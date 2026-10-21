@@ -1,0 +1,334 @@
+:root {
+  --ink: #27325c;
+  --cream: #fffaf2;
+  --blue: #5b8cff;
+  --yellow: #ffd45e;
+  --pink: #ff8fb8;
+  --orange: #ff9c5b;
+  --font: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; font-family: var(--font); color: var(--ink); }
+#app { position: fixed; inset: 0; }
+#app canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+#loading {
+  position: fixed; inset: 0; display: grid; place-items: center;
+  font-size: 22px; font-weight: 800; background: #bfe3ff; z-index: 50;
+}
+#loading.error { color: #c0304a; padding: 24px; text-align: center; font-size: 16px; }
+
+.hud { position: absolute; inset: 0; pointer-events: none; user-select: none; }
+
+/* 크로스헤어: --gap 으로 탄퍼짐 표시 */
+
+.hitmarker { position: absolute; left: 50%; top: 50%; opacity: 0; }
+.hitmarker i { position: absolute; width: 12px; height: 3px; background: #fff; border-radius: 999px; box-shadow: 0 0 0 1px rgba(39,50,92,.5); }
+.hitmarker i:nth-child(1) { transform: translate(6px, 6px) rotate(45deg); }
+.hitmarker i:nth-child(2) { transform: translate(-18px, 6px) rotate(-45deg); }
+.hitmarker i:nth-child(3) { transform: translate(6px, -9px) rotate(-45deg); }
+.hitmarker i:nth-child(4) { transform: translate(-18px, -9px) rotate(45deg); }
+.hitmarker.head i { background: var(--yellow); }
+.hitmarker.kill i { background: #ff4d6d; width: 15px; }
+.kill-confirm {
+  position: absolute; left: 50%; top: calc(50% + 34px); transform: translate(-50%, 0); opacity: 0;
+  font-weight: 900; font-size: 22px; color: #ff4d6d; letter-spacing: 1px;
+  -webkit-text-stroke: 1.5px #fff; text-shadow: 0 2px 0 rgba(39, 50, 92, .35);
+}
+
+.ammo {
+  position: absolute; right: 28px; bottom: 24px; padding: 8px 18px; border-radius: 18px;
+  background: rgba(255, 250, 242, .88); box-shadow: 0 4px 0 rgba(39, 50, 92, .25);
+  font-weight: 900; display: flex; align-items: baseline; gap: 6px;
+}
+.ammo .mag { font-size: 40px; }
+.ammo .res { font-size: 20px; opacity: .7; }
+.ammo.low .mag { color: #e2445c; }
+
+.reload { position: absolute; left: 50%; top: calc(50% + 46px); transform: translateX(-50%); opacity: 0; text-align: center; font-weight: 800; font-size: 13px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.reload.show { opacity: 1; }
+.reload .bar { width: 90px; height: 6px; margin-top: 4px; border-radius: 4px; background: rgba(255,255,255,.4); overflow: hidden; }
+.reload .bar div { height: 100%; width: 0; background: var(--yellow); }
+
+.ads-tag { position: absolute; right: 28px; bottom: 96px; padding: 3px 10px; border-radius: 10px; background: var(--yellow); font-weight: 900; font-size: 13px; opacity: 0; transition: opacity .12s; }
+.ads-tag.show { opacity: 1; }
+
+.fps { position: absolute; left: 12px; top: 10px; font: 700 12px/1 ui-monospace, monospace; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,.75); }
+.debug-lines { position: absolute; left: 12px; top: 34px; margin: 0; font: 11px/1.45 ui-monospace, monospace; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.6); white-space: pre; }
+
+.dmg { position: absolute; left: 0; top: 0; font-weight: 900; font-size: 20px; color: #fff; -webkit-text-stroke: 1.5px var(--ink); will-change: transform; }
+.dmg.head { color: var(--yellow); font-size: 27px; -webkit-text-stroke: 2px #b5481f; }
+.dmg.head::after { content: '!'; }
+
+.death { position: absolute; left: 50%; top: 38%; transform: translateX(-50%); padding: 10px 22px; border-radius: 16px; background: rgba(255, 143, 184, .92); color: #fff; font-weight: 900; font-size: 22px; opacity: 0; }
+.death.show { opacity: 1; }
+.death span { font-size: 14px; margin-left: 8px; }
+
+.lock-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(39, 50, 92, .28); pointer-events: none; }
+.lock-overlay.hidden { display: none; }
+.lock-card { background: var(--cream); padding: 22px 28px; border-radius: 24px; box-shadow: 0 6px 0 rgba(39,50,92,.25); max-width: min(560px, 92vw); }
+.lock-card h1 { margin: 0 0 4px; font-size: 34px; font-weight: 900; color: var(--blue); letter-spacing: -.5px; }
+.lock-card p { margin: 6px 0; font-weight: 800; }
+.lock-card ul { margin: 10px 0; padding-left: 18px; font-size: 14px; line-height: 1.7; }
+.lock-card .mode-line { display: inline-block; padding: 3px 12px; border-radius: 12px; background: var(--yellow); font-size: 14px; }
+.lock-card .touch-guide { display: none; }
+@media (pointer: coarse) { .lock-card .touch-guide { display: block; } .lock-card ul:not(.touch-guide) { display: none; } }
+.lock-card .warn { font-size: 12px; font-weight: 600; color: #b5475d; }
+
+.debug-panel {
+  position: absolute; right: 10px; top: 10px; bottom: 10px; width: 330px; overflow-y: auto;
+  background: rgba(255, 250, 242, .95); border-radius: 14px; padding: 10px 12px; font-size: 12px; z-index: 20;
+  box-shadow: 0 4px 16px rgba(39,50,92,.25);
+}
+.debug-panel.hidden { display: none; }
+.dp-title { font-weight: 900; margin-bottom: 6px; }
+.dp-row { display: grid; grid-template-columns: 70px 1fr 64px; gap: 6px; align-items: center; margin: 2px 0; }
+.dp-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-row input[type=number] { width: 64px; font-size: 11px; }
+.debug-panel fieldset { border: 1px solid #d9d2e6; border-radius: 8px; margin: 6px 0; padding: 4px 8px; }
+.debug-panel legend { font-weight: 800; padding: 0 4px; }
+.dp-check { display: block; margin: 3px 0; font-weight: 700; }
+.debug-panel button { margin-top: 8px; width: 100%; padding: 6px; border-radius: 8px; border: 0; background: var(--blue); color: #fff; font-weight: 800; cursor: pointer; }
+.dp-status { font: 10px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+
+/* 스코프 원형 화면: 바깥은 어둡게, 안쪽은 장면이 보이고 조준선 = 화면 중앙 = 사격 방향 */
+.scope { position: absolute; inset: 0; display: grid; place-items: center; transition: none; }
+.scope-lens {
+  --r: min(42vh, 42vw);
+  position: relative; width: calc(var(--r) * 2); height: calc(var(--r) * 2); border-radius: 50%;
+  box-shadow: 0 0 0 200vmax rgba(18, 24, 48, 0.94), inset 0 0 0 10px #27325c, inset 0 0 40px 18px rgba(0, 0, 0, 0.45);
+}
+.scope-lens i { position: absolute; background: rgba(20, 24, 40, 0.85); }
+.scope-lens .h { left: 6%; right: 6%; top: 50%; height: 2px; margin-top: -1px; }
+.scope-lens .v { top: 6%; bottom: 6%; left: 50%; width: 2px; margin-left: -1px; }
+.scope-lens .c { left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ff4d6d; }
+
+/* 적 피격 부위를 겨눔 (실제 사격 판정 기준) */
+/* 총구 경로가 가까운 장애물에 막힘: 실제 탄착 지점에 표시 (조준선 색은 바꾸지 않음) */
+.blocked-marker {
+  position: absolute; left: 0; top: 0; width: 14px; height: 14px; display: none; border-radius: 50%;
+  border: 2px solid #ff4d6d; box-shadow: 0 0 0 1.5px rgba(255,255,255,.8);
+}
+.blocked-marker::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: #ff4d6d; transform: rotate(45deg); }
+
+/* 플레이어 체력 · 피격 */
+.hp { position: absolute; left: 28px; bottom: 28px; display: flex; align-items: center; gap: 10px; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+.hp-text { font-size: 30px; min-width: 52px; text-align: right; }
+.hp-bar { width: 200px; height: 14px; border-radius: 8px; background: rgba(39,50,92,.35); overflow: hidden; box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
+.hp-bar div { height: 100%; width: 100%; background: linear-gradient(90deg, #6fe3a8, #48c98a); transition: width .12s; }
+.hp.low .hp-bar div { background: linear-gradient(90deg, #ff6b81, #e2445c); }
+.hp.low .hp-text { color: #ffd3da; }
+.protect-tag { position: absolute; left: 28px; bottom: 64px; padding: 3px 10px; border-radius: 10px; background: #8fd3ff; color: #fff; font-weight: 900; font-size: 13px; opacity: 0; }
+.protect-tag.show { opacity: 1; }
+.hurt-flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 46, 77, .65) 100%); }
+.damage-dirs { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+.damage-dir { position: absolute; left: -60px; top: -170px; width: 120px; height: 170px; transform-origin: 50% 100%; }
+.damage-dir::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26px; border-radius: 50% 50% 0 0 / 100% 100% 0 0; border-top: 7px solid rgba(255, 46, 77, .9); filter: drop-shadow(0 0 4px rgba(255,46,77,.7)); }
+/* 봇 머리 위 이름·체력 */
+.labels { position: absolute; inset: 0; }
+.bot-label { position: absolute; left: 0; top: 0; text-align: center; will-change: transform; }
+.bot-label b { display: block; font-size: 12px; font-weight: 900; color: #fff; -webkit-text-stroke: 3px #c2334c; paint-order: stroke fill; white-space: nowrap; }
+.bot-label .bl-bar { width: 56px; height: 6px; margin: 2px auto 0; border-radius: 4px; background: rgba(39,50,92,.45); overflow: hidden; box-shadow: 0 0 0 1.5px rgba(255,255,255,.8); }
+.bot-label .bl-bar div { height: 100%; background: #ff4d6d; }
+.bot-label.protected b { -webkit-text-stroke-color: #3d8bd6; }
+.bot-label.protected .bl-bar div { background: #8fd3ff; }
+/* TDM 아군 이름표 (팀 블루) */
+.bot-label.ally b { -webkit-text-stroke-color: #2878ff; }
+.bot-label.ally .bl-bar div { background: #2878ff; }
+
+/* 무기 · 슬롯 */
+.weapon-hud { position: absolute; right: 28px; bottom: 96px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.weapon-name { padding: 3px 12px; border-radius: 12px; background: rgba(255, 250, 242, .88); box-shadow: 0 3px 0 rgba(39, 50, 92, .2); font-weight: 900; font-size: 15px; }
+.slots { display: flex; gap: 6px; }
+.slot { display: flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; border-radius: 12px; background: rgba(255, 250, 242, .6); font-size: 12px; font-weight: 800; opacity: .75; }
+.slot b { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(39, 50, 92, .25); color: #fff; font-size: 12px; }
+.slot.active { background: var(--yellow); opacity: 1; box-shadow: 0 3px 0 rgba(39, 50, 92, .25); }
+.slot.active b { background: var(--ink); }
+/* ADS 표시는 슬롯 위로 */
+.ads-tag { bottom: 150px; }
+/* 시작 화면 로드아웃 */
+.loadout { margin: 10px 0 6px; padding: 10px 12px; border-radius: 16px; background: rgba(91, 140, 255, .1); }
+.lo-title { font-weight: 900; font-size: 14px; margin-bottom: 6px; }
+.lo-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.lo-btn { pointer-events: auto; cursor: pointer; font: inherit; font-weight: 900; font-size: 14px; padding: 8px 14px; border-radius: 14px; border: 0; background: #fff; color: var(--ink); box-shadow: 0 3px 0 rgba(39, 50, 92, .2); }
+.lo-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.lo-btn.selected { background: var(--yellow); box-shadow: 0 3px 0 rgba(39, 50, 92, .35), 0 0 0 2px var(--ink) inset; }
+.lo-btn:disabled { cursor: default; }
+.lo-note { margin-top: 6px; font-size: 12px; font-weight: 700; opacity: .7; }
+.dp-section { border-top: 1px solid #e6dff0; margin-top: 6px; padding-top: 4px; }
+.dp-section > summary { font-weight: 900; cursor: pointer; padding: 3px 0; }
+.dp-section .dp-section { margin-left: 4px; }
+.dp-hint { font-size: 11px; color: #6b6480; margin: 2px 0 4px; }
+
+/* 조준선: 무기별 모양(data-style) + 실제 탄 퍼짐 크기(--gap). 둥근 끝, 흰색 + 얇은 남색 외곽선 */
+.crosshair { --gap: 8px; --len: 11px; --w: 3.5px; --dot: 4.5px; position: absolute; left: 50%; top: 50%; width: 0; height: 0; transition: opacity .1s; }
+.crosshair i { position: absolute; background: #fff; border-radius: 999px; box-shadow: 0 0 0 1.5px rgba(39, 50, 92, .55); transition: background-color .08s, transform .08s; }
+.crosshair .t, .crosshair .b { width: var(--w); height: var(--len); left: calc(var(--w) / -2); }
+.crosshair .l, .crosshair .r { width: var(--len); height: var(--w); top: calc(var(--w) / -2); }
+.crosshair .t { top: calc(-1 * var(--gap) - var(--len)); }
+.crosshair .b { top: var(--gap); }
+.crosshair .l { left: calc(-1 * var(--gap) - var(--len)); }
+.crosshair .r { left: var(--gap); }
+.crosshair .dot { width: var(--dot); height: var(--dot); left: calc(var(--dot) / -2); top: calc(var(--dot) / -2); }
+/* 원: 테두리 중심선 반지름 = --gap (탄 퍼짐 반지름) */
+.crosshair .ring { display: none; box-sizing: border-box; background: none; border: var(--w) solid #fff;
+  width: calc(var(--gap) * 2 + var(--w)); height: calc(var(--gap) * 2 + var(--w));
+  left: calc(-1 * var(--gap) - var(--w) / 2); top: calc(-1 * var(--gap) - var(--w) / 2);
+  box-shadow: 0 0 0 1.2px rgba(39, 50, 92, .55), inset 0 0 0 1.2px rgba(39, 50, 92, .55); }
+.crosshair[data-style="ring"] .ring { display: block; }
+.crosshair[data-style="ring"] .t, .crosshair[data-style="ring"] .b, .crosshair[data-style="ring"] .l, .crosshair[data-style="ring"] .r,
+.crosshair[data-style="dot"] .t, .crosshair[data-style="dot"] .b, .crosshair[data-style="dot"] .l, .crosshair[data-style="dot"] .r { display: none; }
+.crosshair.hidden { opacity: 0; }
+/* 적 피격 부위를 겨눔 (실제 사격·근접 판정 기준) */
+.crosshair.enemy i { background: #ff2e4d; }
+.crosshair.enemy .ring { background: none; border-color: #ff2e4d; }
+/* 근접: 공격 범위 안 대상이면 점이 살짝 커짐 */
+.crosshair[data-style="dot"].enemy .dot { transform: scale(1.45); }
+
+/* 매치: 상단 바 (남은 시간 · 내 킬/데스 · 순위 · 목표) */
+.match-bar {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; padding: 5px 8px;
+  border-radius: 20px; background: rgba(255, 250, 242, .88); box-shadow: 0 4px 0 rgba(39, 50, 92, .22);
+  font-weight: 900;
+}
+.match-bar.hidden { display: none; }
+.mb-kd { display: flex; gap: 6px; font-size: 12px; }
+.mb-kd span { padding: 3px 9px; border-radius: 12px; background: rgba(91, 140, 255, .14); }
+.mb-kd span + span { background: rgba(255, 143, 184, .18); }
+.mb-kd b { font-size: 16px; margin-right: 2px; }
+.mb-center { text-align: center; min-width: 92px; }
+.mb-time { font-size: 24px; line-height: 1; letter-spacing: .5px; }
+.mb-goal { font-size: 10px; opacity: .65; margin-top: 2px; white-space: nowrap; }
+.match-bar.hurry .mb-time { color: #e2445c; animation: mb-pulse 1s ease-in-out infinite; }
+@keyframes mb-pulse { 50% { transform: scale(1.08); } }
+.mb-rank { padding: 3px 10px; border-radius: 12px; background: var(--yellow); font-size: 12px; white-space: nowrap; }
+.mb-rank b { font-size: 18px; }
+.mb-rank small { font-size: 11px; opacity: .7; margin-left: 3px; }
+
+/* 시작 카운트다운 3·2·1 · GO! */
+.countdown {
+  position: absolute; left: 50%; top: 36%; transform: translate(-50%, -50%); opacity: 0;
+  font-size: 96px; font-weight: 900; color: #fff; -webkit-text-stroke: 4px var(--blue); paint-order: stroke fill;
+  text-shadow: 0 6px 0 rgba(39, 50, 92, .25);
+}
+.countdown.go { color: var(--yellow); -webkit-text-stroke-color: #ff8f3d; }
+
+/* 매치 종료: 전투 HUD 숨김 + 결과 카드 */
+.match-over .crosshair, .match-over .blocked-marker, .match-over .death, .match-over .reload,
+.match-over .protect-tag, .match-over .scope { display: none !important; }
+.result { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(39, 50, 92, .35); pointer-events: auto; }
+.result.hidden { display: none; }
+.result-card {
+  min-width: min(420px, 92vw); padding: 22px 26px 20px; border-radius: 26px; text-align: center;
+  background: var(--cream); box-shadow: 0 7px 0 rgba(39, 50, 92, .25);
+}
+.res-title { font-size: 46px; font-weight: 900; letter-spacing: -1px; color: var(--blue); -webkit-text-stroke: 1.5px #fff; }
+.res-title[data-outcome="win"] { color: #ff8f3d; }
+.res-title[data-outcome="draw"] { color: #8a7bd9; }
+.res-title[data-outcome="lose"] { color: #6a7499; }
+.res-reason { font-weight: 800; font-size: 14px; opacity: .75; margin: 2px 0 12px; }
+.res-table { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-weight: 800; font-size: 15px; }
+.res-table th { font-size: 11px; opacity: .55; font-weight: 800; padding-bottom: 2px; }
+.res-table td { padding: 7px 10px; background: rgba(39, 50, 92, .06); }
+.res-table td:first-child { border-radius: 12px 0 0 12px; }
+.res-table td:last-child { border-radius: 0 12px 12px 0; }
+.res-table tr.first td { background: rgba(255, 212, 94, .45); }
+.res-table tr.me td { color: var(--blue); background: rgba(91, 140, 255, .16); }
+.res-table tr.me.first td { background: rgba(255, 212, 94, .55); }
+.res-replay {
+  margin-top: 14px; padding: 11px 30px; border: 0; border-radius: 16px; cursor: pointer;
+  background: var(--blue); color: #fff; font: 900 18px var(--font); box-shadow: 0 4px 0 #3b62c4;
+}
+.res-replay:active { transform: translateY(2px); box-shadow: 0 2px 0 #3b62c4; }
+/* CHARACTER DEBUG (개발용) */
+.dp-select { grid-column: 2 / 4; font-size: 12px; padding: 2px; }
+.dp-char-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 4px 0; }
+.debug-panel .dp-char-grid button { margin-top: 0; padding: 5px 2px; font-size: 11px; opacity: 0.75; }
+.debug-panel .dp-char-grid button.active { opacity: 1; outline: 2px solid var(--yellow, #ffd45e); }
+/* 시작 화면 캐릭터 선택 (6종, 3×2 · 좁은 화면 2열) */
+.char-select { margin-top: 12px; }
+.cs-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+@media (max-width: 480px) { .cs-cards { grid-template-columns: repeat(2, 1fr); } }
+.cs-card { position: relative; pointer-events: auto; cursor: pointer; font: inherit; text-align: left; padding: 7px 8px 6px 10px; border-radius: 12px; border: 0; background: #fff; color: var(--ink); box-shadow: 0 3px 0 rgba(39, 50, 92, .2); display: grid; gap: 1px; overflow: hidden; }
+.cs-card:hover:not(:disabled) { transform: translateY(-1px); }
+.cs-card:disabled { cursor: default; }
+.cs-swatch { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--cs-color); }
+.cs-name { font-size: 13px; font-weight: 900; letter-spacing: -.2px; }
+.cs-role { font-size: 11px; font-weight: 700; opacity: .65; }
+.cs-stats { display: flex; flex-wrap: wrap; gap: 0 6px; font-size: 10.5px; font-weight: 700; opacity: .8; }
+.cs-stats span { white-space: nowrap; }
+.cs-stats b { font-weight: 900; }
+.cs-card.selected { background: var(--yellow); box-shadow: 0 3px 0 rgba(39, 50, 92, .35), 0 0 0 2px var(--ink) inset; }
+.cs-card.locked:not(.selected) { background: #ecebf2; color: rgba(39, 50, 92, .6); }
+.cs-lock { position: absolute; right: 6px; top: 5px; font-size: 12px; }
+/* 낮은 화면(모바일 가로): 시작 카드 2열 — 왼쪽 캐릭터 선택, 오른쪽 무기·모드·시작 안내 */
+@media (max-height: 520px) {
+  .lock-card { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 0 14px; align-items: start; padding: 12px 16px; max-width: min(860px, 96vw); }
+  .lock-card h1 { grid-column: 1 / -1; font-size: 24px; }
+  .lock-card .char-select { grid-column: 1; grid-row: 2 / span 6; margin: 4px 0 0; }
+  .lock-card > :not(h1):not(.char-select) { grid-column: 2; }
+  .lock-card .loadout:not(.char-select) { margin-top: 4px; }
+  .lock-card ul:not(.touch-guide) { display: none; }
+  .lock-card p, .lock-card ul { font-size: 12px; }
+  .cs-card { padding: 5px 6px 4px 9px; }
+}
+/* 킬로그 (우측 상단): 처치자 · 무기 아이콘(+헤드샷) · 사망자. 새 줄이 위, 최대 4줄 */
+.killfeed {
+  position: absolute; z-index: 5; pointer-events: none;
+  top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  max-width: min(340px, 34vw);
+}
+.kf-row {
+  display: flex; align-items: center; gap: 7px; max-width: 100%;
+  padding: 4px 11px; border-radius: 12px;
+  background: rgba(30, 36, 64, .6); color: #fff; box-shadow: 0 2px 0 rgba(20, 24, 46, .25);
+  font-weight: 800; font-size: 13px; line-height: 1.25; white-space: nowrap;
+  animation: kf-in .18s ease-out;
+  transition: opacity .3s ease, transform .3s ease;
+}
+.kf-row.out { opacity: 0; transform: translateX(10px); }
+@keyframes kf-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+.kf-name { min-width: 0; max-width: 9em; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 1px rgba(0, 0, 0, .35); }
+.kf-icons { display: inline-flex; align-items: center; gap: 3px; flex: none; color: #fff; }
+.kf-icon { display: block; }
+.kf-head { display: block; color: var(--yellow); }
+/* 내가 처치: 배경 조금 밝게 + 처치자 굵게 / 내가 사망: 사망자 이름에 옅은 붉은 칸 */
+.kf-row.local-kill { background: rgba(70, 82, 140, .78); box-shadow: 0 2px 0 rgba(20, 24, 46, .25), 0 0 0 1.5px rgba(255, 215, 94, .75) inset; }
+.kf-row.local-kill .kf-killer { font-weight: 900; }
+.kf-row.local-death .kf-victim { font-weight: 900; padding: 0 5px; border-radius: 6px; background: rgba(255, 100, 100, .22); }
+/* 좁은·낮은 화면 (모바일 가로): 글자·아이콘·이름 폭 축소, 정보(처치자·무기·사망자)는 유지 */
+@media (max-width: 900px), (max-height: 520px) {
+  .killfeed { top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); gap: 3px; max-width: 30vw; }
+  .kf-row { font-size: 11px; gap: 5px; padding: 3px 8px; border-radius: 10px; }
+  .kf-name { max-width: 6.5em; }
+  .kf-icon { transform: scale(.85); transform-origin: center; }
+}
+
+/* 네트워크 테스트 패널 (?net=1, F9) */
+.net-panel {
+  position: absolute; left: 10px; bottom: 10px; width: min(420px, calc(100vw - 20px)); max-height: calc(100vh - 20px); overflow-y: auto;
+  background: rgba(255, 250, 242, .95); border-radius: 14px; padding: 8px 10px; font-size: 12px; z-index: 21;
+  box-shadow: 0 4px 16px rgba(39,50,92,.25);
+}
+.net-panel.collapsed .np-body { display: none; }
+.np-head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-weight: 900; }
+.np-key { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: var(--yellow); }
+.np-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
+.np-btns button, .np-join button { padding: 5px 4px; border-radius: 8px; border: 0; background: var(--blue); color: #fff; font-weight: 800; cursor: pointer; font-size: 11px; }
+.np-btns button:disabled { opacity: .5; }
+.np-join { display: grid; grid-template-columns: 1fr 90px; gap: 4px; margin-top: 4px; }
+.np-code { padding: 4px 6px; border-radius: 8px; border: 1px solid #d9d2e6; font: 12px ui-monospace, monospace; }
+.net-panel fieldset { border: 1px solid #d9d2e6; border-radius: 8px; margin: 6px 0; padding: 4px 8px; }
+.net-panel legend { font-weight: 800; padding: 0 4px; }
+.np-sim { border-color: #ff8fb8 !important; background: rgba(255, 143, 184, .08); }
+.np-sim legend { color: #c2386a; }
+.np-row { display: grid; grid-template-columns: 96px 1fr 52px; gap: 6px; align-items: center; margin: 2px 0; }
+.np-check { display: block; margin: 3px 0; font-weight: 700; }
+.np-hint { font-size: 10px; color: #6b6f8a; margin: 2px 0; }
+.np-info, .np-log { font: 10px/1.45 ui-monospace, monospace; white-space: pre-wrap; margin: 6px 0 0; word-break: break-all; }
+.np-info.sim-on { border-left: 3px solid #ff8fb8; padding-left: 6px; }
+.np-log { max-height: 160px; overflow-y: auto; background: rgba(39,50,92,.05); border-radius: 6px; padding: 4px; }
+.np-sub { font-weight: 800; margin-top: 6px; }

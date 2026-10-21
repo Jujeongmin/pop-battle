@@ -1,24 +1,19 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
 node_modules
 dist
 dist-ssr
 *.local
+*.log
 
-# Editor directories and files
+# 로컬 개발 도구 설정
+.claude/
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+
+# 원본 아트·Blender 작업물 (520MB, 게임 실행에 불필요 — 로컬에만 보관)
+art-src/
+
+# 일지·비교 렌더 이미지 (로컬 기록용)
+docs/devlog/
+docs/poly/

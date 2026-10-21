@@ -1,0 +1,18 @@
+{
+  "name": "agent8-gameserver-node",
+  "version": "0.1.0",
+  "description": "Agent8 GameServer",
+  "private": true,
+  "scripts": {
+    "build": "gameserver-node build",
+    "build:dev": "gameserver-node build --no-minify",
+    "watch": "gameserver-node build --watch",
+    "test": "gameserver-node test",
+    "test:dev": "gameserver-node test --no-minify",
+    "dev": "gameserver-node dev",
+    "dev:readable": "gameserver-node dev --no-minify"
+  },
+  "devDependencies": {
+    "@agent8/gameserver-node": "^2.0.1"
+  }
+}
