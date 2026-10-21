@@ -1,7 +1,7 @@
 // 시작 화면의 "Multiplayer Test" 화면: 방 만들기 · 코드로 입장 · 대기실(방장 Start Test) · 진행 중 일시정지 · 연결 끊김.
 // 표시는 전부 서버가 확인한 상태(NetSession)만 읽는다 — 클라이언트가 임의로 성공을 표시하지 않음.
 import { displayCode, type NetSession } from './NetSession';
-import { NET_MAX_PLAYERS } from './shared/protocol';
+import { NET_MAX_PLAYERS, NET_MIN_PLAYERS } from './shared/protocol';
 
 export interface MultiplayerMenuHost {
   /** 세션 (첫 연결 전에는 null) */
@@ -128,7 +128,7 @@ export class MultiplayerMenu {
   }
 
   private renderHome(c: HTMLElement, s: NetSession | null): void {
-    c.append(el('p', 'mp-sub', `캐릭터: ${this.host.characterName()} · 2인 테스트 (봇 없음)`));
+    c.append(el('p', 'mp-sub', `캐릭터: ${this.host.characterName()} · 최대 ${NET_MAX_PLAYERS}인 테스트 (봇 없음)`));
     const create = this.button('Create Room', 'mp-primary', () => this.run(() => this.host.create()));
     const row = el('div', 'mp-join');
     const input = el('input', 'mp-code-input');
@@ -200,11 +200,18 @@ export class MultiplayerMenu {
     c.append(list, el('p', 'mp-count', `Players: ${Object.keys(s.players).length}/${NET_MAX_PLAYERS}`));
 
     if (v === 'lobby') {
-      const full = Object.keys(s.players).length >= NET_MAX_PLAYERS && ![...Object.keys(s.players)].some((a) => s.isLost(a));
+      const n = Object.keys(s.players).length;
+      const anyLost = Object.keys(s.players).some((a) => s.isLost(a));
+      const ready = n >= NET_MIN_PLAYERS && !anyLost;
       if (s.isHost) {
         const start = this.button('Start Test', 'mp-primary', () => this.run(() => this.host.start()));
-        start.disabled = !full;
-        c.append(start, el('p', 'mp-hint', full ? '시작하면 두 사람 모두 같은 맵으로 들어가요' : '두 번째 플레이어를 기다리는 중 — Room Code를 알려 주세요'));
+        start.disabled = !ready;
+        const hint = anyLost
+          ? '연결이 끊긴 플레이어가 돌아오거나 나갈 때까지 기다려요'
+          : n < NET_MIN_PLAYERS
+            ? '다른 플레이어를 기다리는 중 — Room Code를 알려 주세요'
+            : `지금 ${n}명으로 시작할 수 있어요 (최대 ${NET_MAX_PLAYERS}명, 시작 뒤에도 들어올 수 있음)`;
+        c.append(start, el('p', 'mp-hint', hint));
       } else {
         c.append(el('p', 'mp-status', '방장이 Start Test를 누르면 시작해요'));
       }

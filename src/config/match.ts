@@ -31,11 +31,11 @@ export const FFA_RULES: MatchRules = {
   spawns: 'all',
 };
 
-/** 2인 네트워크 테스트 (?net=1): 봇 없음, 시간·점수 종료 사실상 없음 (기술 검증용) */
+/** 멀티플레이 테스트 (최대 4인): 봇 없음, 시간·점수 종료 사실상 없음 (기술 검증용) */
 export const NET_TEST_RULES: MatchRules = {
   mode: 'ffa',
-  label: '1:1 네트워크 테스트',
-  players: 2,
+  label: '멀티플레이 테스트',
+  players: 4,
   timeLimit: 1800,
   scoreToWin: 999,
   countdown: 1,

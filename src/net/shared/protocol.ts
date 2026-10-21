@@ -2,8 +2,10 @@
 // 서버는 isolated-vm에서 돌기 때문에 이 파일은 three.js·DOM·다른 게임 모듈을 import 하지 않는다 (순수 데이터·함수만).
 // 무기·캐릭터 수치는 config/weapons.ts·config/characters.ts의 복사본 → 클라이언트가 시작할 때 checkNetRules로 어긋남을 검사.
 
-/** 룸 정원 (기술 검증용 1:1) */
-export const NET_MAX_PLAYERS = 2;
+/** 룸 정원 (멀티플레이 테스트: 최대 4명) */
+export const NET_MAX_PLAYERS = 4;
+/** 테스트 시작에 필요한 최소 인원 */
+export const NET_MIN_PLAYERS = 2;
 /** 테스트 룸 id 접두사 (빠른 매칭이 다른 룸을 건드리지 않게) */
 export const NET_ROOM_PREFIX = 'pb-';
 

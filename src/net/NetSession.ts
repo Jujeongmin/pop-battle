@@ -1,4 +1,4 @@
-// 네트워크 레이어 2/2: 2인 테스트 룸 흐름 (만들기·입장·나가기·끊김), 상태 패킷 전송, 원격 상태 보간 버퍼, 서버 이벤트 전달.
+// 네트워크 레이어 2/2: 최대 4인 테스트 룸 흐름 (만들기·입장·나가기·끊김), 상태 패킷 전송, 원격 상태 보간 버퍼, 서버 이벤트 전달.
 // 게임 객체는 모른다 → 결과는 NetSessionEvents 콜백으로만 내보냄 (게임 모드 쪽: NetGameMode).
 import { errText, NetClient } from './NetClient';
 import { SnapshotBuffer } from './SnapshotBuffer';
@@ -23,7 +23,7 @@ export function displayCode(roomId: string | null): string {
 }
 
 const JOIN_ERRORS: Record<string, string> = {
-  full: '방이 가득 찼어요 (2/2)',
+  full: `방이 가득 찼어요 (${NET_MAX_PLAYERS}/${NET_MAX_PLAYERS})`,
   not_found: '방을 찾을 수 없어요 (코드 확인, 또는 방이 사라짐)',
   bad_code: '방 코드 형식이 올바르지 않아요 (영문·숫자 4~12자)',
 };

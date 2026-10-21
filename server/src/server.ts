@@ -1,5 +1,5 @@
 /**
- * POP! BATTLE — Verse8 Agent8 GameServer: 2인 실시간 테스트 룸 (기술 검증용 최소 구현)
+ * POP! BATTLE — Verse8 Agent8 GameServer: 최대 4인 실시간 테스트 룸 (기술 검증용 최소 구현)
  *
  * 역할 분담
  *  - 이동: 클라이언트가 50ms마다 상태 패킷('st', throttle 호출)을 보냄 → 룸 사용자 상태(s)에 저장 → SDK가 다른 클라이언트에 푸시.
@@ -14,6 +14,7 @@ import {
   NET_CHARACTER_HP,
   NET_DEFAULT_HP,
   NET_MAX_PLAYERS,
+  NET_MIN_PLAYERS,
   NET_ROOM_PREFIX,
   NET_TIMING,
   NET_VALIDATION,
@@ -175,12 +176,12 @@ export class Server {
     return { ok: true, roomId: id, count: m.n, phase: m.phase };
   }
 
-  /** 빠른 매칭: 1명이 기다리는 테스트 룸이 있으면 그 룸, 없으면 새 룸 */
+  /** 빠른 매칭: 자리가 남은 테스트 룸이 있으면 그 룸, 없으면 새 룸 */
   async quickMatch(): Promise<{ ok: true; roomId: string; waiting: boolean }> {
     const all = (await $global.getGlobalState()) || {};
     for (const [k, v] of Object.entries(all)) {
       const m = v as RoomMirror;
-      if (!k.startsWith('room_') || !m || m.n !== 1 || Date.now() - m.t > MIRROR_TTL_MS) continue;
+      if (!k.startsWith('room_') || !m || m.n <= 0 || m.n >= NET_MAX_PLAYERS || Date.now() - m.t > MIRROR_TTL_MS) continue;
       const id = k.slice('room_'.length);
       if ((await $global.countRoomUsers(id)) > 0) return { ok: true, roomId: id, waiting: true };
     }
@@ -268,7 +269,7 @@ export class Server {
     });
   }
 
-  /** 방장이 테스트 시작: 2명이 모두 있을 때만. 체력·기록 초기화 후 진행 상태 공유 (두 클라이언트가 룸 상태로 동시에 시작) */
+  /** 방장이 테스트 시작: 2명 이상일 때만. 체력·기록 초기화 후 진행 상태 공유 (모든 클라이언트가 룸 상태로 동시에 시작) */
   async startTest(): Promise<{ ok: boolean; reason?: string }> {
     if ($sender.roomId === NO_ROOM) return { ok: false, reason: 'not_in_room' };
     const me = $sender.account;
@@ -276,7 +277,7 @@ export class Server {
     return $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       if (r.host !== me) return { ok: false, reason: 'not_host' };
-      if (Object.keys(r.players).length < NET_MAX_PLAYERS) return { ok: false, reason: 'need_2_players' };
+      if (Object.keys(r.players).length < NET_MIN_PLAYERS) return { ok: false, reason: 'need_2_players' };
       const now = Date.now();
       for (const p of Object.values(r.players)) {
         Object.assign(p, { hp: p.max, dead: false, respawnAt: 0, k: 0, d: 0, prot: now + NET_TIMING.startProtectionMs });

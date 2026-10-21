@@ -54,6 +54,9 @@ describe('matching', () => {
     expect(one.ok).toBe(true);
     expect(one.count).toBe(1);
     await server.simulateJoin(ROOM, 'bob');
+    expect((await server.findRoom(ROOM)).count).toBe(2);
+    await server.simulateJoin(ROOM, 'carol');
+    await server.simulateJoin(ROOM, 'dave');
     expect((await server.findRoom(ROOM)).reason).toBe('full');
   });
 
@@ -66,20 +69,39 @@ describe('matching', () => {
 });
 
 describe('room lifecycle', () => {
-  test('two players get slots 0/1, third is spectator (-1)', async (server) => {
-    await server.simulateJoin(ROOM, 'alice');
-    await server.simulateJoin(ROOM, 'bob');
-    await server.simulateJoin(ROOM, 'carol');
+  test('four players get slots 0..3, fifth is spectator (-1)', async (server) => {
+    for (const a of ['alice', 'bob', 'carol', 'dave', 'erin']) await server.simulateJoin(ROOM, a);
     server.connect({ account: 'alice', roomId: ROOM });
     expect((await server.hello('blue')).slot).toBe(0);
     server.connect({ account: 'bob', roomId: ROOM });
     expect((await server.hello('black')).slot).toBe(1);
     server.connect({ account: 'carol', roomId: ROOM });
-    const c = await server.hello('blue');
-    expect(c.slot).toBe(-1);
-    expect(Object.keys(c.players)).toHaveLength(2);
-    expect(c.players.bob.max).toBe(130);
-    expect(c.players.bob.hp).toBe(130);
+    expect((await server.hello('pink')).slot).toBe(2);
+    server.connect({ account: 'dave', roomId: ROOM });
+    expect((await server.hello('yellow')).slot).toBe(3);
+    server.connect({ account: 'erin', roomId: ROOM });
+    const e = await server.hello('blue');
+    expect(e.slot).toBe(-1);
+    expect(Object.keys(e.players)).toHaveLength(4);
+    expect(e.players.bob.max).toBe(130);
+    expect(e.players.bob.hp).toBe(130);
+  });
+
+  test('three-player room: hits on two victims are judged separately', async (server) => {
+    for (const a of ['alice', 'bob', 'carol']) await server.simulateJoin(ROOM, a);
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.hello('blue');
+    expect((await server.startTest()).ok).toBe(true);
+    server.connect({ account: 'bob', roomId: ROOM });
+    await server.st(state([0, 0, 10], { s: [{ w: 'rifle', f: [0, 1, 10], e: [5, 1, 20], h: 0 }] }));
+    server.connect({ account: 'carol', roomId: ROOM });
+    await server.st(state([10, 0, 0], { s: [{ w: 'rifle', f: [10, 1, 0], e: [20, 1, 0], h: 0 }] }));
+    server.connect({ account: 'alice', roomId: ROOM });
+    const shots = [{ w: 'rifle', f: [0, 1, 0], e: [0, 1, 10], h: 1 }, { w: 'rifle', f: [0, 1, 0], e: [10, 1, 0], h: 1 }];
+    await server.st(state([0, 0, 0], { s: shots, h: [{ v: 'bob', w: 'rifle', hd: 0, d: 10 }, { v: 'carol', w: 'rifle', hd: 1, d: 10 }] }));
+    const p = await players(server);
+    expect(p.bob.hp).toBe(88);
+    expect(p.carol.hp).toBe(82);
   });
 
   test('leave frees the slot', async (server) => {
@@ -197,7 +219,7 @@ describe('server-authoritative damage', () => {
 });
 
 describe('test room flow', () => {
-  test('host (first joiner) starts only with 2 players; guest cannot', async (server) => {
+  test('host (first joiner) starts with 2+ players; guest cannot', async (server) => {
     await server.simulateJoin(ROOM, 'alice');
     server.connect({ account: 'alice', roomId: ROOM });
     const h = await server.hello('blue');
@@ -227,7 +249,7 @@ describe('test room flow', () => {
   test('bye removes at once, hands host over, frees the slot for findRoom', async (server) => {
     await server.simulateJoin(ROOM, 'alice');
     await server.simulateJoin(ROOM, 'bob');
-    expect((await server.findRoom(ROOM)).reason).toBe('full');
+    expect((await server.findRoom(ROOM)).count).toBe(2);
     server.connect({ account: 'alice', roomId: ROOM });
     expect((await server.bye()).ok).toBe(true);
     server.connect({ account: 'bob', roomId: ROOM });
@@ -258,10 +280,9 @@ describe('test room flow', () => {
     expect(h.host).toBe('alice');
   });
 
-  test('third account cannot take a slot through hello', async (server) => {
-    await server.simulateJoin(ROOM, 'alice');
-    await server.simulateJoin(ROOM, 'bob');
-    server.connect({ account: 'carol', roomId: ROOM });
+  test('fifth account cannot take a slot through hello', async (server) => {
+    for (const a of ['alice', 'bob', 'carol', 'dave']) await server.simulateJoin(ROOM, a);
+    server.connect({ account: 'erin', roomId: ROOM });
     expect((await server.hello('blue')).slot).toBe(-1);
   });
 });

@@ -154,13 +154,13 @@ export class Game {
   private freezeAnim = false;
   /** 직전 프레임 총구 위치 (ADS 총구 수렴 계산용) */
   private readonly lastMuzzle = new THREE.Vector3();
-  /** 2인 네트워크 테스트 (?net=1에서만, 아니면 null → 싱글플레이 그대로) */
+  /** 멀티플레이 테스트 (Multiplayer Test 메뉴로 방에 들어가면 생성, 아니면 null → 싱글플레이 그대로) */
   private net: NetGameMode | null = null;
   private netPanel: NetDebugPanel | null = null;
   /** 시작 화면 "Multiplayer Test" 메뉴 (항상 생성, 서버 연결은 방 만들기/입장 때) */
   private mpMenu: MultiplayerMenu | null = null;
   private netHud: NetTestHud | null = null;
-  /** 멀티 테스트 게임으로 전환됨 (봇 제거, 2인 규칙). 싱글플레이로 돌아가려면 새로고침 */
+  /** 멀티 테스트 게임으로 전환됨 (봇 제거, 최대 4인 규칙). 싱글플레이로 돌아가려면 새로고침 */
   private netGame = false;
   /** 직접 나가기로 룸에서 나옴 (연결 끊김과 구분해 메뉴 화면을 고름) */
   private netLeftByUser = false;
@@ -1524,7 +1524,7 @@ export class Game {
       start: async () => {
         const r = await this.ensureNet().session.startTest();
         if (!r.ok) {
-          const why: Record<string, string> = { not_host: '방장만 시작할 수 있어요', need_2_players: '두 명이 모두 들어와야 시작할 수 있어요' };
+          const why: Record<string, string> = { not_host: '방장만 시작할 수 있어요', need_2_players: '두 명 이상 있어야 시작할 수 있어요' };
           this.mpMenu?.setNotice(`시작 실패: ${why[r.reason ?? ''] ?? r.reason ?? '알 수 없음'}`);
           return;
         }
@@ -1556,7 +1556,7 @@ export class Game {
     location.replace(url.toString());
   }
 
-  /** 첫 방 입장 성공: 봇 제거·2인 규칙·테스트 HUD (싱글플레이 복귀는 새로고침) */
+  /** 첫 방 입장 성공: 봇 제거·멀티 테스트 규칙·테스트 HUD (싱글플레이 복귀는 새로고침) */
   private enterNetGame(): void {
     if (this.netGame) {
       this.resetNetMatch();
@@ -1571,7 +1571,7 @@ export class Game {
     COMBAT.hostility = NET_TEST_RULES.hostility;
     this.resetNetMatch();
     this.hud.setCharacter(this.avatar.character.id, true);
-    this.hud.setModeLine('1:1 멀티플레이 테스트 · 봇 없음');
+    this.hud.setModeLine('멀티플레이 테스트 (최대 4인) · 봇 없음');
     this.netHud = new NetTestHud(this.container, this.ensureNet().session, () => ({ hp: this.combatant.health.hp, max: this.combatant.health.maxHp }));
     this.refreshMultiplayerMenu();
   }
@@ -1596,8 +1596,10 @@ export class Game {
   private beginNetTest(): void {
     const s = this.net?.session;
     if (!s || this.match.state !== 'WAITING') return;
-    const spawns = s.slot === 1 ? this.map.spawns.teamB : this.map.spawns.teamA;
-    this.netSpawn = spawns[0] ?? null;
+    // 자리별 스폰: P1 남쪽 중앙, P2 북쪽 중앙, P3 남쪽 오른쪽, P4 북쪽 왼쪽 (서로 멀리, 가림막 뒤)
+    const { teamA, teamB } = this.map.spawns;
+    const bySlot = [teamA[0], teamB[0], teamA[4] ?? teamA[1], teamB[3] ?? teamB[1]];
+    this.netSpawn = bySlot[s.slot] ?? null;
     this.beginMatch();
     s.client.addLog('info', `테스트 시작 (자리 ${s.slot + 1} 스폰)`);
   }

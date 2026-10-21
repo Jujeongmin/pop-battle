@@ -26,8 +26,9 @@ export class NetTestHud {
     const k = c.counters;
     const online = c.status === 'connected' && c.rsConnected && s.inRoom;
     const me = s.players[s.me];
-    const oppEntry = Object.entries(s.players).find(([a]) => a !== s.me);
-    const opp = oppEntry?.[1];
+    const opps = Object.entries(s.players)
+      .filter(([a]) => a !== s.me)
+      .sort((a, b) => a[1].slot - b[1].slot);
     const lh = this.localHp();
     const sim = c.sim.latencyMs > 0 || c.sim.jitterMs > 0 || c.sim.lossPct > 0;
     const rows: Array<[string, string, string?]> = [
@@ -37,7 +38,9 @@ export class NetTestHud {
       ['Server', online ? 'Connected' : 'Disconnected', online ? 'ok' : 'bad'],
       ['RTT', k.rtt.samples > 0 ? `${Math.round(k.rtt.last)}ms (평균 ${Math.round(k.rtt.avg)})${sim ? ' SIM' : ''}` : '-'],
       ['My HP', me ? `${Math.round(lh.hp)}/${lh.max}${me.dead ? ' 사망' : ''}` : '-'],
-      ['Opp HP', opp ? `${Math.round(opp.hp)}/${opp.max}${opp.dead ? ' 사망' : ''}${oppEntry && s.isLost(oppEntry[0]) ? ' (끊김)' : ''}` : '-'],
+      ...(opps.length
+        ? opps.map(([a, p]): [string, string] => [`P${p.slot + 1} HP`, `${Math.round(p.hp)}/${p.max}${p.dead ? ' 사망' : ''}${s.isLost(a) ? ' (끊김)' : ''} · ${short(a)}`])
+        : [['Opp HP', '-'] as [string, string]]),
       ['Msgs', `보냄 ${k.sentStates + k.sentCalls} · 받음 ${k.recvStates + k.recvMessages}`],
       ['Error', k.lastError || (s.lastError ? s.lastError : '없음'), k.lastError || s.lastError ? 'bad' : undefined],
     ];
