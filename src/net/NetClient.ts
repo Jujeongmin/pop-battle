@@ -87,11 +87,26 @@ function approxBytes(v: unknown): number {
   }
 }
 
-/** Verse8 verse id: 배포 도구가 .env에 쓰는 VITE_AGENT8_VERSE, 또는 ?verse= (개발 서버에서만) */
-export function resolveVerse(): string | null {
-  const q = import.meta.env.DEV ? new URLSearchParams(location.search).get('verse') : null;
-  const v = q || (import.meta.env.VITE_AGENT8_VERSE as string | undefined) || '';
-  return v.trim() || null;
+/** 개발 서버 전용 verse 직접 지정 (?verse=). 없으면 SDK 기본 규칙에 맡김 */
+function verseOverride(): string | null {
+  if (!import.meta.env.DEV) return null;
+  return new URLSearchParams(location.search).get('verse')?.trim() || null;
+}
+
+/**
+ * 접속할 verse: SDK 문서 규칙 그대로 — 개발 서버는 <verse>-preview(develop 푸시가 배포되는 곳), 배포 빌드는 <verse>(런치 후 production).
+ * SDK도 같은 규칙을 갖고 있지만 Vite 개발 서버의 사전 번들에서는 import.meta.env를 못 읽어 'default'로 가므로 직접 계산해 넘긴다.
+ * ?verse= 지정(개발 서버)은 그대로 사용
+ */
+function targetVerse(configured: string): string {
+  const o = verseOverride();
+  if (o) return o;
+  return import.meta.env.DEV ? `${configured}-preview` : configured;
+}
+
+/** 이 빌드에 verse가 있는지 (.env의 VITE_AGENT8_VERSE — Verse8 저장소에서는 플랫폼이 관리) */
+function configuredVerse(): string | null {
+  return verseOverride() || (import.meta.env.VITE_AGENT8_VERSE as string | undefined)?.trim() || null;
 }
 
 export class NetClient {
@@ -100,7 +115,7 @@ export class NetClient {
   readonly log: NetLogEntry[] = [];
   status: NetStatus = 'idle';
   statusReason = '';
-  readonly verse: string | null;
+  private readonly configured = configuredVerse();
   private server: GameServer | null = null;
   private roomId: string | null = null;
   private readonly offs: Array<() => void> = [];
@@ -111,11 +126,15 @@ export class NetClient {
   onRoomDisconnect: ((reason: string) => void) | null = null;
 
   constructor() {
-    this.verse = resolveVerse();
-    if (!this.verse) {
+    if (!this.configured) {
       this.status = 'no-verse';
       this.statusReason = 'VITE_AGENT8_VERSE 없음 (배포 전)';
     }
+  }
+
+  /** 접속한(또는 접속할) verse */
+  get verse(): string | null {
+    return this.server?.verse ?? (this.configured ? targetVerse(this.configured) : null);
   }
 
   get account(): string {
@@ -153,7 +172,7 @@ export class NetClient {
 
   /** 게임 서버 연결 (verse가 없으면 시도하지 않음 — 공용 'default' verse에 붙지 않게) */
   async connect(): Promise<boolean> {
-    if (!this.verse) {
+    if (!this.configured) {
       this.setStatus('no-verse', 'VITE_AGENT8_VERSE 없음 — 배포 후 생성되는 .env 필요 (docs/MULTIPLAYER_TEST.md)');
       return false;
     }
@@ -162,7 +181,7 @@ export class NetClient {
     try {
       // 계정: SDK가 ?account= 를 읽음 (인증 토큰이 없을 때만). 같은 브라우저 두 탭은 계정을 따로 줘야 함 (공식 문서)
       this.server = new GameServer({
-        verse: this.verse,
+        verse: targetVerse(this.configured),
         onDisconnect: (code, reason) => {
           this.setStatus('disconnected', `code ${code ?? '-'} ${reason ?? ''}`.trim());
           this.onDisconnect?.(reason ?? String(code ?? ''));
