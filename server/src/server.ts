@@ -243,9 +243,18 @@ export class Server {
     return $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       const players = r.players;
-      const p = players[me];
-      const out = (slot: number) => ({ slot, now: Date.now(), players, host: r.host, phase: r.phase, startedAt: r.startedAt });
-      if (!p) return out(-1);
+      let p = players[me];
+      let host = r.host;
+      const out = (slot: number) => ({ slot, now: Date.now(), players, host, phase: r.phase, startedAt: r.startedAt });
+      if (!p) {
+        // 나가기(bye) 뒤 30초 유예 안에 다시 들어오면 SDK가 onRoomJoin을 다시 부르지 않음(세션 이어짐) → 여기서 빈자리 배정
+        const slot = freeSlot(players);
+        if (slot < 0) return out(-1);
+        p = players[me] = newRecord(slot, Date.now());
+        host = host && players[host] ? host : pickHost(players);
+        await saveRoom(roomId, players, host, r.phase);
+        $room.broadcastToRoom('joined', { account: me, slot });
+      }
       if (typeof char === 'string' && char in NET_CHARACTER_HP) {
         const max = NET_CHARACTER_HP[char]!;
         // 다친 상태로 캐릭터만 바꿔 회복하는 것 방지: 가득 찬 상태일 때만 새 최대치로 채움

@@ -245,4 +245,23 @@ describe('test room flow', () => {
     await server.simulateLeave(ROOM, 'alice');
     expect((await server.findRoom(ROOM)).reason).toBe('not_found');
   });
+
+  test('rejoin during grace (no new onRoomJoin) gets a slot again via hello', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'bob', roomId: ROOM });
+    await server.bye();
+    // 같은 계정이 유예 중 재입장: 훅 없이 hello만
+    const h = await server.hello('pink');
+    expect(h.slot).toBe(1);
+    expect(h.players.bob.max).toBe(115);
+    expect(h.host).toBe('alice');
+  });
+
+  test('third account cannot take a slot through hello', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'carol', roomId: ROOM });
+    expect((await server.hello('blue')).slot).toBe(-1);
+  });
 });

@@ -201,6 +201,8 @@ export class NetSession {
       const seen = new Set<string>();
       for (const st of states) {
         if (st.account === this.me) continue;
+        // 서버 참가자 기록에 없는 계정 = 나갔거나(나가기 뒤 30초 유예 동안 SDK가 상태를 계속 보냄) 정원 밖 관전자 → 무시
+        if (!this.players[st.account]) continue;
         seen.add(st.account);
         const pkt = st.s as NetStatePacket | undefined;
         if (!pkt) continue;

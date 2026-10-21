@@ -118,11 +118,25 @@ npx -y @agent8/cli call ping "[1]"
 
 ## 6. 테스트 방법
 
-- 주소: `http://localhost:5210/?net=1&account=alice`, 다른 기기 `http://<PC IP>:5210/?net=1&account=bob` (`npm run dev -- --host`). 개발 서버에서는 `&verse=<id>`로 .env 없이 지정 가능.
-- 왼쪽 아래 NETWORK TEST 패널(F9 / 제목 클릭). 화면 클릭 = 게임 시작(포인터 잠금), Esc = 패널 조작.
-- alice: 방 만들기 → 룸 코드 복사 → bob: 코드 입장 (또는 둘 다 빠른 매칭).
-- 같은 PC 두 탭은 "연결 흐름 점검"까지만. **2인 검증은 서로 다른 기기·네트워크**에서.
-- SIMULATION 값(분홍 칸)은 진짜 네트워크가 아님. 기록할 때 실제 값과 따로 적기.
+### 배포된 게임에서 (Verse8, 실제 2인)
+
+1. A: Verse8 게임 링크 접속 → 시작 화면 **Multiplayer Test** → **Create Room** → Room Code(예: `ABC123`) 표시, **Copy**로 복사(막히면 코드 칸을 직접 선택해 복사).
+2. B: **다른 브라우저 또는 다른 기기**, 다른 계정(또는 게스트)으로 같은 링크 → **Multiplayer Test** → 코드 입력 → **Join Room**.
+   - 같은 브라우저의 두 탭은 Verse8가 같은 계정을 넘겨 줘서 충돌(중복 로그인)할 수 있음.
+3. 대기실에서 Player 1·Player 2 모두 `Connected · Ready`, `Players: 2/2` 확인 → 방장(★, 먼저 만든 사람)이 **Start Test**.
+4. 방장은 바로 조작, 상대는 "테스트 시작! 화면을 클릭" → 클릭. 두 사람이 서로 다른 스폰(P1 = A팀 스폰, P2 = B팀 스폰)에서 1초 카운트다운 뒤 시작.
+5. 확인: 서로 이동·점프·슬라이딩, 사격 연출, 피격 HP 감소(일반·헤드샷), 사망 X눈·킬로그, 2.5초 뒤 리스폰.
+6. 오른쪽 위 테스트 HUD: Room, Player(P1/P2·계정), Players, Server, RTT, My HP, Opp HP, Msgs, Error.
+7. 연결 해제: Esc → **Leave Room** (상대 화면에서 바로 사라짐) / 탭 닫기·새로고침 / 와이파이 끄기 (상대 화면에서 숨김 → 30초 안에 돌아오면 복구, 넘으면 퇴장).
+8. 문제가 생기면 F9 → NETWORK DEBUG → **로그 복사** (브라우저 콘솔에도 `[net]`).
+
+- 모바일: 게임에 터치 조작이 아직 없음 → 메뉴·대기실 화면은 가로 화면에 맞췄지만 실제 플레이 테스트는 PC 두 대(또는 두 브라우저)로.
+- 개발 서버(`npm run dev`)는 `<verse>-preview`, Verse8 게임은 production verse에 접속 → 서로 다른 서버라 섞어서 테스트하지 않기.
+
+### 개발 서버에서
+
+- `http://localhost:5210/?account=alice`, 다른 기기 `http://<PC IP>:5210/?account=bob` (`npm run dev -- --host`). `?net=1`이면 메뉴가 바로 열림, `&verse=<id>`로 verse 직접 지정 가능.
+- SIMULATION 값(F9 패널 분홍 칸)은 진짜 네트워크가 아님. 기록할 때 실제 값과 따로 적기.
 
 ### 시나리오
 
