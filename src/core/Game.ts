@@ -10,6 +10,8 @@ import { FFA_RULES, NET_TEST_RULES } from '../config/match';
 import { NET_MODE } from '../net/netConfig';
 import { NetGameMode, type NetGameContext } from '../net/NetGameMode';
 import { NetDebugPanel } from '../net/NetDebugPanel';
+import { MultiplayerMenu } from '../net/MultiplayerMenu';
+import { NetTestHud } from '../net/NetTestHud';
 import type { LocalState } from '../net/NetSession';
 import { checkNetRules, NET_MODES } from '../net/shared/protocol';
 import {
@@ -155,6 +157,16 @@ export class Game {
   /** 2인 네트워크 테스트 (?net=1에서만, 아니면 null → 싱글플레이 그대로) */
   private net: NetGameMode | null = null;
   private netPanel: NetDebugPanel | null = null;
+  /** 시작 화면 "Multiplayer Test" 메뉴 (항상 생성, 서버 연결은 방 만들기/입장 때) */
+  private mpMenu: MultiplayerMenu | null = null;
+  private netHud: NetTestHud | null = null;
+  /** 멀티 테스트 게임으로 전환됨 (봇 제거, 2인 규칙). 싱글플레이로 돌아가려면 새로고침 */
+  private netGame = false;
+  /** 직접 나가기로 룸에서 나옴 (연결 끊김과 구분해 메뉴 화면을 고름) */
+  private netLeftByUser = false;
+  /** 테스트 시작 때 자리별 스폰 (한 번만 사용) */
+  private netSpawn: SpawnPoint | null = null;
+  private mpRefreshTimer = 0;
   /** 리스폰 요청 중 (서버 승인 대기) */
   private netRespawnPending = false;
   /** 이번 프레임 자세 값 (네트워크 상태 패킷용) */
@@ -268,8 +280,7 @@ export class Game {
     if (this.map.hasTestTargets) this.targets = targetSpecs.map((s) => new TestTarget(this.physics, this.scene, s));
 
     // 매치 규칙: 적대 규칙(개인전 = 모두 적)은 봇 생성 전에 적용
-    // 네트워크 테스트(?net=1): 봇 없이 2인 규칙
-    const rules = NET_MODE ? NET_TEST_RULES : FFA_RULES;
+    const rules = FFA_RULES;
     COMBAT.hostility = rules.hostility;
     const allSpawns = [...this.map.spawns.teamA, ...this.map.spawns.teamB];
     this.spawnPool = rules.spawns === 'all' ? allSpawns : this.map.spawns.teamA;
@@ -299,7 +310,7 @@ export class Game {
         this.match.respawned(bot.id);
         this.applyAppearance(bot.id);
       },
-    }, this.map, NET_MODE ? 0 : 3);
+    }, this.map);
     if (rules.spawns === 'all') this.bots.setSpawnPool(allSpawns);
     // 매치: 플레이어 + 봇 등록, 시작 전(WAITING)에는 봇 대기
     this.match = new Match(rules, {
@@ -365,7 +376,9 @@ export class Game {
       this.debugPanel.prepend(this.bulletVfxSection());
     }
 
-    if (NET_MODE) this.initNet();
+    // 멀티플레이 테스트 메뉴 (시작 화면 버튼). ?net=1이면 바로 열림
+    this.initMultiplayerMenu();
+    if (NET_MODE) this.mpMenu?.open();
 
     // 로드아웃 선택 UI (시작 화면 카드). 시작 전에만 바꿀 수 있다
     // 캐릭터 선택 (시작 화면 카드). 시작 전에만, 잠긴 캐릭터는 배포 빌드에서 선택 불가
@@ -692,6 +705,12 @@ export class Game {
     // 네트워크 전송은 이번 프레임 최종 상태로 (50ms마다)
     this.net?.update(dt, this.player.justJumped, this.player.justLanded);
     this.netPanel?.update(dt);
+    this.netHud?.update(dt, this.netGame);
+    this.mpRefreshTimer -= dt;
+    if (this.mpRefreshTimer <= 0 && this.mpMenu) {
+      this.mpRefreshTimer = 0.25;
+      this.refreshMultiplayerMenu();
+    }
     this.input.endFrame();
   }
 
@@ -1095,7 +1114,7 @@ export class Game {
    * 고른 캐릭터는 브라우저에 저장 → 다음 접속 때 그 캐릭터로 시작. 봇 캐릭터는 바뀌지 않음
    */
   async selectCharacter(id: CharacterId): Promise<boolean> {
-    if (this.combatant.active || !(id in CHARACTERS) || !isCharacterSelectable(id)) return false;
+    if (this.combatant.active || this.netGame || !(id in CHARACTERS) || !isCharacterSelectable(id)) return false;
     if (id === this.avatar.character.id) return true;
     const token = ++this.characterSelectToken;
     this.hud.setCharacter(id, false, true);
@@ -1274,6 +1293,13 @@ export class Game {
   /** 첫 클릭(포인터 잠금): 시작 전(WAITING)이면 새 매치 (카운트다운부터) */
   startMatch(): void {
     if (!this.match || this.match.state !== 'WAITING') return;
+    // 멀티 테스트: 서버가 시작 상태를 공유하기 전에는 시작하지 않음 (방장 Start Test → 룸 상태)
+    if (this.netGame) {
+      const s = this.net?.session;
+      if (!s?.inRoom || s.testPhase !== 'playing') return;
+      this.beginNetTest();
+      return;
+    }
     this.beginMatch();
   }
 
@@ -1446,7 +1472,9 @@ export class Game {
 
   private respawn(): void {
     this.dead = false;
-    this.placeAtSpawn(this.pickPlayerSpawn());
+    // 멀티 테스트 시작 때만 자리별 고정 스폰 (P1 / P2 서로 다른 곳), 이후 리스폰은 기존 규칙
+    this.placeAtSpawn(this.netSpawn ?? this.pickPlayerSpawn());
+    this.netSpawn = null;
     this.aim.reset('respawn', true);
     // 선택한 주무기 유지: 1번 슬롯으로 들고 모든 무기 탄약 보충
     this.switchSlot(0, true);
@@ -1462,7 +1490,125 @@ export class Game {
 
   // ---------------- 네트워크 테스트 (?net=1) ----------------
 
-  /** 네트워크 테스트 모드 준비: 게임 모드·디버그 패널 (룸 입장은 패널 버튼) */
+  /** 시작 화면 멀티플레이 테스트 메뉴 (서버 연결은 방 만들기/입장 때 ensureNet) */
+  private initMultiplayerMenu(): void {
+    this.hud.onMultiplayer = () => {
+      this.mpMenu?.open();
+      this.refreshMultiplayerMenu();
+    };
+    this.mpMenu = new MultiplayerMenu(this.container, {
+      session: () => this.net?.session ?? null,
+      characterName: () => this.avatar.character.name,
+      characterLabel: (id) => (id in CHARACTERS ? CHARACTERS[id as CharacterId].name : id),
+      netGame: () => this.netGame,
+      leftUnexpectedly: () => this.netGame && !this.netLeftByUser && !this.net?.session.inRoom && !!this.net?.session.lastError,
+      locked: () => this.input.isLocked,
+      matchStarted: () => this.match.state !== 'WAITING',
+      create: async () => {
+        const net = this.ensureNet();
+        this.netLeftByUser = false;
+        if (await net.session.createRoom(this.avatar.character.id)) this.enterNetGame();
+      },
+      join: async (code) => {
+        const net = this.ensureNet();
+        this.netLeftByUser = false;
+        if (await net.session.joinByCode(this.avatar.character.id, code)) this.enterNetGame();
+      },
+      rejoin: async () => {
+        const net = this.ensureNet();
+        const id = net.session.lastRoomId;
+        if (!id) return;
+        this.netLeftByUser = false;
+        if (await net.session.joinByCode(this.avatar.character.id, id)) this.enterNetGame();
+      },
+      start: async () => {
+        const r = await this.ensureNet().session.startTest();
+        if (!r.ok) {
+          const why: Record<string, string> = { not_host: '방장만 시작할 수 있어요', need_2_players: '두 명이 모두 들어와야 시작할 수 있어요' };
+          this.mpMenu?.setNotice(`시작 실패: ${why[r.reason ?? ''] ?? r.reason ?? '알 수 없음'}`);
+          return;
+        }
+        // 버튼 클릭(사용자 동작) 직후라 포인터 잠금 요청 가능 → 방장은 바로 조작
+        this.input.requestLock();
+      },
+      leave: async () => {
+        this.netLeftByUser = true;
+        await this.net?.session.leave();
+      },
+      singlePlayer: () => this.reloadPage(false),
+    });
+  }
+
+  /** 메뉴·시작 카드 표시 갱신 + 서버 시작 상태 반영 (주기적으로 호출, 바뀐 게 없으면 DOM 그대로) */
+  private refreshMultiplayerMenu(): void {
+    const s = this.net?.session;
+    // 서버가 시작 상태를 공유함 → 로컬 매치 시작 (방장은 잠금과 함께, 손님은 클릭하면)
+    if (this.netGame && s?.inRoom && s.testPhase === 'playing' && this.match.state === 'WAITING' && this.input.isLocked) this.beginNetTest();
+    this.mpMenu?.refresh();
+    this.hud.setMultiplayerCovered(!!this.mpMenu?.covering);
+  }
+
+  /** 새로고침 (싱글플레이로 돌아가기 / 멀티 메뉴 다시 열기). Verse8이 붙인 주소 파라미터(account·auth 등)는 유지 */
+  private reloadPage(multiplayer: boolean): void {
+    const url = new URL(location.href);
+    if (multiplayer) url.searchParams.set('net', '1');
+    else url.searchParams.delete('net');
+    location.replace(url.toString());
+  }
+
+  /** 첫 방 입장 성공: 봇 제거·2인 규칙·테스트 HUD (싱글플레이 복귀는 새로고침) */
+  private enterNetGame(): void {
+    if (this.netGame) {
+      this.resetNetMatch();
+      return;
+    }
+    this.netGame = true;
+    for (const b of this.bots.bots) {
+      this.appearances.delete(b.id);
+      this.teams.delete(b.id);
+    }
+    this.bots.removeAll();
+    COMBAT.hostility = NET_TEST_RULES.hostility;
+    this.resetNetMatch();
+    this.hud.setCharacter(this.avatar.character.id, true);
+    this.hud.setModeLine('1:1 멀티플레이 테스트 · 봇 없음');
+    this.netHud = new NetTestHud(this.container, this.ensureNet().session, () => ({ hp: this.combatant.health.hp, max: this.combatant.health.maxHp }));
+    this.refreshMultiplayerMenu();
+  }
+
+  /** 멀티 테스트 매치를 대기 상태로 새로 만듦 (입장·재입장·나간 뒤) */
+  private resetNetMatch(): void {
+    this.match = new Match(NET_TEST_RULES, {
+      onStateChange: (state, prev) => this.onMatchState(state, prev),
+      onFinish: (result) => this.onMatchFinish(result),
+    });
+    this.match.stats.register({ id: this.combatant.id, name: '나', isLocal: true });
+    for (const r of this.net?.remotes.values() ?? []) this.match.stats.register({ id: r.id, name: r.name, isLocal: false });
+    this.combatant.active = false;
+    this.dead = false;
+    this.deathTimer = 0;
+    this.killedBy = null;
+    this.appearances.get(this.combatant.id)?.setDead(false);
+    this.hud.clearKillFeed();
+  }
+
+  /** 서버가 시작을 알림 → 자리별 스폰에서 카운트다운부터 (두 화면이 같은 룸 상태를 보고 시작) */
+  private beginNetTest(): void {
+    const s = this.net?.session;
+    if (!s || this.match.state !== 'WAITING') return;
+    const spawns = s.slot === 1 ? this.map.spawns.teamB : this.map.spawns.teamA;
+    this.netSpawn = spawns[0] ?? null;
+    this.beginMatch();
+    s.client.addLog('info', `테스트 시작 (자리 ${s.slot + 1} 스폰)`);
+  }
+
+  /** 네트워크 게임 모드 (처음 방 만들기/입장 때 생성) */
+  private ensureNet(): NetGameMode {
+    if (!this.net) this.initNet();
+    return this.net!;
+  }
+
+  /** 네트워크 테스트 모드 준비: 게임 모드·디버그 패널(F9, 접힌 채) */
   private initNet(): void {
     const ctx: NetGameContext = {
       localId: this.combatant.id,
@@ -1511,10 +1657,16 @@ export class Game {
         this.hud.showHit(false, true);
         this.audio.play('kill');
       },
+      roomInfo: () => this.refreshMultiplayerMenu(),
+      leftRoom: (_reason, byUser) => {
+        this.netLeftByUser = byUser;
+        this.input.releaseLock();
+        if (this.netGame) this.resetNetMatch();
+        this.refreshMultiplayerMenu();
+      },
     };
     this.net = new NetGameMode(ctx);
-    this.netPanel = new NetDebugPanel(this.container, this.net, () => this.avatar.character.id);
-    this.hud.setModeLine('1:1 네트워크 테스트 · 봇 없음 · 왼쪽 아래 NETWORK TEST(F9)에서 방 만들기/입장');
+    this.netPanel = new NetDebugPanel(this.container, this.net);
     if (import.meta.env.DEV) {
       // 서버 규칙(net/shared/protocol.ts)은 무기·캐릭터 설정의 사본 → 어긋나면 경고
       const issues = checkNetRules([...PRIMARY_WEAPONS, SECONDARY_WEAPON, MELEE_WEAPON], CHARACTERS);
@@ -1600,6 +1752,8 @@ export class Game {
     cancelAnimationFrame(this.rafId);
     // 네트워크 먼저 (룸 나가기·원격 아바타 해제) → 그다음 장면 전체 해제
     this.netPanel?.dispose();
+    this.netHud?.dispose();
+    this.mpMenu?.dispose();
     this.net?.dispose();
     this.timer.dispose();
     this.resizeObserver.disconnect();

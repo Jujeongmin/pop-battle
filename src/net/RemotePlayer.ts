@@ -26,8 +26,8 @@ export class RemotePlayer implements Damageable {
   hp: number;
   maxHp: number;
   dead = false;
-  /** 연결 유실 (30초 유예 중) */
-  disconnected = false;
+  /** 연결 유실 (30초 유예 중): 숨김·판정 제외 */
+  hidden = false;
   readonly renderFeet = new THREE.Vector3();
   readonly aimDir = new THREE.Vector3(0, 0, 1);
   readonly velocity = new THREE.Vector3();
@@ -85,8 +85,22 @@ export class RemotePlayer implements Damageable {
   setDead(dead: boolean): void {
     this.dead = dead;
     if (dead) this.hp = 0;
-    this.hitboxes.setEnabled(!dead && this.hasState);
-    this.collider.setEnabled(!dead);
+    this.applyActive();
+  }
+
+  /** 연결 유실 중 숨김 (캐릭터·이름표·판정·충돌 모두) */
+  setHidden(hidden: boolean): void {
+    if (hidden === this.hidden) return;
+    this.hidden = hidden;
+    this.applyActive();
+  }
+
+  private applyActive(): void {
+    const present = this.hasState && !this.hidden;
+    this.avatar.root.visible = present;
+    this.hitboxes.setEnabled(present && !this.dead);
+    this.collider.setEnabled(present && !this.dead);
+    if (!present) this.label.visible = false;
   }
 
   /** 캐릭터 교체 (상대가 다른 캐릭터로 들어옴). 이전 아바타는 호출한 쪽이 해제 */
@@ -94,7 +108,7 @@ export class RemotePlayer implements Damageable {
     this.avatar = avatar;
     this.weaponId = '';
     this.weaponClones.clear();
-    avatar.root.visible = this.hasState;
+    this.applyActive();
   }
 
   /** 보간된 상태로 아바타·강체·판정 갱신 (물리 스텝 전에 호출 → 이번 프레임 히트스캔에 반영) */
@@ -102,9 +116,9 @@ export class RemotePlayer implements Damageable {
     if (!s) return;
     if (!this.hasState) {
       this.hasState = true;
-      this.avatar.root.visible = true;
-      this.hitboxes.setEnabled(!this.dead);
+      this.applyActive();
     }
+    if (this.hidden) return;
     const n = s.near;
     this.extrapolating = s.extrapolating;
     this.renderFeet.set(s.p[0], s.p[1], s.p[2]);
@@ -159,7 +173,7 @@ export class RemotePlayer implements Damageable {
     l.hp = this.hp;
     l.maxHp = this.maxHp;
     l.dead = this.dead;
-    l.name = this.disconnected ? `${this.name} (연결 끊김)` : this.name;
+    l.name = this.name;
     l.world.copy(a.headCenter).setY(a.headCenter.y + a.headRadius + 0.25);
     this.labelTimer -= dt;
     if (this.labelTimer <= 0) {

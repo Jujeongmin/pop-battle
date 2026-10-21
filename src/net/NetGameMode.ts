@@ -44,6 +44,10 @@ export interface NetGameContext {
   remoteRespawned(id: string): void;
   /** 내가 쏜 탄이 서버에서 처치로 확정 */
   confirmedKill(): void;
+  /** 룸 정보 변경 (방장·진행 상태·참가자·연결) */
+  roomInfo(): void;
+  /** 룸에서 나옴 (byUser = 직접 나감) */
+  leftRoom(reason: string, byUser: boolean): void;
 }
 
 const _from = new THREE.Vector3();
@@ -81,13 +85,12 @@ export class NetGameMode {
       onRemoteShots: (acc, shots) => this.remoteShots(acc, shots),
       onHits: (r) => this.applyHits(r),
       onSpawn: (acc, hp) => this.remoteSpawn(acc, hp),
-      onRemoteDisconnect: (acc) => {
-        const r = this.remotes.get(acc);
-        if (r) r.disconnected = true;
-      },
-      onLeftRoom: () => {
+      onRemoteDisconnect: () => undefined,
+      onLeftRoom: (reason, byUser) => {
         for (const acc of [...this.remotes.keys()]) this.removeRemote(acc);
+        this.ctx.leftRoom(reason, byUser);
       },
+      onRoomInfo: () => this.ctx.roomInfo(),
     });
   }
 
@@ -112,6 +115,8 @@ export class NetGameMode {
     const renderTime = performance.now() - this.interpDelayMs;
     const cam = this.ctx.camera();
     for (const [acc, r] of this.remotes) {
+      // 연결 유실(30초 유예) 중인 상대는 숨김·판정 제외 (상태가 다시 오면 복구, 유예가 끝나면 퇴장으로 제거)
+      r.setHidden(this.session.isLost(acc));
       const buf = this.session.remotes.get(acc);
       r.update(dt, buf ? buf.sample(renderTime) : null, cam);
     }
@@ -311,7 +316,6 @@ export class NetGameMode {
     const r = this.remotes.get(account);
     if (!r) return;
     r.hp = hp;
-    r.disconnected = false;
     if (r.dead) {
       r.setDead(false);
       this.ctx.setDeadLook(r.id, false);

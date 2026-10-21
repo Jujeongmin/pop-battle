@@ -21,7 +21,7 @@ export class NetDebugPanel {
   readonly root = el('div', 'net-panel');
   private readonly info = el('pre', 'np-info');
   private readonly logBox = el('pre', 'np-log');
-  private readonly codeInput = el('input', 'np-code');
+  private readonly copyBox = el('textarea', 'np-copy');
   private readonly body = el('div', 'np-body');
   private timer = 0;
   private busy = false;
@@ -35,12 +35,11 @@ export class NetDebugPanel {
   constructor(
     container: HTMLElement,
     private readonly mode: NetGameMode,
-    private readonly characterId: () => string,
   ) {
     const s = mode.session;
     const c = s.client;
     const head = el('div', 'np-head');
-    head.append(el('b', '', 'NETWORK TEST (2인 · Verse8)'), el('span', 'np-key', 'F9'));
+    head.append(el('b', '', 'NETWORK DEBUG (상세 측정·로그)'), el('span', 'np-key', 'F9'));
     head.onclick = () => this.toggle();
     this.root.append(head, this.body);
 
@@ -62,27 +61,20 @@ export class NetDebugPanel {
       btns.appendChild(b);
       return b;
     };
-    btn('연결', () => c.connect());
-    btn('방 만들기', () => s.createRoom(this.characterId()));
-    btn('빠른 매칭', () => s.quickMatch(this.characterId()));
-    this.codeInput.placeholder = 'pb-xxxxxx';
-    this.codeInput.spellcheck = false;
-    const joinRow = el('div', 'np-join');
-    const joinBtn = el('button', '', '코드 입장');
-    joinBtn.onclick = async () => {
-      if (this.busy) return;
-      this.busy = true;
+    btn('로그 복사', async () => {
+      const text = this.logText(200);
+      console.info(`[net] 로그\n${text}`);
       try {
-        await s.joinByCode(this.characterId(), this.codeInput.value);
-      } finally {
-        this.busy = false;
-        this.render();
+        await navigator.clipboard.writeText(text);
+        this.copyBox.style.display = 'none';
+      } catch {
+        // iframe(Verse8)에서 클립보드가 막히면 선택된 텍스트 상자로 보여 줌 → Ctrl+C
+        this.copyBox.value = text;
+        this.copyBox.style.display = '';
+        this.copyBox.focus();
+        this.copyBox.select();
       }
-    };
-    joinRow.append(this.codeInput, joinBtn);
-    btn('룸 나가기', () => s.leave());
-    btn('룸 코드 복사', () => navigator.clipboard?.writeText(s.roomId ?? '').catch(() => undefined));
-    btn('로그 복사', () => navigator.clipboard?.writeText(this.logText(200)).catch(() => undefined));
+    });
     btn('통계 초기화', () => {
       c.counters.reset();
       s.rejected = 0;
@@ -101,9 +93,11 @@ export class NetDebugPanel {
     sim.append(this.slider('손실', 0, 30, 1, () => c.sim.lossPct, (v) => (c.sim.lossPct = v), '%'));
     sim.append(el('div', 'np-hint', '손실: 위치 패킷·원격 상태·탄 연출만 버림. 사격·명중이 실린 패킷은 TCP 재전송처럼 지연만 추가 (SDK 전송은 WebSocket = 실제로는 유실 대신 지연).'));
 
-    this.body.append(btns, joinRow, interp, sim, this.info, el('div', 'np-sub', '로그'), this.logBox);
-    // 좁은 화면(모바일·작은 창)에서는 시작 화면을 가리지 않게 접은 채로 시작 (머리글 탭·F9로 펼침)
-    if (window.innerWidth < 900) this.root.classList.add('collapsed');
+    this.copyBox.readOnly = true;
+    this.copyBox.style.display = 'none';
+    this.body.append(btns, interp, sim, this.info, el('div', 'np-sub', '로그 (오류는 ! 표시, 브라우저 콘솔에도 [net])'), this.logBox, this.copyBox);
+    // 접은 채로 시작 (머리글 탭·F9로 펼침). 방 만들기·입장은 시작 화면 Multiplayer Test 메뉴
+    this.root.classList.add('collapsed');
     container.appendChild(this.root);
     window.addEventListener('keydown', this.onKey);
     this.render();

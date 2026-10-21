@@ -332,3 +332,48 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 .np-info.sim-on { border-left: 3px solid #ff8fb8; padding-left: 6px; }
 .np-log { max-height: 160px; overflow-y: auto; background: rgba(39,50,92,.05); border-radius: 6px; padding: 4px; }
 .np-sub { font-weight: 800; margin-top: 6px; }
+
+/* 멀티플레이 테스트: 시작 화면 버튼·메뉴·테스트 HUD */
+.mp-open { pointer-events: auto; cursor: pointer; font: inherit; font-weight: 900; font-size: 15px; margin: 8px 0 2px; padding: 9px 16px; border-radius: 14px; border: 0; background: var(--pink); color: #fff; box-shadow: 0 3px 0 rgba(39, 50, 92, .22); }
+.lock-overlay.mp-covered { display: none; }
+.mp-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(39, 50, 92, .32); z-index: 15; pointer-events: auto; padding: 10px; }
+.mp-overlay.hidden { display: none; }
+.mp-overlay.pass-through { pointer-events: none; background: rgba(39, 50, 92, .18); }
+.mp-card { pointer-events: auto; background: var(--cream); color: var(--ink); padding: 18px 22px; border-radius: 24px; box-shadow: 0 6px 0 rgba(39,50,92,.25); width: min(440px, 94vw); max-height: 94vh; overflow-y: auto; display: grid; gap: 8px; }
+.mp-kicker { font-size: 12px; font-weight: 900; color: var(--orange); letter-spacing: 1px; }
+.mp-title { margin: -4px 0 2px; font-size: 26px; font-weight: 900; color: var(--blue); letter-spacing: -.3px; }
+.mp-sub, .mp-status { margin: 0; font-weight: 800; font-size: 14px; }
+.mp-hint { margin: 0; font-size: 12px; font-weight: 600; color: #6b6f8a; }
+.mp-error { margin: 0; font-size: 13px; font-weight: 800; color: #c2386a; background: rgba(255, 143, 184, .16); border-radius: 10px; padding: 6px 9px; word-break: break-word; }
+.mp-btn { font: inherit; font-weight: 900; font-size: 15px; padding: 10px 14px; border-radius: 14px; border: 0; background: #fff; color: var(--ink); cursor: pointer; box-shadow: 0 3px 0 rgba(39, 50, 92, .2); }
+.mp-btn:disabled { opacity: .45; cursor: default; }
+.mp-primary { background: var(--blue); color: #fff; }
+.mp-ghost { background: transparent; box-shadow: none; text-decoration: underline; font-size: 13px; padding: 4px; }
+.mp-small { font-size: 12px; padding: 6px 10px; }
+.mp-join { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.mp-code-input, .mp-code-value { font: 900 18px ui-monospace, monospace; letter-spacing: 2px; text-transform: uppercase; padding: 8px 10px; border-radius: 12px; border: 2px solid #d9d2e6; background: #fff; color: var(--ink); min-width: 0; }
+.mp-code { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; }
+.mp-code-value { background: var(--yellow); border-color: transparent; text-align: center; }
+.mp-label { font-weight: 900; font-size: 13px; }
+.mp-players { display: grid; gap: 6px; }
+.mp-player { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; background: #fff; border-radius: 12px; padding: 7px 10px; box-shadow: 0 2px 0 rgba(39, 50, 92, .12); font-size: 13px; }
+.mp-player .mp-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-player .mp-ok, .mp-player .mp-bad, .mp-player .mp-wait, .mp-player .mp-hp { grid-column: 2; font-weight: 800; font-size: 12px; }
+.mp-ok { color: #2f9e6e; }
+.mp-bad { color: #c2386a; }
+.mp-wait { color: #9a98ad; grid-column: 2; }
+.mp-count { margin: 0; font-weight: 900; }
+@media (max-height: 520px) {
+  .mp-card { padding: 10px 14px; gap: 5px; width: min(560px, 94vw); }
+  .mp-title { font-size: 20px; }
+  .mp-btn { padding: 7px 12px; font-size: 14px; }
+  .mp-players { grid-template-columns: 1fr 1fr; }
+}
+.net-test-hud { position: absolute; right: 10px; top: 190px; width: 230px; background: rgba(255, 250, 242, .9); border-radius: 12px; padding: 7px 9px; font-size: 11px; z-index: 12; pointer-events: none; box-shadow: 0 3px 10px rgba(39,50,92,.18); }
+.net-test-hud b { display: block; font-size: 11px; color: var(--blue); margin-bottom: 3px; }
+.net-test-hud div { display: grid; grid-template-columns: 56px 1fr; gap: 6px; line-height: 1.45; }
+.net-test-hud div span:first-child { font-weight: 800; color: #6b6f8a; }
+.net-test-hud .ok { color: #2f9e6e; font-weight: 800; }
+.net-test-hud .bad { color: #c2386a; font-weight: 800; word-break: break-word; }
+@media (max-height: 520px) { .net-test-hud { top: 120px; width: 200px; font-size: 10px; } }
+.np-copy { width: 100%; height: 120px; font: 10px ui-monospace, monospace; margin-top: 4px; }

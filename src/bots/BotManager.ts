@@ -314,6 +314,19 @@ export class BotManager {
     return lines;
   }
 
+  /** 봇 전부 제거 (멀티플레이 테스트로 전환할 때). 플레이어는 그대로, 이후 봇 업데이트는 빈 목록 */
+  removeAll(): void {
+    for (const b of this.bots) b.dispose();
+    this.bots.length = 0;
+    this.labels.length = 0;
+    this.combatants.length = 1;
+    for (const l of this.pathLines) {
+      l.geometry.dispose();
+      this.scene.remove(l);
+    }
+    this.pathLines.length = 0;
+  }
+
   dispose(): void {
     for (const b of this.bots) b.dispose();
     for (const l of this.pathLines) {

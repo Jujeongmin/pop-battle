@@ -25,7 +25,11 @@ async function setupPair(server: any) {
   await server.st(state([0, 0, 0]));
   server.connect({ account: 'bob', roomId: ROOM });
   await server.hello('blue');
-  // bob이 한 발 쏴서 리스폰 보호 해제 (테스트가 2초 기다리지 않게)
+  // 방장(alice, 먼저 입장)이 테스트 시작
+  server.connect({ account: 'alice', roomId: ROOM });
+  expect((await server.startTest()).ok).toBe(true);
+  server.connect({ account: 'bob', roomId: ROOM });
+  // bob이 한 발 쏴서 보호 해제 (테스트가 기다리지 않게)
   await server.st(state([0, 0, 10], { s: [{ w: 'rifle', f: [0, 1, 10], e: [5, 1, 20], h: 0 }] }));
   server.connect({ account: 'alice', roomId: ROOM });
 }
@@ -42,7 +46,8 @@ describe('matching', () => {
   });
 
   test('findRoom: bad code / not found / ok / full', async (server) => {
-    expect((await server.findRoom('hello')).reason).toBe('bad_code');
+    expect((await server.findRoom('he!!o')).reason).toBe('bad_code');
+    expect((await server.findRoom('ABC123')).reason).toBe('not_found');
     expect((await server.findRoom(ROOM)).reason).toBe('not_found');
     await server.simulateJoin(ROOM, 'alice');
     const one = await server.findRoom(ROOM);
@@ -164,6 +169,8 @@ describe('server-authoritative damage', () => {
   test('protected victim takes no damage', async (server) => {
     await server.simulateJoin(ROOM, 'alice');
     await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.startTest();
     server.connect({ account: 'bob', roomId: ROOM });
     await server.st(state([0, 0, 10]));
     server.connect({ account: 'alice', roomId: ROOM });
@@ -186,5 +193,56 @@ describe('server-authoritative damage', () => {
     server.connect({ account: 'alice', roomId: '__no_room__' });
     await server.st(state([0, 0, 0]));
     expect((await server.selfDeath('fall')).ok).toBe(false);
+  });
+});
+
+describe('test room flow', () => {
+  test('host (first joiner) starts only with 2 players; guest cannot', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    server.connect({ account: 'alice', roomId: ROOM });
+    const h = await server.hello('blue');
+    expect(h.host).toBe('alice');
+    expect(h.phase).toBe('lobby');
+    expect((await server.startTest()).reason).toBe('need_2_players');
+    await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'bob', roomId: ROOM });
+    expect((await server.startTest()).reason).toBe('not_host');
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.startTest()).ok).toBe(true);
+    const after = await server.hello('blue');
+    expect(after.phase).toBe('playing');
+    expect(after.startedAt).toBeGreaterThan(0);
+  });
+
+  test('no damage before start (lobby)', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'bob', roomId: ROOM });
+    await server.st(state([0, 0, 10]));
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.st(state([0, 0, 0], { s: [{ w: 'rifle', f: [0, 1, 0], e: [0, 1, 10], h: 1 }], h: [{ v: 'bob', w: 'rifle', hd: 0, d: 10 }] }));
+    expect((await players(server)).bob.hp).toBe(100);
+  });
+
+  test('bye removes at once, hands host over, frees the slot for findRoom', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    await server.simulateJoin(ROOM, 'bob');
+    expect((await server.findRoom(ROOM)).reason).toBe('full');
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.bye()).ok).toBe(true);
+    server.connect({ account: 'bob', roomId: ROOM });
+    const h = await server.hello('blue');
+    expect(Object.keys(h.players)).toEqual(['bob']);
+    expect(h.host).toBe('bob');
+    const f = await server.findRoom('PB-TEST01'.replace('PB-', ''));
+    expect(f.ok).toBe(true);
+    expect(f.count).toBe(1);
+  });
+
+  test('room summary is cleared when the room is destroyed', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    expect((await server.findRoom(ROOM)).ok).toBe(true);
+    await server.simulateLeave(ROOM, 'alice');
+    expect((await server.findRoom(ROOM)).reason).toBe('not_found');
   });
 });

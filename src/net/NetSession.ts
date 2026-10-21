@@ -14,6 +14,19 @@ import {
 } from './shared/protocol';
 
 export type RoomPhase = 'lobby' | 'joining' | 'in-room';
+/** 서버 룸의 테스트 진행 상태 (대기실 / 시작됨) */
+export type TestPhase = 'lobby' | 'playing';
+
+/** 룸 코드 표시용 ('pb-abc123' → 'ABC123') */
+export function displayCode(roomId: string | null): string {
+  return roomId ? roomId.replace(/^pb-/, '').toUpperCase() : '';
+}
+
+const JOIN_ERRORS: Record<string, string> = {
+  full: '방이 가득 찼어요 (2/2)',
+  not_found: '방을 찾을 수 없어요 (코드 확인, 또는 방이 사라짐)',
+  bad_code: '방 코드 형식이 올바르지 않아요 (영문·숫자 4~12자)',
+};
 
 export interface NetSessionEvents {
   /** 원격 플레이어가 생김 (상태를 처음 받음) / 사라짐 (룸을 나감) */
@@ -29,8 +42,10 @@ export interface NetSessionEvents {
   onSpawn(account: string, hp: number): void;
   /** 원격 플레이어 연결 유실 (30초 유예 중) */
   onRemoteDisconnect(account: string): void;
-  /** 내가 룸에서 나옴 (직접 나가기·정원 초과·연결 끊김) */
-  onLeftRoom(reason: string): void;
+  /** 내가 룸에서 나옴 (직접 나가기·정원 초과·연결 끊김). byUser = 직접 나감 */
+  onLeftRoom(reason: string, byUser: boolean): void;
+  /** 룸 정보(방장·진행 상태·참가자·연결) 변경 → UI 갱신 */
+  onRoomInfo(): void;
 }
 
 /** 이번 프레임 로컬 상태 (q·t·s·h는 세션이 채움) */
@@ -47,6 +62,16 @@ export class NetSession {
   lastRejectReason = '';
   /** 마지막 hello 때 서버 시각 - 로컬 시각 (참고용) */
   serverClockOffset = 0;
+  /** 서버 룸: 방장 계정·진행 상태·시작 시각 */
+  host: string | null = null;
+  testPhase: TestPhase = 'lobby';
+  startedAt = 0;
+  /** 마지막 입장 실패·연결 오류 (UI 표시용, 서버가 준 원인 그대로) */
+  lastError = '';
+  /** 마지막으로 들어갔던 룸 (재입장용) */
+  lastRoomId: string | null = null;
+  /** 연결 유실(30초 유예) 중인 원격 계정 → 새 상태가 오면 해제 */
+  private readonly lost = new Set<string>();
   private seq = 0;
   private sendTimer = 0;
   private pingTimer = 0;
@@ -57,8 +82,22 @@ export class NetSession {
   private characterId = 'blue';
 
   constructor(private readonly events: NetSessionEvents) {
-    this.client.onDisconnect = () => this.handleLeft('게임 서버 연결 끊김');
-    this.client.onRoomDisconnect = () => this.handleLeft('룸 서버 연결 끊김');
+    this.client.onDisconnect = (r) => this.handleLeft(`게임 서버 연결 끊김${r ? ` (${r})` : ''}`);
+    this.client.onRoomDisconnect = (r) => this.handleLeft(`룸 서버 연결 끊김${r ? ` (${r})` : ''}`);
+    this.client.onStatus = () => this.events.onRoomInfo();
+    // 탭 닫기·새로고침: 바로 퇴장 알림 (응답 기다리지 않음). SDK 소켓도 1001로 닫혀 서버가 즉시 onRoomLeave
+    addEventListener('pagehide', () => {
+      if (this.inRoom) this.client.fire('bye');
+    });
+  }
+
+  get isHost(): boolean {
+    return this.inRoom && this.host === this.me;
+  }
+
+  /** 원격 플레이어가 연결 유실(30초 유예) 중인지 */
+  isLost(account: string): boolean {
+    return this.lost.has(account);
   }
 
   get me(): string {
@@ -86,7 +125,7 @@ export class NetSession {
   async joinByCode(characterId: string, code: string): Promise<boolean> {
     return this.enter(characterId, async () => {
       const r = await this.client.call<{ ok: boolean; roomId?: string; reason?: string; count?: number }>('findRoom', [code]);
-      if (!r.ok || !r.roomId) throw new Error(r.reason === 'full' ? '룸 정원(2명) 가득' : r.reason === 'not_found' ? '없는 룸 코드' : '잘못된 룸 코드');
+      if (!r.ok || !r.roomId) throw new Error(JOIN_ERRORS[r.reason ?? ''] ?? `입장 불가 (${r.reason ?? '알 수 없음'})`);
       return r.roomId;
     });
   }
@@ -95,38 +134,62 @@ export class NetSession {
     return this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('quickMatch')).roomId);
   }
 
-  leave(reason = '사용자가 나감'): void {
+  /** 방장만: 테스트 시작 (서버가 2명 확인 후 진행 상태를 룸에 공유) */
+  async startTest(): Promise<{ ok: boolean; reason?: string }> {
+    try {
+      const r = await this.client.call<{ ok: boolean; reason?: string }>('startTest');
+      if (!r.ok) this.client.addLog('warn', `시작 거부: ${r.reason}`);
+      return r;
+    } catch (e) {
+      this.client.addLog('error', `startTest: ${errText(e)}`);
+      return { ok: false, reason: errText(e) };
+    }
+  }
+
+  /** 직접 나가기: 서버에 먼저 알려 상대 화면에서 바로 사라지게 (SDK leaveRoom만 쓰면 30초 유예) */
+  async leave(reason = '사용자가 나감'): Promise<void> {
     if (this.phase === 'lobby') return;
+    if (this.inRoom) {
+      await Promise.race([this.client.call('bye').catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
+    }
     this.client.leaveRoom();
-    this.handleLeft(reason);
+    this.handleLeft(reason, true);
   }
 
   private async enter(characterId: string, pickRoom: () => Promise<string>): Promise<boolean> {
     if (this.phase !== 'lobby') return false;
     this.characterId = characterId;
     this.phase = 'joining';
+    this.lastError = '';
+    this.events.onRoomInfo();
     try {
       if (!(await this.client.connect())) throw new Error(this.client.statusReason || '연결 실패');
       const roomId = await pickRoom();
       await this.client.joinRoom(roomId);
       this.subscribe();
-      const hello = await this.client.call<{ slot: number; now: number; players: NetPlayers }>('hello', [characterId]);
+      const hello = await this.client.call<{ slot: number; now: number; players: NetPlayers; host: string | null; phase: TestPhase; startedAt: number }>('hello', [characterId]);
       this.serverClockOffset = hello.now - Date.now();
       if (hello.slot < 0) {
         this.client.addLog('warn', `정원 ${NET_MAX_PLAYERS}명 초과 → 관전자 자리라 나감`);
         this.client.leaveRoom();
+        this.lastError = JOIN_ERRORS.full!;
         this.handleLeft('정원 초과');
         return false;
       }
       this.slot = hello.slot;
       this.phase = 'in-room';
+      this.lastRoomId = roomId;
+      this.applyRoom(hello);
       this.applyPlayers(hello.players);
-      this.client.addLog('info', `자리 ${hello.slot} · 참가자 ${Object.keys(hello.players).length}명`);
+      this.client.addLog('info', `자리 ${hello.slot} · 참가자 ${Object.keys(hello.players).length}명 · 방장 ${hello.host ?? '-'} · ${hello.phase}`);
+      this.events.onRoomInfo();
       return true;
     } catch (e) {
-      this.client.addLog('error', `입장 실패: ${errText(e)}`);
+      this.lastError = errText(e);
+      this.client.addLog('error', `입장 실패: ${this.lastError}`);
       this.client.leaveRoom();
       this.phase = 'lobby';
+      this.events.onRoomInfo();
       return false;
     }
   }
@@ -141,6 +204,7 @@ export class NetSession {
         seen.add(st.account);
         const pkt = st.s as NetStatePacket | undefined;
         if (!pkt) continue;
+        if (this.lost.delete(st.account)) this.events.onRoomInfo();
         let buf = this.remotes.get(st.account);
         if (!buf) {
           buf = new SnapshotBuffer();
@@ -152,7 +216,9 @@ export class NetSession {
       }
     });
     c.subscribeRoom((state) => {
+      this.applyRoom(state);
       if (state.players) this.applyPlayers(state.players as NetPlayers);
+      this.events.onRoomInfo();
     });
     c.onRoomMessage<{ a: string; s: NetShot[] }>('fx', (m) => {
       if (m.a !== this.me) this.events.onRemoteShots(m.a, m.s);
@@ -165,14 +231,23 @@ export class NetSession {
       this.dropRemote(m.account);
     });
     c.onRoomMessage<{ account: string }>('dc', (m) => {
+      if (m.account === this.me) return;
       c.addLog('warn', `연결 유실(30초 유예): ${m.account}`);
+      this.lost.add(m.account);
       this.events.onRemoteDisconnect(m.account);
+      this.events.onRoomInfo();
     });
     c.onRoomMessage<{ r: NetRejected[] }>('rej', (m) => {
       this.rejected += m.r.length;
       this.lastRejectReason = m.r.map((x) => `${x.w}→${x.reason}`).join(', ');
       c.addLog('warn', `서버가 명중 거부: ${this.lastRejectReason}`);
     });
+  }
+
+  private applyRoom(state: { host?: string | null; phase?: string; startedAt?: number }): void {
+    if (state.host !== undefined) this.host = state.host;
+    if (state.phase) this.testPhase = state.phase === 'playing' ? 'playing' : 'lobby';
+    if (state.startedAt !== undefined) this.startedAt = state.startedAt;
   }
 
   private applyPlayers(players: NetPlayers): void {
@@ -183,21 +258,28 @@ export class NetSession {
   }
 
   private dropRemote(account: string): void {
+    this.lost.delete(account);
     if (!this.remotes.delete(account)) return;
     this.events.onRemoteLeave(account);
+    this.events.onRoomInfo();
   }
 
-  private handleLeft(reason: string): void {
+  private handleLeft(reason: string, byUser = false): void {
     if (this.phase === 'lobby') return;
     this.phase = 'lobby';
     this.slot = -1;
+    this.host = null;
+    this.testPhase = 'lobby';
+    this.lost.clear();
+    if (!byUser && !this.lastError) this.lastError = reason;
     for (const acc of [...this.remotes.keys()]) this.dropRemote(acc);
     this.players = {};
     this.shots.length = 0;
     this.hits.length = 0;
     this.respawnPending = false;
-    this.client.addLog('info', `룸에서 나옴: ${reason}`);
-    this.events.onLeftRoom(reason);
+    this.client.addLog(byUser ? 'info' : 'warn', `룸에서 나옴: ${reason}`);
+    this.events.onLeftRoom(reason, byUser);
+    this.events.onRoomInfo();
   }
 
   // ---------------- 전송 ----------------

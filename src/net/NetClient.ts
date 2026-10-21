@@ -242,6 +242,13 @@ export class NetClient {
     return r;
   }
 
+  /** 응답 없는 호출 (탭 닫힐 때 퇴장 알림 등, 시뮬 지연 없음) */
+  fire(name: string, args: unknown[] = []): void {
+    if (!this.server?.connected) return;
+    this.counters.sentCalls++;
+    this.server.remoteFunction(name, args, { needResponse: false }).catch(() => undefined);
+  }
+
   /**
    * 상태 스트림 (throttle 호출, 응답 없음). 호출 간격이 throttle 창보다 길어야 버려지지 않는다.
    * 시뮬 손실: reliable=false(위치만)면 버림, true(사격·명중 포함)면 TCP 재전송처럼 지연만 더함

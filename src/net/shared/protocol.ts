@@ -16,6 +16,8 @@ export const NET_TIMING = {
   respawnDelayMs: 2500,
   /** 리스폰 보호 (ms) = COMBAT.player.spawnProtection */
   spawnProtectionMs: 2000,
+  /** 테스트 시작 직후 보호 (ms): 시작 카운트다운(1초) 동안 피해 없음 */
+  startProtectionMs: 1500,
   /** RTT 측정 간격 (ms). 일반 호출은 함수 이름당 초당 10회 제한 */
   pingIntervalMs: 1000,
 } as const;

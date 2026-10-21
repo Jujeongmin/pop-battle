@@ -153,6 +153,8 @@ export class Hud {
   private locked = false;
   /** 결과 화면 "다시 플레이" 버튼 */
   onReplay: (() => void) | null = null;
+  /** 시작 카드 "Multiplayer Test" 버튼 */
+  onMultiplayer: (() => void) | null = null;
   /** 우측 상단 실시간 킬로그 */
   private readonly killFeed: KillFeed;
 
@@ -205,6 +207,7 @@ export class Hud {
             <div class="lo-note"></div>
           </div>
           <p class="mode-line">개인전 4인 · 3분 · 15킬 먼저 달성하면 승리</p>
+          <div><button type="button" class="mp-open">Multiplayer Test</button></div>
           <p>화면을 클릭해서 시작</p>
           <ul>
             <li><b>WASD</b> 이동 · <b>W 두 번</b> 달리기 · <b>Shift</b> 슬라이딩 · <b>Space</b> 점프</li>
@@ -254,6 +257,10 @@ export class Hud {
     this.matchBar = q('.match-bar');
     this.countdownEl = q('.countdown');
     this.resultEl = q('.result');
+    q<HTMLButtonElement>('.mp-open').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onMultiplayer?.();
+    });
     q<HTMLButtonElement>('.res-replay').addEventListener('click', (e) => {
       e.stopPropagation();
       this.onReplay?.();
@@ -356,6 +363,11 @@ export class Hud {
     }
     this.loadoutNote.textContent = locked ? '전투 중에는 주무기를 바꿀 수 없어요' : '2번 권총 · 3번 뿅망치는 고정';
     this.root.querySelector('.loadout:not(.char-select) .lo-title')!.textContent = locked ? '주무기 (고정)' : '주무기 선택';
+  }
+
+  /** 멀티플레이 테스트 화면이 덮고 있으면 시작 카드 숨김 */
+  setMultiplayerCovered(covered: boolean): void {
+    this.lockOverlay.classList.toggle('mp-covered', covered);
   }
 
   /** 시작 카드의 모드 안내 문구 (네트워크 테스트 모드 등) */
