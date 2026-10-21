@@ -408,3 +408,4 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 .mp-table th, .mp-table td { padding: 5px 6px; text-align: center; }
 .mp-table th { font-size: 11px; color: #6b6f8a; }
 .mp-table tr.me td { background: rgba(255, 212, 94, .35); font-weight: 900; }
+.net-toast { position: absolute; left: 50%; top: 72px; transform: translateX(-50%); background: rgba(39, 50, 92, .85); color: #fff; font-weight: 800; font-size: 13px; padding: 6px 14px; border-radius: 14px; z-index: 14; pointer-events: none; white-space: nowrap; }

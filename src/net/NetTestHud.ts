@@ -15,7 +15,25 @@ export class NetTestHud {
     container.appendChild(this.root);
   }
 
+  private readonly toastEl = document.createElement('div');
+  private toastTimer = 0;
+
+  /** 화면 위쪽 알림 (4초) */
+  toast(text: string): void {
+    if (!this.toastEl.isConnected) {
+      this.toastEl.className = 'net-toast';
+      this.root.parentElement?.appendChild(this.toastEl);
+    }
+    this.toastEl.textContent = text;
+    this.toastEl.style.display = '';
+    this.toastTimer = 4;
+  }
+
   update(dt: number, visible: boolean): void {
+    if (this.toastTimer > 0) {
+      this.toastTimer -= dt;
+      if (this.toastTimer <= 0) this.toastEl.style.display = 'none';
+    }
     this.root.style.display = visible ? '' : 'none';
     if (!visible) return;
     this.timer -= dt;
@@ -61,6 +79,7 @@ export class NetTestHud {
   }
 
   dispose(): void {
+    this.toastEl.remove();
     this.root.remove();
   }
 }

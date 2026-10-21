@@ -1594,6 +1594,8 @@ export class Game {
     this.hud.setCharacter(this.avatar.character.id, true);
     this.hud.setModeLine('멀티플레이 (최대 4인) · 봇 없음');
     this.netHud = new NetTestHud(this.container, this.ensureNet().session, () => ({ hp: this.combatant.health.hp, max: this.combatant.health.maxHp }));
+    // 다른 플레이어 퇴장·연결 끊김을 화면에 알림
+    this.ensureNet().session.onNotice = (text) => this.netHud?.toast(text);
     this.refreshMultiplayerMenu();
   }
 
@@ -1692,7 +1694,8 @@ export class Game {
     const all = [...Object.entries(s.players).map(([a, p]) => ({ a, k: p.k, d: p.d })), ...Object.values(s.gone).map((g) => ({ a: g.account, k: g.k, d: g.d }))];
     const me = s.players[s.me];
     const sorted = [...all].sort((x, y) => y.k - x.k || x.d - y.d);
-    const now = s.serverNow();
+    // 결과가 나오면 종료 시각에서 멈춤
+    const now = s.matchPhase === 'result' && s.result ? s.result.endedAt : s.serverNow();
     const timeLeft = s.endAt > 0 ? Math.max(0, Math.min(rule.timeLimitMs, s.endAt - Math.max(now, s.startAt)) / 1000) : null;
     return {
       mode: s.mode,

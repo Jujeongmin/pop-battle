@@ -21,6 +21,10 @@ import {
 
 export type RoomPhase = 'lobby' | 'joining' | 'in-room';
 
+function shortName(a: string): string {
+  return a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
+}
+
 /** 룸 코드 표시용 ('pb-abc123' → 'ABC123') */
 export function displayCode(roomId: string | null): string {
   return roomId ? roomId.replace(/^pb-/, '').toUpperCase() : '';
@@ -80,6 +84,10 @@ export class NetSession {
   lastError = '';
   /** 마지막으로 들어갔던 룸 (재입장용) */
   lastRoomId: string | null = null;
+  /** 다른 플레이어 입장·퇴장·끊김 알림 (화면 토스트) */
+  onNotice: ((text: string) => void) | null = null;
+  /** 직접 나간 계정 (나가기 뒤 SDK가 보내는 연결 끊김 알림은 무시) */
+  private readonly departed = new Set<string>();
   /** 연결 유실(30초 유예) 중인 원격 계정 → 새 상태가 오면 해제 */
   private readonly lost = new Set<string>();
   private seq = 0;
@@ -271,15 +279,22 @@ export class NetSession {
     }, true);
     c.onRoomMessage<{ r: NetHitResult[] }>('hits', (m) => this.events.onHits(m.r));
     c.onRoomMessage<{ a: string; hp: number }>('spawn', (m) => this.events.onSpawn(m.a, m.hp));
-    c.onRoomMessage<{ account: string; slot: number }>('joined', (m) => c.addLog('info', `입장: ${m.account} (자리 ${m.slot})`));
+    c.onRoomMessage<{ account: string; slot: number }>('joined', (m) => {
+      c.addLog('info', `입장: ${m.account} (자리 ${m.slot})`);
+      this.departed.delete(m.account);
+      if (m.account !== this.me) this.onNotice?.(`P${m.slot + 1} ${shortName(m.account)} 입장`);
+    });
     c.onRoomMessage<{ account: string }>('left', (m) => {
       c.addLog('info', `퇴장: ${m.account}`);
+      this.departed.add(m.account);
+      if (m.account !== this.me) this.onNotice?.(`${shortName(m.account)} 나감${this.inMatch ? ' — 기록은 결과에 남아요' : ''}`);
       this.dropRemote(m.account);
     });
     c.onRoomMessage<{ account: string }>('dc', (m) => {
-      if (m.account === this.me) return;
+      if (m.account === this.me || this.departed.has(m.account)) return;
       c.addLog('warn', `연결 유실(30초 유예): ${m.account}`);
       this.lost.add(m.account);
+      this.onNotice?.(`${shortName(m.account)} 연결 끊김 — 30초 안에 돌아오지 않으면 퇴장`);
       this.events.onRemoteDisconnect(m.account);
       this.events.onRoomInfo();
     });
