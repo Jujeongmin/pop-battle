@@ -237,7 +237,7 @@ export class NetSession {
   async rejoin(characterId: string): Promise<boolean> {
     const id = this.lastRoomId;
     if (!id) return false;
-    this.logEvent('Reconnection Attempted', { room: id });
+    this.logEvent('Reconnection Attempted');
     const ok = await this.joinByCode(characterId, id);
     this.logEvent(ok ? 'Reconnected' : 'Reconnection Failed', ok ? { slot: this.slot, phase: this.matchPhase } : { reason: this.lastError });
     // 방이 이미 사라졌으면 복귀 버튼을 지움

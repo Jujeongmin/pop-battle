@@ -521,4 +521,17 @@ describe('match timer and reconnection', () => {
     expect(r.gone.bob).toBe(undefined);
     expect(r.teamScore.BLUE).toBe(1);
   });
+
+  test('short drop in a full room: the dropped account (still in the 30 s grace) can find the room, others get full', async (server) => {
+    expect((await room4(server, 'tdm')).ok).toBe(true);
+    await server.startMatch();
+    spin(COUNTDOWN);
+    // 끊김 유예 중: 서버 기록에는 아직 4명
+    server.connect({ account: 'carol', roomId: '__no_room__' });
+    const f = await server.findRoom(ROOM);
+    expect(f.ok).toBe(true);
+    expect(f.count).toBe(4);
+    server.connect({ account: 'erin', roomId: '__no_room__' });
+    expect((await server.findRoom(ROOM)).reason).toBe('full');
+  });
 });

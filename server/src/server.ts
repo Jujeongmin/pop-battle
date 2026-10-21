@@ -54,6 +54,8 @@ interface RoomMirror {
   t: number;
   /** 이번 매치 중 나간 계정 (같은 계정은 진행 중에도 돌아올 수 있음) */
   gone?: string[];
+  /** 지금 룸 기록에 있는 계정 (30초 유예 중인 사람 포함) */
+  in?: string[];
 }
 
 /** 서버 로그 (Verse8 서버 콘솔). 이동 패킷은 남기지 않음, 계정은 앞뒤만 */
@@ -139,7 +141,7 @@ async function readRoom(): Promise<NetRoomState> {
 /** 룸 상태 전체 저장 + 글로벌 요약 갱신. 룸 락 안에서 호출 */
 async function saveRoom(roomId: string, r: NetRoomState): Promise<void> {
   await $room.updateRoomState({ ...r }, { returnState: false });
-  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, t: Date.now(), gone: Object.keys(r.gone) };
+  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, t: Date.now(), gone: Object.keys(r.gone), in: Object.keys(r.players) };
   await $global.updateGlobalState({ [MIRROR(roomId)]: m });
 }
 
@@ -291,9 +293,11 @@ export class Server {
     const m = ((await $global.getGlobalState([MIRROR(id)])) || {})[MIRROR(id)] as RoomMirror | undefined;
     const users = await $global.countRoomUsers(id);
     if (!m || users <= 0 || m.n <= 0) return { ok: false, reason: 'not_found', count: 0 };
-    if (m.n >= NET_MAX_PLAYERS) return { ok: false, reason: 'full', count: m.n, mode: m.mode };
+    // 짧게 끊긴 사람(30초 유예 중, 자리가 아직 있음)은 정원이 차 있어도 자기 자리로 돌아옴
+    const present = !!m.in?.includes($sender.account);
+    if (m.n >= NET_MAX_PLAYERS && !present) return { ok: false, reason: 'full', count: m.n, mode: m.mode };
     // 진행 중인 TDM·FFA: 이번 매치에서 나갔던 같은 계정(새로고침·끊김)만 돌아올 수 있음
-    const returning = !!m.gone?.includes($sender.account);
+    const returning = present || !!m.gone?.includes($sender.account);
     if (m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing') && !returning) return { ok: false, reason: 'in_progress', count: m.n, mode: m.mode };
     return { ok: true, roomId: id, count: m.n, phase: m.phase, mode: m.mode };
   }
