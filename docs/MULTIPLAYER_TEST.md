@@ -309,6 +309,18 @@ npx -y @agent8/cli call ping "[1]"
 - 표시 이름: Verse8 SDK·문서에 닉네임 API 없음 (`Verse8.getUser()`는 verse·account·exp·구독 정보만). → 임시 이름 `P<자리> <캐릭터>` (예: `P2 PINK`), 계정은 화면에 안 보임.
 - 배포 직후 기존 방은 이전 서버 코드로 도는 것으로 보임 → 새 서버 확인은 새 방에서.
 
+**실서버 확인 (preview, 커밋 7cb0e88, SDK 클라이언트 4개 — 실제 기기 4대 아님)**
+
+| 항목 | 결과 |
+|---|---|
+| 새로고침식 퇴장(`bye quit:false`) → 복귀 | 남은 사람 `left` quit=false, 복귀 자리 1·RED·캐릭터 red·HP 108(나갈 때 값) 그대로 |
+| Leave Room(`bye quit:true`) | `left` quit=true, findRoom·hello 모두 `left_match` 거절, 결과표에 left·quit 기록 |
+| 쓰러진 채 끊김 → 복귀 | HP 가득(100/100)·살아 있음·데스 1·RED 유지 |
+| TDM 2v1 진행 | 이탈 후에도 playing, 점수(BLUE 1)·타이머 유지, 시간 종료로 결과 |
+| 다음 매치 | 결과 → 대기실 뒤 Leave Room 했던 계정 입장 허용 (자리 2·BLUE) |
+| 자동 재접속 (개발 서버 게임 화면, 이전 서버 코드에서) | 강제 끊김 → RECONNECTING… → 1.5초 뒤 복귀, 룸 구독 9개(중복 없음), 원격 캐릭터 3개 |
+| 에디터 배포 지연 | 첫 새로고침 뒤 약 5분간 이전 서버 코드 → 에디터 문제 해결·재새로고침 후 반영 |
+
 #### 실서버 결과
 
 preview 실서버 (커밋 755ee7c 배포 후, 이 PC 한 대: SDK 클라이언트 4개 / 게임 화면 1개 + SDK 클라이언트 3개. **실제 기기 4대·사람 4명 아님**)
