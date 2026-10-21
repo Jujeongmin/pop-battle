@@ -53,6 +53,14 @@ export class MeshFader {
       } else {
         prepass = new THREE.Mesh(mesh.geometry, this.prepassMaterial);
       }
+      // 모프가 페이더보다 나중에 생겨도(사망 눈동자 평탄화 등) 그릴 때 원본과 같은 영향도 배열을 씀
+      const pp = prepass;
+      pp.onBeforeRender = () => {
+        if (mesh.morphTargetInfluences && pp.morphTargetInfluences !== mesh.morphTargetInfluences) {
+          pp.morphTargetInfluences = mesh.morphTargetInfluences;
+          pp.morphTargetDictionary = mesh.morphTargetDictionary;
+        }
+      };
       prepass.name = `${mesh.name}__fadePrepass`;
       prepass.position.copy(mesh.position);
       prepass.quaternion.copy(mesh.quaternion);

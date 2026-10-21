@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CHARACTERS, TEAM_COLORS, TEAM_SHADE, type CharacterDef, type CharacterId, type GameModeId, type TeamId } from '../config/characters';
+import { addPupilFlattenMorph, PUPIL_MORPH, type PupilFlattenEye, type PupilFlattenReport } from './pupilFlatten';
 
 /** 외형을 정하는 값 (네트워크로는 이 셋만 보내면 된다, 색 자체는 보내지 않음) */
 export interface AppearanceSpec {
@@ -41,6 +42,8 @@ export interface DeadEyes {
   texture: THREE.Texture;
   /** side: 1 = 정면에서 왼쪽 눈, 2 = 오른쪽 눈, 0 = 두 눈 조각이 한 사각형에 섞임 */
   rects: Array<{ uv: [number, number, number, number]; atlas: [number, number, number, number]; side?: number }>;
+  /** 눈(흰자) 타원 (모델 공간, 정면 투영) — 눈동자 평탄화 모프 범위 */
+  eyes: PupilFlattenEye[];
 }
 
 const deadCache = new Map<string, Promise<DeadEyes>>();
@@ -52,7 +55,7 @@ export function loadDeadEyes(def: CharacterDef): Promise<DeadEyes> {
     p = Promise.all([
       fetch(`${def.deadEyes}.json`).then((r) => {
         if (!r.ok) throw new Error(`사망 눈 데이터 없음: ${def.deadEyes}.json`);
-        return r.json() as Promise<{ rects: DeadEyes['rects'] }>;
+        return r.json() as Promise<{ rects: DeadEyes['rects']; eyes?: PupilFlattenEye[] }>;
       }),
       maskLoader.loadAsync(`${def.deadEyes}.png`),
     ]).then(([info, tex]) => {
@@ -64,7 +67,7 @@ export function loadDeadEyes(def: CharacterDef): Promise<DeadEyes> {
       // 미리 곱한 알파: UV 조각 경계의 투명 텍셀 색이 밉맵·선형 보간에 검게 섞이지 않게 (셰이더는 덮기 합성)
       tex.premultiplyAlpha = true;
       tex.needsUpdate = true;
-      return { texture: tex, rects: info.rects };
+      return { texture: tex, rects: info.rects, eyes: info.eyes ?? [] };
     });
     p.catch(() => deadCache.delete(def.deadEyes));
     deadCache.set(def.deadEyes, p);
@@ -152,6 +155,13 @@ export class CharacterAppearance {
    * 지금 게임 GLB에는 넣지 않음 — 사망 표정은 흰자를 그대로 두고 눈동자만 X로 바꾸므로 눈 형태를 바꾸지 않음. 없으면 비어 있음
    */
   private readonly deadMorphs: Array<[number[], number]> = [];
+  /**
+   * 눈동자 평탄화 모프 (런타임 생성, pupilFlatten.ts): 볼록한 눈동자를 흰자 구면으로 당겨 X가 흰 혹 위에 뜨지 않게.
+   * [영향도 배열, 모프 번호, 눈 조각 side]
+   */
+  private readonly pupilMorphs: Array<[number[], number, number]> = [];
+  /** 디버그: 눈동자 평탄화 결과 (눈 조각별) */
+  pupilFlatten: PupilFlattenReport[] = [];
 
   constructor(meshes: readonly THREE.Mesh[], characterId: CharacterId, mask: THREE.Texture, deadEyes?: DeadEyes) {
     this.def = CHARACTERS[characterId];
@@ -169,6 +179,14 @@ export class CharacterAppearance {
       });
     }
     for (const mesh of meshes) {
+      if (deadEyes?.eyes.length) {
+        const rep = addPupilFlattenMorph(mesh, deadEyes);
+        if (rep.length) this.pupilFlatten = rep;
+        for (const r of rep) {
+          const i = mesh.morphTargetDictionary?.[PUPIL_MORPH(r.side)];
+          if (i !== undefined && mesh.morphTargetInfluences) this.pupilMorphs.push([mesh.morphTargetInfluences, i, r.side]);
+        }
+      }
       const i = mesh.morphTargetDictionary?.['Dead'];
       if (i !== undefined && mesh.morphTargetInfluences) this.deadMorphs.push([mesh.morphTargetInfluences, i]);
     }
@@ -239,7 +257,7 @@ export class CharacterAppearance {
       sides: this.uniforms.uDeadSide.value.slice(0, this.uniforms.uDeadCount.value).join(''),
       atlas: t.image ? `${t.image.width}×${t.image.height}` : '-',
       mix: this.uniforms.uDeadMix.value,
-      morph: this.deadMorphs.length > 0,
+      morph: this.deadMorphs.length > 0 || this.pupilMorphs.length > 0,
     };
   }
 
@@ -253,6 +271,8 @@ export class CharacterAppearance {
     this.uniforms.uDeadMix.value = v;
     this.uniforms.uDeadSides.value = e === 'deadLeft' ? 1 : e === 'deadRight' ? 2 : 0;
     for (const [influences, i] of this.deadMorphs) influences[i] = v;
+    const sides = this.uniforms.uDeadSides.value;
+    for (const [influences, i, side] of this.pupilMorphs) influences[i] = v && (sides === 0 || side === sides) ? 1 : 0;
   }
 
   /** 사망 셰이프 키가 있는지 (디버그) */
