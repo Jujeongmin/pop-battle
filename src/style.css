@@ -661,3 +661,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
   .killfeed { max-width: 36vw; }
   .kf-name { max-width: 6.5em; }
 }
+
+/* 메인 로비가 떠 있는 동안: 전투 HUD·시작 카드 숨김 */
+.hud.in-lobby .lock-overlay, .hud.in-lobby .hp, .hud.in-lobby .slots, .hud.in-lobby .weapon-card, .hud.in-lobby .crosshair,
+.hud.in-lobby .labels, .hud.in-lobby .killfeed, .hud.in-lobby .match-bar, .hud.in-lobby .hud-notice, .hud.in-lobby .reload,
+.hud.in-lobby .death, .hud.in-lobby .scope, .hud.in-lobby .countdown { display: none !important; }
+/* 결과 카드: 다시 플레이 + 메인 로비 */
+.res-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.res-lobby { margin-top: 14px; padding: 11px 22px; border: 0; border-radius: 16px; cursor: pointer; background: #fff; color: var(--ink); font: 900 18px var(--font); box-shadow: 0 4px 0 rgba(39, 50, 92, .25); }
+.res-lobby:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(39, 50, 92, .25); }
+/* 낮은 화면: 결과 카드가 잘리지 않게 스크롤 */
+.result-card { max-height: calc(100% - 16px); overflow-y: auto; }

@@ -14,6 +14,8 @@ export class GameInput {
   /** 이번 프레임 합친 입력 (beginFrame에서 갱신) */
   readonly state: InputState = createInputState();
   touchMode: boolean;
+  /** PC 마우스 시점 감도 배율 (설정 화면, 기본 1) */
+  mouseSensitivity = 1;
   onLockChange: ((locked: boolean) => void) | null = null;
   onTouchModeChange: ((on: boolean) => void) | null = null;
   private readonly abort = new AbortController();
@@ -69,8 +71,8 @@ export class GameInput {
     s.moveY = stick ? t.moveY : k.moveY;
     s.moveSource = stick ? 'joystick' : 'keyboard';
     s.sprint = !stick && k.sprint;
-    s.lookDX = k.lookDX + (touchOn ? t.lookDX : 0);
-    s.lookDY = k.lookDY + (touchOn ? t.lookDY : 0);
+    s.lookDX = k.lookDX * this.mouseSensitivity + (touchOn ? t.lookDX : 0);
+    s.lookDY = k.lookDY * this.mouseSensitivity + (touchOn ? t.lookDY : 0);
     s.fireHeld = k.fireHeld || (touchOn && t.fireHeld);
     s.jumpPressed = k.jumpPressed || (touchOn && t.jumpPressed);
     s.slidePressed = k.slidePressed || (touchOn && t.slidePressed);

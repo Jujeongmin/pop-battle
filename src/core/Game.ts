@@ -63,6 +63,10 @@ import { CharacterDebug, type DebugParticipant } from '../ui/CharacterDebug';
 import { DebugPanel } from '../ui/DebugPanel';
 import type { DeathCause, KillFeedEvent } from '../ui/KillFeed';
 import { Hud, type MatchHudInfo } from '../ui/Hud';
+import { Lobby } from '../ui/lobby/Lobby';
+import type { LobbyHost, LobbySlider } from '../ui/lobby/lobbyDom';
+import { loadUserSettings, saveUserSettings, USER_LIMITS } from './UserSettings';
+import { TOUCH_LIMITS } from './TouchInput';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MAP_ID } from '../config/maps';
 import type { GameMap, SpawnPoint } from '../world/GameMap';
@@ -189,6 +193,16 @@ export class Game {
   inspectOrbit: { yaw: number; pitch: number; distance: number; height?: number; focusRifle?: boolean } | null = null;
   /** 디버그 패널 "자세 보기 카메라": 캐릭터 정면 기준 각도(도, 0 = 정면, -90 = 오른쪽, 180 = 뒤) */
   private poseView = { on: false, angleDeg: -45, pitchDeg: 7, distance: 1.6 };
+  /** 메인 로비 (게임 시작 전). 첫 매치·멀티 입장 뒤에는 다시 뜨지 않음 (로비로 = 새로고침) */
+  private lobby: Lobby | null = null;
+  private lobbyDone = false;
+  private lobbyShown = false;
+  private lobbyTime = 0;
+  /** 로비 3D 캐릭터를 둘 화면 가로 위치 (px, 패널·메뉴를 피한 빈 공간 가운데, null = 화면 가운데) / 지금 적용된 화면 이동량 */
+  private lobbyCenterX: number | null = null;
+  private lobbyShift = 0;
+  /** 사용자 설정 (소리·마우스 감도, 이 기기 저장) */
+  private readonly userSettings = loadUserSettings();
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -412,6 +426,17 @@ export class Game {
     this.hud.setCharacter(this.avatar.character.id, false);
     this.hud.setLoadoutOptions(PRIMARY_WEAPONS.map((w) => ({ id: w.id, name: w.name })), (id) => this.selectPrimary(id));
     this.hud.setLoadout(this.primary.id, false);
+    this.hud.onLobby = () => this.reloadPage(false);
+
+    // 사용자 설정 적용 + 메인 로비 (?net=1로 멀티 메뉴를 바로 열면 메뉴가 먼저 보임)
+    this.audio.setVolume(this.userSettings.volume);
+    this.input.mouseSensitivity = this.userSettings.mouseSensitivity;
+    this.lobby = new Lobby(this.container, this.lobbyHost());
+    // 로비 배경이 매번 같도록 첫 스폰(남쪽 가운데)에 세우고 경기장 바깥쪽을 보게 → 로비 카메라 뒤로 장난감 마을이 보임.
+    // 매치가 시작되면 원래 스폰 규칙으로 다시 배치(방향 포함)
+    this.placeAtSpawn(this.map.spawns.teamA[0]!);
+    this.bodyYaw += Math.PI;
+    this.tpsCamera.yaw += Math.PI;
 
     // 첫 프레임 이전에 물리 쿼리 구조를 만들어 둔다
     this.physics.step();
@@ -433,6 +458,7 @@ export class Game {
     this.input.beginFrame();
     const input = this.input.state;
     this.updateFps(dt);
+    this.updateLobbyVisibility();
 
     // 무기 장착 디버그 패널은 개발 모드에서만
     if (input.debugTogglePressed && import.meta.env.DEV) {
@@ -613,6 +639,7 @@ export class Game {
         ? THREE.MathUtils.clamp((adsBlend - aimProfile.overlayFrom) / (1 - aimProfile.overlayFrom), 0, 1)
         : 0;
 
+    if (this.lobbyShown) this.updateLobbyCamera(cam, dt);
     if (this.poseView.on) {
       const pv = this.poseView;
       const d = THREE.MathUtils.degToRad;
@@ -1281,6 +1308,114 @@ export class Game {
     if (!on) this.inspectOrbit = null;
   }
 
+  // ---------------- 메인 로비 ----------------
+
+  /** 로비가 게임에 요청하는 동작 (실제로 있는 기능만 연결) */
+  private lobbyHost(): LobbyHost {
+    const pct = (v: number) => `${Math.round(v * 100)}%`;
+    const x = (v: number) => `${v.toFixed(1)}×`;
+    const user = (key: keyof typeof USER_LIMITS, label: string, format: (v: number) => string, apply: (v: number) => void): LobbySlider => ({
+      label,
+      min: USER_LIMITS[key][0],
+      max: USER_LIMITS[key][1],
+      step: USER_LIMITS[key][2],
+      get: () => this.userSettings[key],
+      set: (v) => {
+        this.userSettings[key] = v;
+        apply(v);
+        saveUserSettings(this.userSettings);
+      },
+      format,
+    });
+    const touch = (key: keyof typeof TOUCH_LIMITS, label: string, format: (v: number) => string): LobbySlider => ({
+      label,
+      min: TOUCH_LIMITS[key][0],
+      max: TOUCH_LIMITS[key][1],
+      step: TOUCH_LIMITS[key][2],
+      get: () => this.input.touch.settings[key],
+      set: (v) => this.input.touch.setSettings({ [key]: v }),
+      format,
+    });
+    return {
+      characters: () =>
+        CHARACTER_IDS.map((id) => {
+          const c = CHARACTERS[id];
+          const sel = CHARACTER_SELECT[id];
+          return { id, name: c.name, role: sel.role, color: sel.color, maxHp: c.stats.maxHp, speed: c.stats.speed, locked: sel.locked, selectable: isCharacterSelectable(id) };
+        }),
+      currentCharacter: () => this.avatar.character.id,
+      selectCharacter: (id) => this.selectCharacter(id as CharacterId),
+      primaryWeapons: () => PRIMARY_WEAPONS.map((w) => ({ id: w.id, name: w.name })),
+      fixedWeapons: () => ({ secondary: { id: SECONDARY_WEAPON.id, name: SECONDARY_WEAPON.name }, melee: { id: MELEE_WEAPON.id, name: MELEE_WEAPON.name } }),
+      currentPrimary: () => this.primary.id,
+      selectPrimary: (id) => void this.selectPrimary(id),
+      // 버튼 클릭(사용자 동작) 안에서 포인터 잠금/터치 시작 → onLockChange → 연습전 시작 (기존 싱글플레이 흐름)
+      playPractice: () => this.input.requestLock(),
+      openMultiplayer: (mode) => {
+        this.mpMenu?.openWith(mode);
+        this.refreshMultiplayerMenu();
+      },
+      lastRoomCode: () => this.net?.session.lastRoomId ?? readLastRoomCode(),
+      rejoinLastRoom: () => {
+        this.mpMenu?.openWith(null);
+        this.mpMenu?.rejoinNow();
+      },
+      settings: () => ({
+        sound: [user('volume', '전체 소리', pct, (v) => this.audio.setVolume(v))],
+        controls: [user('mouseSensitivity', '마우스 감도', x, (v) => (this.input.mouseSensitivity = v))],
+        touch: [touch('lookSensitivity', '시점 회전 감도', x), touch('joystickScale', '조이스틱 크기', pct), touch('buttonScale', '버튼 크기', pct)],
+      }),
+      panelChanged: (centerX) => (this.lobbyCenterX = centerX),
+    };
+  }
+
+  /** 로비 표시: 게임 시작 전 + 멀티 메뉴가 덮고 있지 않을 때. 바뀔 때만 HUD·봇 표시를 바꿈 */
+  private updateLobbyVisibility(): void {
+    const show = !!this.lobby && !this.lobbyDone && !this.mpMenu?.covering;
+    if (show === this.lobbyShown) {
+      if (show) this.lobby!.refresh();
+      return;
+    }
+    this.lobbyShown = show;
+    this.lobby?.setVisible(show);
+    this.hud.setLobby(show);
+    // 로비 배경에서는 봇을 숨김 (가운데 캐릭터만). 매치가 시작되면 다시 보임
+    for (const b of this.bots.bots) b.avatar.root.visible = !show;
+    if (!show) {
+      this.tpsCamera.camera.clearViewOffset();
+      this.lobbyShift = 0;
+    }
+  }
+
+  /**
+   * 로비 카메라: 실제 플레이어 아바타(대기 자세·장착 무기)를 정면 3/4 각도로 크게. 키에 맞춰 전신이 들어오는 거리,
+   * 아주 느린 좌우 흔들림. 오른쪽 패널이 열리면 화면 이동(view offset)으로 캐릭터를 남은 공간 가운데로 (카메라 위치는 그대로)
+   */
+  private updateLobbyCamera(cam: THREE.PerspectiveCamera, dt: number): void {
+    this.lobbyTime += dt;
+    const d = THREE.MathUtils.degToRad;
+    const feet = this.renderFeet;
+    const top = this.avatar.headCenter.y + this.avatar.headRadius;
+    const h = Math.max(0.6, top - feet.y);
+    // 전신 + 위아래 여유 (상단 바·PLAY 버튼에 머리·발이 가리지 않게), 캐릭터는 화면 가운데보다 살짝 아래
+    const target = new THREE.Vector3(feet.x, feet.y + h * 0.56, feet.z);
+    const dist = (h * 0.5 * 1.9) / Math.tan(d(cam.fov) / 2);
+    const yaw = this.bodyYaw + d(28) + Math.sin(this.lobbyTime * 0.35) * d(5);
+    const pitch = d(7);
+    cam.position.set(target.x + Math.sin(yaw) * Math.cos(pitch) * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * Math.cos(pitch) * dist);
+    cam.lookAt(target);
+    cam.updateMatrixWorld();
+    const w = this.container.clientWidth;
+    const hpx = this.container.clientHeight;
+    const want = this.lobbyCenterX === null ? 0 : w / 2 - this.lobbyCenterX;
+    this.lobbyShift += (want - this.lobbyShift) * (1 - Math.exp(-8 * dt));
+    if (Math.abs(this.lobbyShift) < 0.5 && want === 0) {
+      if (cam.view) cam.clearViewOffset();
+    } else {
+      cam.setViewOffset(w, hpx, this.lobbyShift, 0, w, hpx);
+    }
+  }
+
   selectPrimary(id: string): boolean {
     if (this.combatant.active) return false;
     const def = PRIMARY_WEAPONS.find((w) => w.id === id);
@@ -1337,6 +1472,7 @@ export class Game {
    * (체력·탄약·사망·무적·ADS·재장전·봇 결정 초기화) → 카운트다운.
    */
   private beginMatch(): void {
+    this.lobbyDone = true;
     this.combatant.active = true;
     // 주무기 고정 (매치 중 변경 불가)
     this.hud.setLoadout(this.primary.id, true);
@@ -1613,6 +1749,7 @@ export class Game {
       return;
     }
     this.netGame = true;
+    this.lobbyDone = true;
     for (const b of this.bots.bots) {
       this.appearances.delete(b.id);
       this.teams.delete(b.id);

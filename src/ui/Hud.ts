@@ -211,6 +211,8 @@ export class Hud {
   private locked = false;
   /** 결과 화면 "다시 플레이" 버튼 */
   onReplay: (() => void) | null = null;
+  /** 결과 화면 "메인 로비" 버튼 */
+  onLobby: (() => void) | null = null;
   /** 시작 카드 "Multiplayer" 버튼 */
   onMultiplayer: (() => void) | null = null;
   /** 터치 모드: 무기 슬롯을 눌렀을 때 (0부터) */
@@ -276,7 +278,7 @@ export class Hud {
           <div class="res-title"></div>
           <div class="res-reason"></div>
           <table class="res-table"><thead><tr><th>순위</th><th>이름</th><th>킬</th><th>데스</th></tr></thead><tbody></tbody></table>
-          <button type="button" class="res-replay">다시 플레이</button>
+          <div class="res-btns"><button type="button" class="res-replay">다시 플레이</button><button type="button" class="res-lobby">메인 로비</button></div>
         </div>
       </div>
       <div class="lock-overlay">
@@ -369,6 +371,10 @@ export class Hud {
     q<HTMLButtonElement>('.res-replay').addEventListener('click', (e) => {
       e.stopPropagation();
       this.onReplay?.();
+    });
+    q<HTMLButtonElement>('.res-lobby').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onLobby?.();
     });
     this.killFeed = new KillFeed(this.root);
     const dirs = q<HTMLDivElement>('.damage-dirs');
@@ -480,6 +486,11 @@ export class Hud {
     }
     this.loadoutNote.textContent = locked ? '전투 중에는 주무기를 바꿀 수 없어요' : '2번 권총 · 3번 뿅망치는 고정';
     this.root.querySelector('.loadout:not(.char-select) .lo-title')!.textContent = locked ? '주무기 (고정)' : '주무기 선택';
+  }
+
+  /** 메인 로비가 떠 있는 동안: 전투 HUD·시작 카드 숨김 (로비가 화면을 맡음) */
+  setLobby(on: boolean): void {
+    this.root.classList.toggle('in-lobby', on);
   }
 
   /** 모바일 터치 조작: 터치 버튼 자리를 비운 배치 + 슬롯 터치 + 시작 카드 안내·설정 버튼 */

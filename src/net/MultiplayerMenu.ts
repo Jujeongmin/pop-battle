@@ -99,6 +99,17 @@ export class MultiplayerMenu {
     this.refresh(true);
   }
 
+  /** 로비 PLAY에서 열기: 고른 모드를 방 만들기 모드로 (null = 그대로) */
+  openWith(mode: NetMode | null): void {
+    if (mode) this.createMode = mode;
+    this.open();
+  }
+
+  /** 로비 "이전 방 다시 입장" */
+  rejoinNow(): void {
+    void this.run(() => this.host.rejoin());
+  }
+
   private view(): View {
     const s = this.host.session();
     if (s?.reconnecting && !s.inRoom) return 'reconnecting';
@@ -209,7 +220,7 @@ export class MultiplayerMenu {
     const err = this.notice || s?.lastError;
     if (err) c.append(el('p', 'mp-error', err));
     // 멀티로 전환된 뒤에는 봇이 없으므로 싱글플레이는 새로고침으로 복귀
-    c.append(this.host.netGame() ? this.button('싱글플레이로 돌아가기', 'mp-ghost', () => this.host.singlePlayer()) : this.button('Back', 'mp-ghost', () => this.close()));
+    c.append(this.host.netGame() ? this.button('메인 로비로', 'mp-ghost', () => this.host.singlePlayer()) : this.button('Back', 'mp-ghost', () => this.close()));
     c.append(el('p', 'mp-hint', '같은 게임 링크를 연 다른 사람(다른 브라우저·기기, 다른 계정)이 Room Code로 들어와요.'));
   }
 
@@ -227,7 +238,7 @@ export class MultiplayerMenu {
   private renderLeft(c: HTMLElement, s: NetSession | null): void {
     c.append(el('p', 'mp-error', s?.lastError || '룸에서 나왔어요'));
     if (s?.lastRoomId) c.append(this.button(`다시 입장 (${displayCode(s.lastRoomId)})`, 'mp-primary', () => this.run(() => this.host.rejoin())));
-    c.append(this.button('싱글플레이로 돌아가기', 'mp-ghost', () => this.host.singlePlayer()));
+    c.append(this.button('메인 로비로', 'mp-ghost', () => this.host.singlePlayer()));
   }
 
   private codeRow(s: NetSession): HTMLElement {

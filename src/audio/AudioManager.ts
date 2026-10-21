@@ -30,6 +30,12 @@ export class AudioManager {
   };
   volume = 0.6;
 
+  /** 전체 소리 크기 (설정 화면). 오디오가 아직 시작 전이면 시작할 때 이 값으로 */
+  setVolume(v: number): void {
+    this.volume = Math.min(1, Math.max(0, v));
+    if (this.master) this.master.gain.value = this.volume;
+  }
+
   /** 사용자 입력(클릭) 뒤에 호출해야 브라우저가 소리를 허용한다 */
   unlock(): void {
     if (!this.ctx) {
