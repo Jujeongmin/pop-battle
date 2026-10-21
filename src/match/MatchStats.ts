@@ -36,7 +36,12 @@ export class MatchStats {
   private readonly order: string[] = [];
 
   register(info: ParticipantInfo): void {
-    if (this.records.has(info.id)) return;
+    const old = this.records.get(info.id);
+    if (old) {
+      // 표시 이름만 갱신 (멀티: 상대가 캐릭터를 바꿔 들어옴)
+      if (old.name !== info.name) this.records.set(info.id, { ...old, name: info.name });
+      return;
+    }
     this.records.set(info.id, { ...info, kills: 0, deaths: 0, alive: true });
     this.order.push(info.id);
   }

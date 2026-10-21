@@ -1,4 +1,5 @@
-// 멀티플레이 테스트 HUD (검증용 최소 정보). 측정하지 못한 값은 '-'로 두고 임의 값을 넣지 않는다.
+// 멀티플레이 측정 패널 (F9 네트워크 디버그를 펼쳤을 때만, 개발·검증용). 측정하지 못한 값은 '-'로 두고 임의 값을 넣지 않는다.
+// 플레이어용 알림은 정식 HUD(Hud.notify).
 import { displayCode, type NetSession } from './NetSession';
 import { NET_MAX_PLAYERS, NET_MODE_RULES } from './shared/protocol';
 
@@ -16,25 +17,7 @@ export class NetTestHud {
     container.appendChild(this.root);
   }
 
-  private readonly toastEl = document.createElement('div');
-  private toastTimer = 0;
-
-  /** 화면 위쪽 알림 (4초) */
-  toast(text: string): void {
-    if (!this.toastEl.isConnected) {
-      this.toastEl.className = 'net-toast';
-      this.root.parentElement?.appendChild(this.toastEl);
-    }
-    this.toastEl.textContent = text;
-    this.toastEl.style.display = '';
-    this.toastTimer = 4;
-  }
-
   update(dt: number, visible: boolean): void {
-    if (this.toastTimer > 0) {
-      this.toastTimer -= dt;
-      if (this.toastTimer <= 0) this.toastEl.style.display = 'none';
-    }
     this.root.style.display = visible ? '' : 'none';
     if (!visible) return;
     this.timer -= dt;
@@ -83,7 +66,6 @@ export class NetTestHud {
   }
 
   dispose(): void {
-    this.toastEl.remove();
     this.root.remove();
   }
 }

@@ -54,10 +54,6 @@ const _from = new THREE.Vector3();
 const _end = new THREE.Vector3();
 const _n = new THREE.Vector3();
 
-function shortName(account: string): string {
-  return account.length > 12 ? `${account.slice(0, 6)}…${account.slice(-4)}` : account;
-}
-
 function r3(v: THREE.Vector3, d = 1000): [number, number, number] {
   return [Math.round(v.x * d) / d, Math.round(v.y * d) / d, Math.round(v.z * d) / d];
 }
@@ -183,7 +179,7 @@ export class NetGameMode {
         this.ctx.forgetParticipant(id);
         return;
       }
-      const name = shortName(account);
+      const name = this.session.displayName(account);
       const remote = new RemotePlayer(this.ctx.physics, account, name, avatar, (w) => this.ctx.weaponModel(w), (t, h) => this.claim(t, h));
       if (rec) remote.setServerState(rec.hp, rec.max, rec.dead);
       this.remotes.set(account, remote);
@@ -219,6 +215,7 @@ export class NetGameMode {
       const r = this.remotes.get(acc);
       if (!r) continue;
       const wasDead = r.dead;
+      r.name = this.session.displayName(acc);
       r.setServerState(rec.hp, rec.max, rec.dead);
       if (wasDead !== rec.dead) this.ctx.setDeadLook(r.id, rec.dead);
       // 상대가 캐릭터를 바꿔 들어옴 → 아바타 교체
@@ -276,7 +273,7 @@ export class NetGameMode {
     if (!account) return null;
     if (account === this.session.me) return { id: this.ctx.localId, name: '나', team: 'player', position: new THREE.Vector3() };
     const r = this.remotes.get(account);
-    if (!r) return { id: `net:${account}`, name: shortName(account), team: 'remote', position: new THREE.Vector3() };
+    if (!r) return { id: `net:${account}`, name: this.session.displayName(account), team: 'remote', position: new THREE.Vector3() };
     return { id: r.id, name: r.name, team: r.team, position: r.muzzle.clone() };
   }
 

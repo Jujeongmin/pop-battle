@@ -4,9 +4,9 @@ import type { BotLabel } from '../bots/BotManager';
 import { COMBAT } from '../config/combat';
 import type { MatchRules } from '../config/match';
 import type { MatchResult, MatchState } from '../match/Match';
-import { KillFeed, type KillFeedEvent } from './KillFeed';
+import { KillFeed, weaponIconSvg, type KillFeedEvent } from './KillFeed';
 
-/** 매치 정보 (상단 바·카운트다운) */
+/** 매치 정보 (상단 매치 카드·카운트다운) */
 export interface MatchHudInfo {
   state: MatchState;
   timeLeft: number;
@@ -21,7 +21,7 @@ export interface MatchHudInfo {
   net?: NetScoreHud;
 }
 
-/** 멀티플레이 점수판: TDM = BLUE 8 — 6 RED, FFA = LEADER 7 / 15, 남은 시간 (null = 제한 없음) */
+/** 멀티플레이 점수판: TDM = BLUE 08 — 06 RED, FFA = MY KILLS 07 / 15, 남은 시간 (null = 제한 없음) */
 export interface NetScoreHud {
   mode: 'tdm' | 'ffa' | 'test';
   blue: number;
@@ -75,8 +75,10 @@ export interface HudFrame {
   weaponName: string;
   /** 근접무기: 탄약 표시 숨김 */
   melee: boolean;
-  /** 1/2/3 슬롯 */
-  slots: ReadonlyArray<{ key: string; name: string; active: boolean }>;
+  /** 1/2/3 슬롯 (실제 로드아웃) */
+  slots: ReadonlyArray<{ key: string; id: string; name: string; active: boolean }>;
+  /** 개발용 수치(FPS·디버그 줄) 표시: 개발 서버에서 디버그 패널(`)을 열었을 때만 */
+  debug: boolean;
   debugLines: string[];
 }
 
@@ -102,8 +104,25 @@ const DEFAULT_CROSSHAIR: CrosshairDef = { style: 'cross', lineLength: 11, lineWi
 const POPUP_LIFE = 0.6;
 const POPUP_POOL = 24;
 const INDICATOR_POOL = 6;
+/** 체력 경고 (최대 체력 대비) */
+const LOW_HP = 0.3;
+/** 탄약 경고 (탄창 대비) */
+const LOW_AMMO = 0.25;
+
+/** 상단 매치 카드의 모드 이름 */
+const MODE_TITLE: Record<NetScoreHud['mode'], string> = { tdm: 'TEAM DEATHMATCH', ffa: 'FREE FOR ALL', test: 'FREE TEST' };
+
+const HEART_SVG =
+  '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21 C 5 16 1 12 1 7.2 A 5.6 5.6 0 0 1 12 4.6 A 5.6 5.6 0 0 1 23 7.2 C 23 12 19 16 12 21 Z" fill="currentColor"/>' +
+  '<ellipse cx="7" cy="7" rx="2.4" ry="1.6" fill="#fff" opacity=".55" transform="rotate(-30 7 7)"/></svg>';
 
 const _v = new THREE.Vector3();
+
+const pad2 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(2, '0');
+const clock = (sec: number) => {
+  const t = Math.max(0, Math.ceil(sec));
+  return `${pad2(t / 60)}:${pad2(t % 60)}`;
+};
 
 /** 시작 화면 캐릭터 카드 1장 */
 export interface CharacterCard {
@@ -120,14 +139,29 @@ export interface CharacterCard {
   selectable: boolean;
 }
 
-/** HTML/CSS HUD: 크로스헤어, 탄약, 재장전, ADS 표시, 히트마커, 피해 숫자, FPS. */
+/**
+ * 게임 HUD (HTML/CSS). 화면 구역:
+ * - 상단 중앙: 매치 카드 (모드·남은 시간·팀 점수 / 내 킬·순위) · 카운트다운
+ * - 상단 우측: 킬로그 (KillFeed)
+ * - 중앙: 조준선(일반·적 조준·ADS) · 히트마커(명중·헤드샷·처치) · 피해 숫자 · 피격 방향
+ * - 좌측 하단: 체력 카드 / 하단 중앙: 무기 슬롯 / 우측 하단: 무기·탄약 카드
+ * - 개발용 수치(FPS·디버그 줄)는 debug일 때만
+ * 크기는 화면에 맞춰 --u(0.6~1.2)로 조절, 가장자리는 safe area. 모바일 터치 버튼이 생기면 .hud.touch에서
+ * --touch-lift-l / --touch-lift-r 만큼 좌·우 하단 카드를 올려 버튼 자리를 비움 (CSS만 바꾸면 됨).
+ */
 export class Hud {
   private readonly root: HTMLDivElement;
   private readonly crosshair: HTMLDivElement;
   private readonly scope: HTMLDivElement;
   private readonly blocked: HTMLDivElement;
   private readonly hitmarker: HTMLDivElement;
-  private readonly ammo: HTMLDivElement;
+  private readonly weaponCard: HTMLDivElement;
+  private readonly weaponIcon: HTMLDivElement;
+  private readonly weaponName: HTMLDivElement;
+  private readonly magEl: HTMLElement;
+  private readonly resEl: HTMLElement;
+  private readonly weaponState: HTMLDivElement;
+  private readonly cardReloadBar: HTMLDivElement;
   private readonly reload: HTMLDivElement;
   private readonly reloadBar: HTMLDivElement;
   private readonly adsTag: HTMLDivElement;
@@ -144,28 +178,35 @@ export class Hud {
   private crosshairKey = '';
   private spreadShown = 0;
   private lastFpsText = '';
-  private readonly hpBar: HTMLDivElement;
+  private readonly hpCard: HTMLDivElement;
   private readonly hpFill: HTMLDivElement;
-  private readonly hpText: HTMLSpanElement;
+  private readonly hpLag: HTMLDivElement;
+  private readonly hpText: HTMLElement;
+  private readonly hpMax: HTMLElement;
   private readonly protectTag: HTMLDivElement;
   private readonly hurtFlash: HTMLDivElement;
   private readonly labelHost: HTMLDivElement;
   private readonly indicators: DamageIndicator[] = [];
   private readonly labelEls: HTMLDivElement[] = [];
   private lastHp = -1;
-  private readonly weaponName: HTMLDivElement;
+  private lastMaxHp = -1;
   private readonly slotsEl: HTMLDivElement;
   private readonly loadoutButtons: HTMLDivElement;
   private readonly loadoutNote: HTMLDivElement;
   private readonly charCards: HTMLDivElement;
   private readonly charNote: HTMLDivElement;
-  private lastWeaponText = '';
+  private lastWeaponId = '';
+  private lastWeaponKey = '';
   private lastSlotsKey = '';
+  private lastActiveSlot = '';
   private readonly matchBar: HTMLDivElement;
   private readonly countdownEl: HTMLDivElement;
   private readonly resultEl: HTMLDivElement;
+  private readonly noticeEl: HTMLDivElement;
+  private noticeTimer = 0;
   private lastMatchKey = '';
   private lastCountdown = '';
+  private lastScale = '';
   private resultShown = false;
   private locked = false;
   /** 결과 화면 "다시 플레이" 버튼 */
@@ -184,26 +225,46 @@ export class Hud {
       <div class="blocked-marker"></div>
       <div class="hitmarker"><i></i><i></i><i></i><i></i></div>
       <div class="kill-confirm">KO!</div>
-      <div class="weapon-hud"><div class="weapon-name"></div><div class="slots"></div></div>
-      <div class="ammo"><b class="mag">30</b><span class="res">/ 120</span></div>
-      <div class="reload"><span>재장전</span><div class="bar"><div></div></div></div>
-      <div class="ads-tag">ADS</div>
+      <div class="reload"><div class="bar"><div></div></div></div>
       <div class="fps">-- FPS</div>
       <pre class="debug-lines"></pre>
-      <div class="death"><b>쓰러짐!</b> <span></span></div>
+      <div class="death"><b>쓰러짐!</b><span></span></div>
       <div class="hurt-flash"></div>
       <div class="damage-dirs"></div>
       <div class="labels"></div>
-      <div class="hp"><span class="hp-text">100</span><div class="hp-bar"><div></div></div></div>
-      <div class="protect-tag">보호 중</div>
+      <div class="hp">
+        <div class="hp-icon">${HEART_SVG}</div>
+        <div class="hp-main">
+          <div class="hp-nums"><b class="hp-text">100</b><span class="hp-max">/ 100</span><span class="protect-tag">보호 중</span></div>
+          <div class="hp-bar"><div class="hp-lag"></div><div class="hp-fill"></div><i class="hp-shine"></i></div>
+        </div>
+      </div>
+      <div class="slots"></div>
+      <div class="weapon-card">
+        <div class="ads-tag">ADS</div>
+        <div class="wc-icon"></div>
+        <div class="wc-body">
+          <div class="wc-name"></div>
+          <div class="ammo"><b class="mag">30</b><span class="res">/ 120</span></div>
+          <div class="wc-state"></div>
+          <div class="wc-reload"><div></div></div>
+        </div>
+      </div>
       <div class="match-bar hidden">
-        <div class="mb-kd"><span><b class="mb-k">0</b>킬</span><span><b class="mb-d">0</b>데스</span></div>
-        <div class="mb-center"><div class="mb-time">3:00</div><div class="mb-goal">개인전 · 15킬 먼저</div></div>
-        <div class="mb-rank"><b>1</b>위<small>/ 4</small></div>
-        <div class="mb-net-left"></div>
-        <div class="mb-net-right"></div>
+        <div class="mb-mode"></div>
+        <div class="mb-row">
+          <div class="mb-side blue"><span class="mb-tname">BLUE</span><b class="mb-score">00</b></div>
+          <div class="mb-time">03:00</div>
+          <div class="mb-side red"><b class="mb-score">00</b><span class="mb-tname">RED</span></div>
+        </div>
+        <div class="mb-sub">
+          <span class="mb-pill mb-kills"></span>
+          <span class="mb-pill mb-rank"></span>
+          <span class="mb-pill mb-goal"></span>
+        </div>
       </div>
       <div class="countdown"></div>
+      <div class="hud-notice"></div>
       <div class="result hidden">
         <div class="result-card">
           <div class="res-title"></div>
@@ -253,7 +314,13 @@ export class Hud {
       this.root.appendChild(el);
       this.popupPool.push(el);
     }
-    this.ammo = q('.ammo');
+    this.weaponCard = q('.weapon-card');
+    this.weaponIcon = q('.wc-icon');
+    this.weaponName = q('.wc-name');
+    this.magEl = q('.ammo .mag');
+    this.resEl = q('.ammo .res');
+    this.weaponState = q('.wc-state');
+    this.cardReloadBar = q('.wc-reload div');
     this.reload = q('.reload');
     this.reloadBar = q('.reload .bar div');
     this.adsTag = q('.ads-tag');
@@ -261,21 +328,23 @@ export class Hud {
     this.debug = q('.debug-lines');
     this.death = q('.death');
     this.lockOverlay = q('.lock-overlay');
-    this.weaponName = q('.weapon-name');
     this.slotsEl = q('.slots');
     this.loadoutButtons = q('.lo-buttons');
     this.loadoutNote = q('.loadout:not(.char-select) .lo-note');
     this.charCards = q('.cs-cards');
     this.charNote = q('.cs-note');
-    this.hpBar = q('.hp');
-    this.hpFill = q('.hp-bar div');
+    this.hpCard = q('.hp');
+    this.hpFill = q('.hp-fill');
+    this.hpLag = q('.hp-lag');
     this.hpText = q('.hp-text');
+    this.hpMax = q('.hp-max');
     this.protectTag = q('.protect-tag');
     this.hurtFlash = q('.hurt-flash');
     this.labelHost = q('.labels');
     this.matchBar = q('.match-bar');
     this.countdownEl = q('.countdown');
     this.resultEl = q('.result');
+    this.noticeEl = q('.hud-notice');
     q<HTMLButtonElement>('.mp-open').addEventListener('click', (e) => {
       e.stopPropagation();
       this.onMultiplayer?.();
@@ -295,15 +364,27 @@ export class Hud {
     }
   }
 
-  /** 플레이어 피격: 화면 가장자리 빨간 섬광 + 공격 방향 표시 */
+  /** 플레이어 피격: 화면 가장자리 빨간 섬광 + 공격 방향 표시 + 체력 카드 흔들림 */
   showDamage(source: THREE.Vector3 | null, amount: number): void {
     this.hurtFlash.animate([{ opacity: Math.min(0.85, 0.35 + amount / 40) }, { opacity: 0 }], { duration: 380, easing: 'ease-out' });
+    this.hpCard.animate(
+      [{ transform: 'translateX(0)' }, { transform: 'translateX(-5px) rotate(-1.5deg)' }, { transform: 'translateX(4px) rotate(1deg)' }, { transform: 'translateX(-2px)' }, { transform: 'translateX(0)' }],
+      { duration: 280, easing: 'ease-out' },
+    );
     if (!source) return;
     // 같은 방향(가까운 지점) 표시는 갱신, 아니면 가장 오래된 칸 재사용
     let slot = this.indicators.find((d) => d.life > 0 && d.source.distanceTo(source) < 2);
     if (!slot) slot = this.indicators.reduce((a, b) => (a.life <= b.life ? a : b));
     slot.source.copy(source);
     slot.life = COMBAT.damageIndicatorTime;
+  }
+
+  /** 화면 위쪽 알림 (입장·퇴장·연결 끊김 등, 약 4초) */
+  notify(text: string): void {
+    this.noticeEl.textContent = text;
+    this.noticeEl.classList.add('show');
+    this.noticeEl.animate([{ transform: 'translate(-50%, -8px) scale(.9)', opacity: 0 }, { transform: 'translate(-50%, 0) scale(1)', opacity: 1 }], { duration: 200, easing: 'ease-out' });
+    this.noticeTimer = 4;
   }
 
   /**
@@ -384,12 +465,12 @@ export class Hud {
     this.root.querySelector('.loadout:not(.char-select) .lo-title')!.textContent = locked ? '주무기 (고정)' : '주무기 선택';
   }
 
-  /** 멀티플레이 테스트 화면이 덮고 있으면 시작 카드 숨김 */
+  /** 멀티플레이 화면이 덮고 있으면 시작 카드 숨김 */
   setMultiplayerCovered(covered: boolean): void {
     this.lockOverlay.classList.toggle('mp-covered', covered);
   }
 
-  /** 시작 카드의 모드 안내 문구 (네트워크 테스트 모드 등) */
+  /** 시작 카드의 모드 안내 문구 */
   setModeLine(text: string): void {
     this.root.querySelector('.mode-line')!.textContent = text;
   }
@@ -416,11 +497,10 @@ export class Hud {
     this.lastCountdown = '';
   }
 
-  /** 매치 결과 화면: 승리/패배/무승부, 종료 사유, 순위표, 다시 플레이 */
+  /** 싱글플레이 매치 결과: VICTORY / DEFEAT / DRAW, 종료 사유, 순위표(내 기록 강조), 다시 플레이 */
   showResult(r: MatchResult, rules: MatchRules): void {
     const title = this.resultEl.querySelector<HTMLDivElement>('.res-title')!;
-    const outcome = { win: '승리!', draw: '무승부', lose: '패배' }[r.localOutcome];
-    title.textContent = outcome;
+    title.textContent = { win: 'VICTORY', draw: 'DRAW', lose: 'DEFEAT' }[r.localOutcome];
     title.dataset.outcome = r.localOutcome;
     const reason = r.reason === 'score' ? `${rules.scoreToWin}킬 달성으로 종료` : '시간 종료';
     const draw = r.draw ? ' · 공동 1위' : '';
@@ -431,7 +511,7 @@ export class Hud {
       const tr = document.createElement('tr');
       tr.classList.toggle('me', s.isLocal);
       tr.classList.toggle('first', r.winners.includes(s.id));
-      for (const v of [`${s.rank}위`, s.name, String(s.kills), String(s.deaths)]) {
+      for (const v of [`${s.rank}`, s.name, String(s.kills), String(s.deaths)]) {
         const td = document.createElement('td');
         td.textContent = v;
         tr.appendChild(td);
@@ -451,73 +531,57 @@ export class Hud {
     this.setLocked(this.locked);
   }
 
-  /** 상단 매치 바 (남은 시간·킬/데스·순위·목표) + 카운트다운 숫자 */
+  /**
+   * 상단 매치 카드. 같은 틀에 모드별 내용:
+   * TDM = 모드 · BLUE 08 ⏱ 06 RED · 목표 / FFA = 모드 · ⏱ · MY KILLS 07 / 15 · 순위 / 자유 테스트 = 시간 없음 · K/D
+   */
   private updateMatch(m: MatchHudInfo): void {
     this.matchBar.classList.toggle('hidden', m.state === 'WAITING');
-    this.matchBar.classList.toggle('net', !!m.net);
-    if (m.net) {
-      this.updateNetScore(m);
-      return;
-    }
-    const t = Math.ceil(m.timeLeft);
-    const time = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-    const key = `${time}|${m.kills}|${m.deaths}|${m.rank}|${m.players}|${m.scoreToWin}|${m.state}`;
+    // 매치 종료(싱글 결과 카드·멀티 결과 화면): 하단 카드·슬롯 숨김
+    this.root.classList.toggle('match-done', m.state === 'FINISHED');
+    const n = m.net;
+    const mode: NetScoreHud['mode'] = n ? n.mode : 'ffa';
+    const time = n ? (n.timeLeft === null ? '∞' : clock(n.timeLeft)) : clock(m.timeLeft);
+    const secs = n ? n.timeLeft : m.timeLeft;
+    const kills = n ? n.mine : m.kills;
+    const deaths = n ? n.myDeaths : m.deaths;
+    const goal = n ? n.goal : m.scoreToWin;
+    const rank = n ? n.rank : m.rank;
+    const players = n ? n.players : m.players;
+    const key = `${mode}|${time}|${n?.blue}|${n?.red}|${n?.myTeam}|${kills}|${deaths}|${goal}|${rank}|${players}|${m.state}|${!!n}`;
     if (key !== this.lastMatchKey) {
       this.lastMatchKey = key;
-      this.matchBar.querySelector('.mb-time')!.textContent = time;
-      this.matchBar.querySelector('.mb-k')!.textContent = String(m.kills);
-      this.matchBar.querySelector('.mb-d')!.textContent = String(m.deaths);
-      this.matchBar.querySelector('.mb-rank b')!.textContent = String(m.rank);
-      this.matchBar.querySelector('.mb-rank small')!.textContent = `/ ${m.players}`;
-      this.matchBar.querySelector('.mb-goal')!.textContent = `${m.label} · ${m.scoreToWin}킬 먼저`;
-      this.matchBar.classList.toggle('hurry', m.state === 'PLAYING' && m.timeLeft <= 10);
-    }
-    if (m.state === 'COUNTDOWN') {
-      const n = String(Math.max(1, Math.ceil(m.countdown)));
-      if (n !== this.lastCountdown) {
-        this.lastCountdown = n;
-        const el = this.countdownEl;
-        el.classList.remove('go');
-        el.textContent = n;
-        el.animate(
-          [
-            { opacity: 1, transform: 'translate(-50%, -50%) scale(1.5)' },
-            { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: 0.25 },
-            { opacity: 0.9, transform: 'translate(-50%, -50%) scale(1)' },
-          ],
-          { duration: 1000, easing: 'ease-out', fill: 'forwards' },
-        );
-      }
-    }
-  }
-
-  /** 멀티플레이 점수판 (서버 값). 카운트다운 숫자는 싱글플레이와 같은 연출 */
-  private updateNetScore(m: MatchHudInfo): void {
-    const n = m.net!;
-    const t = n.timeLeft === null ? null : Math.ceil(n.timeLeft);
-    const time = t === null ? '—' : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-    const key = `net|${time}|${n.mode}|${n.blue}|${n.red}|${n.myTeam}|${n.leader}|${n.mine}|${n.myDeaths}|${n.rank}|${n.players}|${m.state}`;
-    if (key !== this.lastMatchKey) {
-      this.lastMatchKey = key;
-      const left = this.matchBar.querySelector('.mb-net-left') as HTMLElement;
-      const right = this.matchBar.querySelector('.mb-net-right') as HTMLElement;
-      const goal = this.matchBar.querySelector('.mb-goal') as HTMLElement;
-      this.matchBar.querySelector('.mb-time')!.textContent = time;
-      const b = (v: number | string) => `<b>${v}</b>`;
-      if (n.mode === 'tdm') {
-        left.innerHTML = `<span class="mb-team blue${n.myTeam === 'BLUE' ? ' mine' : ''}">BLUE ${b(n.blue)}</span>`;
-        right.innerHTML = `<span class="mb-team red${n.myTeam === 'RED' ? ' mine' : ''}">${b(n.red)} RED</span>`;
-        goal.textContent = `팀 데스매치 · ${n.goal}킬 먼저${n.myTeam ? ` · 내 팀 ${n.myTeam}` : ''}`;
-      } else if (n.mode === 'ffa') {
-        left.innerHTML = `<span class="mb-team">LEADER ${b(n.leader)} / ${n.goal}</span>`;
-        right.innerHTML = `<span class="mb-team">나 ${b(n.mine)}킬 · ${b(n.rank)}위/${n.players}</span>`;
-        goal.textContent = `개인전 · ${n.goal}킬 먼저`;
+      const mb = this.matchBar;
+      mb.classList.toggle('tdm', mode === 'tdm');
+      mb.classList.toggle('solo', mode !== 'tdm');
+      mb.querySelector('.mb-mode')!.textContent = n ? MODE_TITLE[mode] : `${MODE_TITLE.ffa} · BOTS`;
+      mb.querySelector('.mb-time')!.textContent = time;
+      const pill = (sel: string, html: string | null) => {
+        const el = mb.querySelector(sel) as HTMLElement;
+        el.style.display = html === null ? 'none' : '';
+        if (html !== null) el.innerHTML = html;
+      };
+      if (mode === 'tdm') {
+        const [blue, red] = mb.querySelectorAll<HTMLElement>('.mb-side');
+        blue!.querySelector('.mb-score')!.textContent = pad2(n!.blue);
+        red!.querySelector('.mb-score')!.textContent = pad2(n!.red);
+        blue!.classList.toggle('mine', n!.myTeam === 'BLUE');
+        red!.classList.toggle('mine', n!.myTeam === 'RED');
+        blue!.classList.toggle('lead', n!.blue > n!.red);
+        red!.classList.toggle('lead', n!.red > n!.blue);
+        pill('.mb-kills', null);
+        pill('.mb-rank', null);
+        pill('.mb-goal', `목표 <b>${goal}</b>킬${n!.myTeam ? ` · 내 팀 <b class="t-${n!.myTeam.toLowerCase()}">${n!.myTeam}</b>` : ''}`);
+      } else if (mode === 'test') {
+        pill('.mb-kills', `K <b>${kills}</b> · D <b>${deaths}</b>`);
+        pill('.mb-rank', `<b>${rank}</b>위 / ${players}`);
+        pill('.mb-goal', null);
       } else {
-        left.innerHTML = `<span class="mb-team">${b(n.mine)}킬 ${b(n.myDeaths)}데스</span>`;
-        right.innerHTML = `<span class="mb-team">${b(n.rank)}위/${n.players}</span>`;
-        goal.textContent = '자유 테스트 · 제한 없음';
+        pill('.mb-kills', `MY KILLS <b>${pad2(kills)}</b> / ${goal}`);
+        pill('.mb-rank', `<b>${rank}</b>위 / ${players}`);
+        pill('.mb-goal', null);
       }
-      this.matchBar.classList.toggle('hurry', m.state === 'PLAYING' && t !== null && t <= 10);
+      mb.classList.toggle('hurry', m.state === 'PLAYING' && secs !== null && secs <= 10);
     }
     if (m.state === 'COUNTDOWN') {
       const c = String(Math.max(1, Math.ceil(m.countdown)));
@@ -538,7 +602,10 @@ export class Hud {
     }
   }
 
-  /** 히트마커: 실제 피해가 들어갔을 때만 호출. 일반 흰색 / 헤드샷 노란색 / 처치 빨간색 + KO 표시. 연속 명중마다 다시 시작 */
+  /**
+   * 히트마커: 실제 피해가 들어갔을 때만 호출. 일반 흰색 / 헤드샷 노란색 + HEADSHOT / 처치 빨간색 + KO.
+   * 연속 명중마다 다시 시작
+   */
   showHit(headshot: boolean, killed: boolean): void {
     const hm = this.hitmarker;
     hm.classList.toggle('head', headshot && !killed);
@@ -553,15 +620,18 @@ export class Hud {
       ],
       { duration: killed ? 380 : 240, easing: 'ease-out' },
     );
-    if (killed) {
-      this.killConfirm.animate(
+    if (killed || headshot) {
+      const kc = this.killConfirm;
+      kc.textContent = killed ? 'KO!' : 'HEADSHOT';
+      kc.classList.toggle('head', !killed);
+      kc.animate(
         [
           { opacity: 0, transform: 'translate(-50%, 0) scale(0.6)' },
           { opacity: 1, transform: 'translate(-50%, -6px) scale(1.15)', offset: 0.2 },
           { opacity: 1, transform: 'translate(-50%, -10px) scale(1)', offset: 0.7 },
           { opacity: 0, transform: 'translate(-50%, -16px) scale(1)' },
         ],
-        { duration: 700, easing: 'ease-out' },
+        { duration: killed ? 700 : 520, easing: 'ease-out' },
       );
     }
   }
@@ -637,6 +707,13 @@ export class Hud {
   }
 
   update(f: HudFrame, camera: THREE.Camera, width: number, height: number): void {
+    // 화면 크기 → HUD 배율 (1280×720 기준, 작은 모바일 가로 0.6 ~ 큰 화면 1.2)
+    const scale = THREE.MathUtils.clamp(Math.min(width / 1280, height / 720), 0.6, 1.2).toFixed(2);
+    if (scale !== this.lastScale) {
+      this.lastScale = scale;
+      this.root.style.setProperty('--u', scale);
+    }
+    this.root.classList.toggle('show-debug', f.debug);
     this.killFeed.update(performance.now());
     this.updateMatch(f.match);
     this.updateCrosshair(f, height);
@@ -644,6 +721,8 @@ export class Hud {
     this.scope.style.opacity = f.scopeOverlay.toFixed(3);
     // 빨간색 = 실제 사격 판정 기준으로 적에게 맞음. 총구 막힘은 조준선 색이 아니라 탄착 표시로만 알림
     this.crosshair.classList.toggle('enemy', f.enemyTargeted);
+    // ADS: 가운데 점 강조 (모양·크기는 실제 탄 퍼짐 그대로)
+    this.crosshair.classList.toggle('ads', f.aiming && !f.melee);
     if (f.blockedAt) {
       _v.copy(f.blockedAt).project(camera);
       const visible = _v.z < 1;
@@ -654,9 +733,6 @@ export class Hud {
     }
     this.scope.style.display = f.scopeOverlay > 0 ? '' : 'none';
     this.updateWeapon(f);
-    this.ammo.querySelector('.mag')!.textContent = String(f.magazine);
-    this.ammo.querySelector('.res')!.textContent = `/ ${f.reserve}`;
-    this.ammo.classList.toggle('low', f.magazine <= Math.ceil(f.magazineSize * 0.2));
     this.reload.classList.toggle('show', f.reloading);
     this.reloadBar.style.width = `${(f.reloadProgress * 100).toFixed(0)}%`;
     this.adsTag.classList.toggle('show', f.aiming);
@@ -668,14 +744,19 @@ export class Hud {
     this.updateHealth(f);
     this.updateIndicators(f);
     this.updateLabels(f, camera, width, height);
-
-    const fpsText = `${f.fps.toFixed(0)} FPS`;
-    if (fpsText !== this.lastFpsText) {
-      this.fps.textContent = fpsText;
-      this.lastFpsText = fpsText;
+    if (this.noticeTimer > 0) {
+      this.noticeTimer -= f.dt;
+      if (this.noticeTimer <= 0) this.noticeEl.classList.remove('show');
     }
-    this.debug.textContent = f.debugLines.join('\n');
 
+    if (f.debug) {
+      const fpsText = `${f.fps.toFixed(0)} FPS`;
+      if (fpsText !== this.lastFpsText) {
+        this.fps.textContent = fpsText;
+        this.lastFpsText = fpsText;
+      }
+      this.debug.textContent = f.debugLines.join('\n');
+    }
 
     for (let i = this.popups.length - 1; i >= 0; i--) {
       const p = this.popups[i]!;
@@ -697,34 +778,77 @@ export class Hud {
     }
   }
 
+  /**
+   * 우측 하단 무기 카드 (아이콘·이름·탄창/예비·재장전·탄약 경고) + 하단 중앙 슬롯 바.
+   * 근접무기는 탄약 줄을 숨김. 투척무기는 아직 없어 슬롯·탄약 모두 표시하지 않음
+   */
   private updateWeapon(f: HudFrame): void {
-    if (f.weaponName !== this.lastWeaponText) {
+    if (f.weaponId !== this.lastWeaponId) {
+      this.lastWeaponId = f.weaponId;
+      this.weaponIcon.innerHTML = weaponIconSvg(f.weaponId);
       this.weaponName.textContent = f.weaponName;
-      this.lastWeaponText = f.weaponName;
+      this.weaponCard.animate([{ transform: 'translateY(6px) scale(.96)', opacity: 0.6 }, { transform: 'none', opacity: 1 }], { duration: 180, easing: 'ease-out' });
     }
-    const key = f.slots.map((s) => `${s.key}${s.name}${s.active ? '*' : ''}`).join('|');
-    if (key !== this.lastSlotsKey) {
-      this.lastSlotsKey = key;
+    const empty = !f.melee && f.magazine === 0 && f.reserve === 0;
+    const low = !f.melee && !f.reloading && f.magazine <= Math.ceil(f.magazineSize * LOW_AMMO);
+    const state = f.melee ? '근접 무기' : f.reloading ? '재장전 중…' : empty ? '탄약 없음' : f.magazine === 0 ? 'R 재장전' : low ? '탄약 부족 · R' : '';
+    const key = `${f.magazine}|${f.reserve}|${f.melee}|${f.reloading}|${state}|${low}`;
+    if (key !== this.lastWeaponKey) {
+      this.lastWeaponKey = key;
+      this.magEl.textContent = String(f.magazine);
+      this.resEl.textContent = `/ ${f.reserve}`;
+      this.weaponState.textContent = state;
+      this.weaponCard.classList.toggle('melee', f.melee);
+      this.weaponCard.classList.toggle('reloading', f.reloading);
+      this.weaponCard.classList.toggle('low', low);
+      this.weaponCard.classList.toggle('empty', empty);
+    }
+    this.cardReloadBar.style.width = `${(f.reloadProgress * 100).toFixed(0)}%`;
+
+    const slotsKey = f.slots.map((s) => `${s.key}${s.id}${s.name}`).join('|');
+    if (slotsKey !== this.lastSlotsKey) {
+      this.lastSlotsKey = slotsKey;
+      this.lastActiveSlot = '';
       this.slotsEl.textContent = '';
       for (const s of f.slots) {
         const el = document.createElement('div');
-        el.className = `slot${s.active ? ' active' : ''}`;
-        el.innerHTML = '<b></b><span></span>';
+        el.className = 'slot';
+        el.dataset.key = s.key;
+        el.innerHTML = `<b></b><span class="slot-icon">${weaponIconSvg(s.id)}</span><span class="slot-name"></span>`;
         el.querySelector('b')!.textContent = s.key;
-        el.querySelector('span')!.textContent = s.name;
+        el.querySelector('.slot-name')!.textContent = s.name;
+        el.title = s.name;
         this.slotsEl.appendChild(el);
       }
     }
-    this.ammo.style.display = f.melee ? 'none' : '';
+    const active = f.slots.find((s) => s.active)?.key ?? '';
+    if (active !== this.lastActiveSlot) {
+      const first = this.lastActiveSlot === '';
+      this.lastActiveSlot = active;
+      for (const el of this.slotsEl.children as HTMLCollectionOf<HTMLElement>) {
+        const on = el.dataset.key === active;
+        el.classList.toggle('active', on);
+        if (on && !first) el.animate([{ transform: 'translateY(0) scale(1)' }, { transform: 'translateY(-6px) scale(1.12)', offset: 0.4 }, { transform: 'translateY(-3px) scale(1)' }], { duration: 220, easing: 'ease-out' });
+      }
+    }
   }
 
+  /** 좌측 하단 체력 카드: 하트·현재/최대(캐릭터별)·둥근 바. 깎이면 흰 잔상이 늦게 따라옴, 낮으면 경고 */
   private updateHealth(f: HudFrame): void {
-    const hp = Math.ceil(f.hp);
-    if (hp !== this.lastHp) {
+    const hp = Math.max(0, Math.ceil(f.hp));
+    if (hp !== this.lastHp || f.maxHp !== this.lastMaxHp) {
+      const dropped = this.lastHp >= 0 && hp < this.lastHp;
       this.lastHp = hp;
+      this.lastMaxHp = f.maxHp;
+      const pct = `${((Math.max(0, f.hp) / f.maxHp) * 100).toFixed(1)}%`;
       this.hpText.textContent = String(hp);
-      this.hpFill.style.width = `${((f.hp / f.maxHp) * 100).toFixed(1)}%`;
-      this.hpBar.classList.toggle('low', f.hp <= f.maxHp * 0.3);
+      this.hpMax.textContent = `/ ${f.maxHp}`;
+      this.hpFill.style.width = pct;
+      // 피해: 잔상 바는 잠깐 머물렀다 줄어듦 (CSS transition-delay) / 회복: 바로 맞춤
+      this.hpLag.classList.toggle('instant', !dropped);
+      this.hpLag.style.width = pct;
+      this.hpCard.classList.toggle('low', f.hp > 0 && f.hp <= f.maxHp * LOW_HP);
+      this.hpCard.classList.toggle('empty', f.hp <= 0);
     }
     this.protectTag.classList.toggle('show', f.protection > 0 && !f.dead);
   }

@@ -107,6 +107,11 @@ export class NetDebugPanel {
     this.root.classList.toggle('collapsed');
   }
 
+  /** 펼쳐져 있음 (F9). 접히면 화면에서 완전히 숨김 — 일반 플레이 화면에 개발용 막대가 남지 않게 */
+  get isOpen(): boolean {
+    return !this.root.classList.contains('collapsed');
+  }
+
   update(dt: number): void {
     this.timer -= dt;
     if (this.timer > 0 || this.root.classList.contains('collapsed')) return;

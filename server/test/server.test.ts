@@ -534,4 +534,96 @@ describe('match timer and reconnection', () => {
     server.connect({ account: 'erin', roomId: '__no_room__' });
     expect((await server.findRoom(ROOM)).reason).toBe('full');
   });
+
+  test('Leave Room (quit) blocks this match only; refresh-style bye still returns; next match accepts the quitter', async (server) => {
+    expect((await room4(server, 'tdm')).ok).toBe(true);
+    expect((await server.startMatch({ timeLimitSec: 20 })).ok).toBe(true);
+    spin(COUNTDOWN);
+    // carol: Leave Room 버튼 / dave: 새로고침 (pagehide → bye)
+    server.connect({ account: 'carol', roomId: ROOM });
+    expect((await server.bye({ quit: true })).ok).toBe(true);
+    await server.simulateLeave(ROOM, 'carol');
+    server.connect({ account: 'dave', roomId: ROOM });
+    expect((await server.bye()).ok).toBe(true);
+    await server.simulateLeave(ROOM, 'dave');
+    let r = await roomState(server);
+    expect(r.gone.carol.quit).toBe(true);
+    expect(r.gone.dave.quit).toBe(false);
+    server.connect({ account: 'carol', roomId: '__no_room__' });
+    expect((await server.findRoom(ROOM)).reason).toBe('left_match');
+    server.connect({ account: 'carol', roomId: ROOM });
+    const h = await server.hello('blue');
+    expect(h.slot).toBe(-1);
+    expect(h.reason).toBe('left_match');
+    server.connect({ account: 'dave', roomId: '__no_room__' });
+    expect((await server.findRoom(ROOM)).ok).toBe(true);
+    await server.simulateJoin(ROOM, 'dave');
+    r = await roomState(server);
+    expect(r.players.dave.team).toBe('RED');
+    expect(r.players.carol).toBe(undefined);
+    // 2v1 + 복귀한 dave = BLUE 1 : RED 2 → 매치는 그대로 진행, 시간 종료로 끝남
+    await server.simulateTick(ROOM, 200);
+    r = await roomState(server);
+    expect(r.phase).toBe('playing');
+    spin(r.endAt - Date.now() + 50);
+    await server.simulateTick(ROOM, 200);
+    r = await roomState(server);
+    expect(r.phase).toBe('result');
+    expect(r.result.standings.find((s: any) => s.account === 'carol').left).toBe(true);
+    // 다음 매치: 대기실로 → carol 다시 입장 가능
+    expect((await server.toLobby()).ok).toBe(true);
+    server.connect({ account: 'carol', roomId: '__no_room__' });
+    expect((await server.findRoom(ROOM)).ok).toBe(true);
+    await server.simulateJoin(ROOM, 'carol');
+    r = await roomState(server);
+    expect(r.players.carol.team).toBe('BLUE');
+    expect(Object.keys(r.players).length).toBe(4);
+  });
+
+  test('returning player keeps the original team, character, K/D and HP (dead on leave → full HP)', async (server) => {
+    expect((await room4(server, 'tdm')).ok).toBe(true);
+    server.connect({ account: 'bob', roomId: ROOM });
+    await server.hello('red');
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.startMatch()).ok).toBe(true);
+    spin(COUNTDOWN);
+    // alice(BLUE) → bob(RED) 라이플 1발 (12)
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.st(state(POS.alice!, { s: [{ w: 'rifle', f: [0, 1, 0], e: [2, 1, 0], h: 1 }], h: [{ v: 'bob', w: 'rifle', hd: 0, d: dist2('alice', 'bob') }] }));
+    let r = await roomState(server);
+    const hurt = r.players.bob.hp;
+    expect(hurt).toBe(r.players.bob.max - 12);
+    server.connect({ account: 'bob', roomId: ROOM });
+    await server.bye();
+    await server.simulateLeave(ROOM, 'bob');
+    await server.simulateJoin(ROOM, 'bob');
+    r = await roomState(server);
+    expect(r.players.bob.team).toBe('RED');
+    expect(r.players.bob.char).toBe('red');
+    expect(r.players.bob.hp).toBe(hurt);
+    expect(r.players.bob.slot).toBe(1);
+    // 쓰러진 채 나갔다 오면 가득 찬 체력, 데스는 그대로
+    await shotgunKill(server, 'carol', 'dave');
+    server.connect({ account: 'dave', roomId: ROOM });
+    await server.bye();
+    await server.simulateLeave(ROOM, 'dave');
+    await server.simulateJoin(ROOM, 'dave');
+    r = await roomState(server);
+    expect(r.players.dave.dead).toBe(false);
+    expect(r.players.dave.hp).toBe(r.players.dave.max);
+    expect(r.players.dave.d).toBe(1);
+    expect(r.players.dave.team).toBe('RED');
+    expect(r.teamScore.BLUE).toBe(1);
+  });
+
+  test('joining again while still in the room (grace) keeps one record, no duplicate slot', async (server) => {
+    expect((await room4(server, 'ffa')).ok).toBe(true);
+    expect((await server.startMatch()).ok).toBe(true);
+    await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'bob', roomId: ROOM });
+    const h = await server.hello('blue');
+    expect(h.slot).toBe(1);
+    const slots = Object.values(h.players).map((p: any) => p.slot).sort();
+    expect(slots).toEqual([0, 1, 2, 3]);
+  });
 });

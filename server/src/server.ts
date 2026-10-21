@@ -52,8 +52,10 @@ interface RoomMirror {
   phase: NetMatchPhase;
   mode: NetMode;
   t: number;
-  /** 이번 매치 중 나간 계정 (같은 계정은 진행 중에도 돌아올 수 있음) */
+  /** 이번 매치 중 끊겨서 나간 계정 (같은 계정은 진행 중에도 돌아올 수 있음) */
   gone?: string[];
+  /** 이번 매치 중 Leave Room으로 직접 나간 계정 (이 매치에는 다시 못 들어옴) */
+  quit?: string[];
   /** 지금 룸 기록에 있는 계정 (30초 유예 중인 사람 포함) */
   in?: string[];
 }
@@ -141,7 +143,7 @@ async function readRoom(): Promise<NetRoomState> {
 /** 룸 상태 전체 저장 + 글로벌 요약 갱신. 룸 락 안에서 호출 */
 async function saveRoom(roomId: string, r: NetRoomState): Promise<void> {
   await $room.updateRoomState({ ...r }, { returnState: false });
-  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, t: Date.now(), gone: Object.keys(r.gone), in: Object.keys(r.players) };
+  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, t: Date.now(), gone: Object.keys(r.gone).filter((a) => !r.gone[a]!.quit), quit: Object.keys(r.gone).filter((a) => r.gone[a]!.quit), in: Object.keys(r.players) };
   await $global.updateGlobalState({ [MIRROR(roomId)]: m });
 }
 
@@ -296,9 +298,11 @@ export class Server {
     // 짧게 끊긴 사람(30초 유예 중, 자리가 아직 있음)은 정원이 차 있어도 자기 자리로 돌아옴
     const present = !!m.in?.includes($sender.account);
     if (m.n >= NET_MAX_PLAYERS && !present) return { ok: false, reason: 'full', count: m.n, mode: m.mode };
-    // 진행 중인 TDM·FFA: 이번 매치에서 나갔던 같은 계정(새로고침·끊김)만 돌아올 수 있음
+    // 진행 중인 TDM·FFA: 이번 매치에서 끊겨 나갔던 같은 계정(새로고침·끊김)만 돌아올 수 있음. Leave Room으로 나간 계정은 이 매치에 다시 못 들어옴
+    const inMatch = m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing');
+    if (inMatch && !present && m.quit?.includes($sender.account)) return { ok: false, reason: 'left_match', count: m.n, mode: m.mode };
     const returning = present || !!m.gone?.includes($sender.account);
-    if (m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing') && !returning) return { ok: false, reason: 'in_progress', count: m.n, mode: m.mode };
+    if (inMatch && !returning) return { ok: false, reason: 'in_progress', count: m.n, mode: m.mode };
     return { ok: true, roomId: id, count: m.n, phase: m.phase, mode: m.mode };
   }
 
@@ -326,7 +330,7 @@ export class Server {
     const slot = await $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       if (r.players[account]) return r.players[account]!.slot;
-      const s = this.admit(r, account);
+      const s = this.admit(r, account).slot;
       if (s < 0) return -1;
       await saveRoom(roomId, r);
       return s;
@@ -372,13 +376,16 @@ export class Server {
     });
   }
 
-  /** 참가자 기록 제거 (매치 중이면 기록을 결과용으로 보존, 방장이면 남은 사람에게 넘김). @returns 제거했으면 true */
-  private async removePlayer(roomId: string, account: string): Promise<boolean> {
+  /**
+   * 참가자 기록 제거 (매치 중이면 기록을 결과·복귀용으로 보존, 방장이면 남은 사람에게 넘김).
+   * quit = Leave Room (이 매치 재입장 불가) / false = 끊김·새로고침·탭 닫기 (같은 계정 복귀 가능). @returns 제거했으면 true
+   */
+  private async removePlayer(roomId: string, account: string, quit = false): Promise<boolean> {
     return $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       const p = r.players[account];
       if (!p) return false;
-      if (r.phase === 'countdown' || r.phase === 'playing') r.gone[account] = { ...standingOf(account, p), left: true };
+      if (r.phase === 'countdown' || r.phase === 'playing') r.gone[account] = { ...standingOf(account, p), left: true, quit, hp: p.dead ? 0 : p.hp };
       delete r.players[account];
       if (r.host === account || !r.host || !r.players[r.host]) r.host = pickHost(r.players);
       if (Object.keys(r.players).length === 0) Object.assign(r, { phase: 'lobby', result: null, gone: {}, startAt: 0, endAt: 0 });
@@ -387,33 +394,45 @@ export class Server {
     });
   }
 
-  /** 새 참가자 자리·팀 배정 (락 안). @returns 자리, 못 들어오면 -1 */
-  private admit(r: NetRoomState, account: string): number {
+  /**
+   * 새 참가자 자리·팀 배정 (락 안). @returns 자리 (못 들어오면 -1 + 이유: full | in_progress | left_match | team_full)
+   *
+   * 매치 중 복귀 (이번 매치 기록이 gone에 있는 같은 계정 — 새로고침·30초 넘는 끊김):
+   * - 팀·캐릭터·킬/데스·체력(나갈 때 값, 쓰러져 나갔으면 가득)을 되살림
+   * - 팀은 반드시 원래 팀. 원래 팀이 이미 꽉 찼으면 다른 팀으로 보내지 않고 거절 (팀 인원 제한 우회 없음)
+   * - Leave Room으로 나간 계정(quit)은 이번 매치에 다시 못 들어옴
+   * 30초 유예 중(아직 players에 있음)은 여기까지 오지 않고 기존 자리 그대로 (onRoomJoin·hello)
+   */
+  private admit(r: NetRoomState, account: string): { slot: number; reason?: string } {
     const inMatch = r.phase === 'countdown' || r.phase === 'playing';
-    // 이번 매치에서 나갔던 같은 계정(새로고침·30초 넘는 끊김): 기록(자리·팀·킬/데스)을 되살려 복귀
     const back = inMatch ? r.gone[account] : undefined;
-    if (back) {
+    if (back?.quit && r.mode !== 'test') return { slot: -1, reason: 'left_match' };
+    if (back && !back.quit) {
       const used = new Set(Object.values(r.players).map((p) => p.slot));
       const slot = used.has(back.slot) ? freeSlot(r.players) : back.slot;
-      if (slot < 0) return -1;
+      if (slot < 0) return { slot: -1, reason: 'full' };
+      const teams = NET_MODE_RULES[r.mode].teams;
+      if (teams && (!back.team || teamCount(r.players, back.team) >= NET_TEAM_SIZE)) return { slot: -1, reason: 'team_full' };
       const rec = newRecord(slot, Date.now());
-      const team = back.team && teamCount(r.players, back.team) < NET_TEAM_SIZE ? back.team : NET_MODE_RULES[r.mode].teams ? pickTeam(r.players) : null;
-      Object.assign(rec, { char: back.char, k: back.k, d: back.d, team });
+      const max = NET_CHARACTER_HP[back.char] ?? NET_DEFAULT_HP;
+      const hp = typeof back.hp === 'number' && back.hp > 0 ? Math.min(back.hp, max) : max;
+      Object.assign(rec, { char: back.char, max, hp, k: back.k, d: back.d, team: teams ? back.team : null });
       r.players[account] = rec;
       delete r.gone[account];
       if (!r.host || !r.players[r.host]) r.host = pickHost(r.players);
-      return slot;
+      return { slot };
     }
     // TDM·FFA 매치 중 새 참가자는 받지 않음 (자유 테스트는 중간 입장 허용)
-    if (r.mode !== 'test' && inMatch) return -1;
+    if (r.mode !== 'test' && inMatch) return { slot: -1, reason: 'in_progress' };
     const slot = freeSlot(r.players);
     // 정원 초과: onRoomJoin에서 거절하면 SDK가 재시도만 반복함(문서) → 자리 없이 두고 클라이언트가 스스로 나감
-    if (slot < 0) return -1;
+    if (slot < 0) return { slot: -1, reason: 'full' };
+    if (back) delete r.gone[account];
     const rec = newRecord(slot, Date.now());
     rec.team = NET_MODE_RULES[r.mode].teams ? pickTeam(r.players) : null;
     r.players[account] = rec;
     if (!r.host || !r.players[r.host]) r.host = pickHost(r.players);
-    return slot;
+    return { slot };
   }
 
   // ---------------- 룸 안 ----------------
@@ -428,9 +447,8 @@ export class Server {
       let p = r.players[me];
       if (!p) {
         // 나가기(bye) 뒤 30초 유예 안에 다시 들어오면 SDK가 onRoomJoin을 다시 부르지 않음(세션 이어짐) → 여기서 자리 배정
-        const inProgress = r.mode !== 'test' && (r.phase === 'countdown' || r.phase === 'playing');
-        const slot = this.admit(r, me);
-        if (slot < 0) return { ...r, slot: -1, reason: inProgress ? 'in_progress' : 'full', now: Date.now() };
+        const { slot, reason } = this.admit(r, me);
+        if (slot < 0) return { ...r, slot: -1, reason: reason ?? 'full', now: Date.now() };
         p = r.players[me]!;
         await saveRoom(roomId, r);
         $room.broadcastToRoom('joined', { account: me, slot });
@@ -534,12 +552,17 @@ export class Server {
     });
   }
 
-  /** 직접 나가기: 기록을 바로 지우고 알림 (SDK leaveRoom은 끊김과 구분이 안 돼 30초 유예를 기다리므로 먼저 호출) */
-  async bye(): Promise<{ ok: boolean }> {
+  /**
+   * 나가기 알림: 기록을 바로 지우고 알림 (SDK leaveRoom은 끊김과 구분이 안 돼 30초 유예를 기다리므로 먼저 호출).
+   * opts.quit = true: Leave Room 버튼 (이번 매치 재입장 불가). 없거나 false: 새로고침·탭 닫기 (같은 계정 복귀 가능)
+   */
+  async bye(opts?: { quit?: boolean }): Promise<{ ok: boolean }> {
     if (!roomOf()) return { ok: false };
     const me = $sender.account;
-    const removed = await this.removePlayer(roomOf()!, me);
-    if (removed) $room.broadcastToRoom('left', { account: me });
+    const quit = opts?.quit === true;
+    const removed = await this.removePlayer(roomOf()!, me, quit);
+    if (removed) $room.broadcastToRoom('left', { account: me, quit });
+    slog(quit ? 'quit' : 'bye', roomOf()!, { account: me });
     return { ok: removed };
   }
 

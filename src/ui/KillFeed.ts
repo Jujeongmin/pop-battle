@@ -93,6 +93,11 @@ const WEAPON_ICON: Record<string, string> = {
   melee: 'melee',
 };
 
+/** HUD 무기 카드·슬롯용 무기 아이콘 SVG (킬로그와 같은 그림, 크기는 CSS) */
+export function weaponIconSvg(weaponId: string): string {
+  return ICONS[WEAPON_ICON[weaponId] ?? 'unknown']!;
+}
+
 /** 무기 id → 아이콘 키 (모르는 무기는 기본 처치 아이콘) */
 export function killIconKey(e: Pick<KillFeedEvent, 'cause' | 'weaponId'>): string {
   if (e.cause === 'suicide') return 'suicide';

@@ -32,11 +32,13 @@ export interface MultiplayerMenuHost {
   toLobby(): Promise<void>;
   leave(): Promise<void>;
   rejoin(): Promise<void>;
+  /** 자동 재접속 취소 */
+  cancelReconnect(): void;
   /** 싱글플레이로 돌아가기 (새로고침) */
   singlePlayer(): void;
 }
 
-type View = 'home' | 'busy' | 'lobby' | 'paused' | 'result' | 'left';
+type View = 'home' | 'busy' | 'lobby' | 'paused' | 'result' | 'left' | 'reconnecting';
 
 const MODES: NetMode[] = ['tdm', 'ffa', 'test'];
 
@@ -45,10 +47,6 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text;
   return e;
-}
-
-function shortAccount(a: string): string {
-  return a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
 }
 
 /** 모드 규칙 한 줄 */
@@ -103,6 +101,7 @@ export class MultiplayerMenu {
 
   private view(): View {
     const s = this.host.session();
+    if (s?.reconnecting && !s.inRoom) return 'reconnecting';
     if (this.busy || s?.phase === 'joining') return 'busy';
     if (s?.inRoom) {
       if (s.matchPhase === 'result' && s.result) return 'result';
@@ -114,7 +113,7 @@ export class MultiplayerMenu {
 
   private visible(v: View): boolean {
     if (v === 'paused') return !this.host.locked();
-    if (v === 'left' || v === 'result') return true;
+    if (v === 'left' || v === 'result' || v === 'reconnecting') return true;
     return this.opened || this.host.netGame();
   }
 
@@ -139,7 +138,7 @@ export class MultiplayerMenu {
           .map(([a, p]) => `${a}:${p.slot}:${p.char}:${p.team}:${p.k}:${p.d}:${s.isLost(a)}:${s.remotes.has(a)}`)
           .join('|')
       : '';
-    return [v, this.notice, this.createMode, this.testTime, this.host.lastRoomCode(), s?.roomId, s?.host, s?.mode, s?.matchPhase, s?.result?.endedAt, s?.lastError, s?.client.status, ps, this.host.matchStarted(), this.host.characterName()].join('#');
+    return [v, s?.reconnectAttempt, this.notice, this.createMode, this.testTime, this.host.lastRoomCode(), s?.roomId, s?.host, s?.mode, s?.matchPhase, s?.result?.endedAt, s?.lastError, s?.client.status, ps, this.host.matchStarted(), this.host.characterName()].join('#');
   }
 
   private render(v: View): void {
@@ -151,6 +150,7 @@ export class MultiplayerMenu {
       c.append(el('p', 'mp-status', s?.inRoom ? '처리하는 중…' : '서버에 연결하는 중…'));
       return;
     }
+    if (v === 'reconnecting' && s) return this.renderReconnecting(c, s);
     if (v === 'home') return this.renderHome(c, s);
     if (v === 'left') return this.renderLeft(c, s);
     if (!s) return;
@@ -213,6 +213,17 @@ export class MultiplayerMenu {
     c.append(el('p', 'mp-hint', '같은 게임 링크를 연 다른 사람(다른 브라우저·기기, 다른 계정)이 Room Code로 들어와요.'));
   }
 
+  /** 자동 재접속 중: 시도 횟수 + 취소 (취소하면 끊김 화면의 수동 "다시 입장") */
+  private renderReconnecting(c: HTMLElement, s: NetSession): void {
+    const box = el('div', 'mp-reconnect');
+    box.append(el('div', 'mp-spinner'), el('b', '', 'RECONNECTING…'));
+    c.append(box);
+    const attempt = s.reconnectAttempt > 0 ? `시도 ${s.reconnectAttempt}/${s.reconnectMax}` : '곧 다시 연결해요';
+    c.append(el('p', 'mp-status', `연결이 끊겼어요 — 같은 방(${displayCode(s.lastRoomId)})으로 자동 복귀 중 · ${attempt}`));
+    c.append(el('p', 'mp-hint', '복귀하면 팀·캐릭터·킬/데스·체력이 그대로 이어져요'));
+    c.append(this.button('취소', 'mp-ghost', () => this.host.cancelReconnect()));
+  }
+
   private renderLeft(c: HTMLElement, s: NetSession | null): void {
     c.append(el('p', 'mp-error', s?.lastError || '룸에서 나왔어요'));
     if (s?.lastRoomId) c.append(this.button(`다시 입장 (${displayCode(s.lastRoomId)})`, 'mp-primary', () => this.run(() => this.host.rejoin())));
@@ -255,7 +266,7 @@ export class MultiplayerMenu {
         const mine = e.acc === s.me;
         const lost = s.isLost(e.acc);
         const status = lost ? 'Disconnected (재접속 대기 30초)' : mine || s.remotes.has(e.acc) ? 'Connected · Ready' : 'Connected';
-        const name = el('span', 'mp-name', `${mine ? '나' : shortAccount(e.acc)} · ${this.host.characterLabel(e.p.char)}${s.host === e.acc ? ' · ★방장' : ''}`);
+        const name = el('span', 'mp-name', `${mine ? '나' : `P${e.p.slot + 1}`} · ${this.host.characterLabel(e.p.char)}${s.host === e.acc ? ' · ★방장' : ''}`);
         if (rule.teams && e.p.team) row.classList.add(e.p.team === 'BLUE' ? 'team-blue' : 'team-red');
         row.append(name);
         if (rule.teams && e.p.team) row.append(el('span', `mp-team ${e.p.team === 'BLUE' ? 'blue' : 'red'}`, e.p.team));
@@ -308,12 +319,16 @@ export class MultiplayerMenu {
   private renderResult(c: HTMLElement, s: NetSession): void {
     const r = s.result!;
     const mine = r.winners.includes(s.me);
-    const outcome = r.draw ? (r.mode === 'tdm' || mine ? 'DRAW' : 'LOSE') : mine ? 'WIN' : 'LOSE';
-    c.append(el('div', `mp-outcome ${outcome.toLowerCase()}`, outcome));
+    const outcome = r.draw ? (r.mode === 'tdm' || mine ? 'draw' : 'lose') : mine ? 'win' : 'lose';
+    c.append(el('div', `mp-outcome ${outcome}`, { win: 'VICTORY', lose: 'DEFEAT', draw: 'DRAW' }[outcome]));
     const why = r.reason === 'score' ? `${NET_MODE_RULES[r.mode].scoreToWin}킬 달성` : '시간 종료';
     if (r.mode === 'tdm') {
       const sc = el('div', 'mp-final');
-      sc.append(el('span', 'mp-team blue', `BLUE ${r.teamScore.BLUE}`), el('span', '', ':'), el('span', 'mp-team red', `${r.teamScore.RED} RED`));
+      sc.append(
+        el('span', `mp-team blue${r.winnerTeam === 'BLUE' ? ' win' : ''}`, `BLUE ${r.teamScore.BLUE}`),
+        el('span', '', ':'),
+        el('span', `mp-team red${r.winnerTeam === 'RED' ? ' win' : ''}`, `${r.teamScore.RED} RED`),
+      );
       c.append(sc, el('p', 'mp-hint', `${NET_MODE_RULES[r.mode].label} · ${why}${r.winnerTeam ? ` · ${r.winnerTeam} 승리` : ' · 무승부'}`));
     } else {
       c.append(el('p', 'mp-hint', `${NET_MODE_RULES[r.mode].label} · ${why}${r.draw ? ' · 공동 1위 무승부' : ''}`));
@@ -329,8 +344,13 @@ export class MultiplayerMenu {
       if (k !== prev) rank = i + 1;
       prev = k;
       const tr = el('tr', p.account === s.me ? 'me' : '');
+      // TDM: 팀 색 줄, FFA: 1위(공동 포함) 강조. 나간 사람은 흐리게
+      if (r.mode === 'tdm' && p.team) tr.classList.add(p.team === 'BLUE' ? 'team-blue' : 'team-red');
+      if (r.mode !== 'tdm' && r.winners.includes(p.account)) tr.classList.add('first');
+      if (p.left) tr.classList.add('left');
       const team = r.mode === 'tdm' ? (p.team ?? '-') : this.host.characterLabel(p.char);
-      for (const v of [String(rank), `${p.account === s.me ? '나' : shortAccount(p.account)}${p.left ? ' (나감)' : ''}`, team, String(p.k), String(p.d)]) tr.append(el('td', '', v));
+      const cells = [String(rank), `${s.displayName(p.account)}${p.left ? (p.quit ? ' (나감)' : ' (끊김)') : ''}`, team, String(p.k), String(p.d)];
+      cells.forEach((v, i) => tr.append(el('td', i === 0 ? 'rank' : '', v)));
       table.append(tr);
     });
     c.append(table);

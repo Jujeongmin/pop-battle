@@ -47,7 +47,7 @@ export class RemotePlayer implements Damageable {
   constructor(
     private readonly physics: Physics,
     readonly account: string,
-    readonly name: string,
+    public name: string,
     public avatar: PlayerAvatar,
     private readonly weaponModel: (id: string) => THREE.Object3D,
     private readonly onClaim: (target: RemotePlayer, hit: HitInfo) => void,

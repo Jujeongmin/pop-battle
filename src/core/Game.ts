@@ -705,8 +705,10 @@ export class Game {
         playerPos: this.renderFeet,
         weaponName: w.def.name,
         melee: this.weapons.isMelee,
-        slots: this.loadout.map((d, i) => ({ key: String(i + 1), name: d.name, active: i === this.slotIndex })),
+        slots: this.loadout.map((d, i) => ({ key: String(i + 1), id: d.id, name: d.name, active: i === this.slotIndex })),
         botLabels: this.net ? [...this.bots.labels, ...this.net.labels] : this.bots.labels,
+        // 개발용 수치는 개발 서버에서 디버그 패널(`)을 열었을 때만 (일반 플레이 화면에는 정식 HUD만)
+        debug: import.meta.env.DEV && this.debugPanel.visible,
         debugLines,
       },
       cam,
@@ -717,7 +719,8 @@ export class Game {
     // 네트워크 전송은 이번 프레임 최종 상태로 (50ms마다)
     this.net?.update(dt, this.player.justJumped, this.player.justLanded);
     this.netPanel?.update(dt);
-    this.netHud?.update(dt, this.netGame);
+    // 멀티 측정 패널: F9 네트워크 디버그를 열었을 때만 (정식 HUD와 겹치지 않게)
+    this.netHud?.update(dt, this.netGame && !!this.netPanel?.isOpen);
     this.mpRefreshTimer -= dt;
     if (this.mpRefreshTimer <= 0 && this.mpMenu) {
       this.mpRefreshTimer = 0.25;
@@ -1521,6 +1524,7 @@ export class Game {
       localTeam: () => this.net?.session.players[this.net.session.me]?.team ?? null,
       create: async (mode) => {
         const net = this.ensureNet();
+        net.session.cancelReconnect();
         this.netLeftByUser = false;
         if (await net.session.createRoom(this.avatar.character.id, mode)) this.enterNetGame();
       },
@@ -1537,11 +1541,13 @@ export class Game {
       },
       join: async (code) => {
         const net = this.ensureNet();
+        net.session.cancelReconnect();
         this.netLeftByUser = false;
         if (await net.session.joinByCode(this.avatar.character.id, code)) this.enterNetGame();
       },
       rejoin: async () => {
         const net = this.ensureNet();
+        net.session.cancelReconnect();
         this.netLeftByUser = false;
         if (await net.session.rejoin(this.avatar.character.id)) this.enterNetGame();
       },
@@ -1559,6 +1565,7 @@ export class Game {
         this.netLeftByUser = true;
         await this.net?.session.leave();
       },
+      cancelReconnect: () => this.net?.session.cancelReconnect(),
       singlePlayer: () => this.reloadPage(false),
     });
   }
@@ -1602,8 +1609,8 @@ export class Game {
     this.hud.setCharacter(this.avatar.character.id, true);
     this.hud.setModeLine('멀티플레이 (최대 4인) · 봇 없음');
     this.netHud = new NetTestHud(this.container, this.ensureNet().session, () => ({ hp: this.combatant.health.hp, max: this.combatant.health.maxHp }), () => this.fps);
-    // 다른 플레이어 퇴장·연결 끊김을 화면에 알림
-    this.ensureNet().session.onNotice = (text) => this.netHud?.toast(text);
+    // 다른 플레이어 입장·퇴장·연결 끊김을 화면에 알림 (정식 HUD 알림)
+    this.ensureNet().session.onNotice = (text) => this.hud.notify(text);
     this.refreshMultiplayerMenu();
   }
 
@@ -1813,6 +1820,11 @@ export class Game {
       },
     };
     this.net = new NetGameMode(ctx);
+    // 자동 재접속 성공 → 같은 매치로 복귀 (서버가 자리·팀·기록을 되살림)
+    this.net.session.onReconnected = () => {
+      this.netLeftByUser = false;
+      this.enterNetGame();
+    };
     this.netPanel = new NetDebugPanel(this.container, this.net);
     if (import.meta.env.DEV) {
       // 서버 규칙(net/shared/protocol.ts)은 무기·캐릭터 설정의 사본 → 어긋나면 경고

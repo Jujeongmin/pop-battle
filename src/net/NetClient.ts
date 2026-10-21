@@ -178,6 +178,13 @@ export class NetClient {
     }
     if (this.connected) return true;
     this.setStatus('connecting');
+    // 끊긴 이전 연결이 남아 있으면 정리 (자동 재접속 때 소켓·구독이 겹치지 않게)
+    if (this.server) {
+      this.dropRoom();
+      const old = this.server;
+      this.server = null;
+      old.disconnect().catch(() => undefined);
+    }
     try {
       // 계정: SDK가 ?account= 를 읽음 (인증 토큰이 없을 때만). 같은 브라우저 두 탭은 계정을 따로 줘야 함 (공식 문서)
       this.server = new GameServer({

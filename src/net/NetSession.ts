@@ -21,10 +21,6 @@ import {
 
 export type RoomPhase = 'lobby' | 'joining' | 'in-room';
 
-function shortName(a: string): string {
-  return a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
-}
-
 /** 룸 코드 표시용 ('pb-abc123' → 'ABC123') */
 export function displayCode(roomId: string | null): string {
   return roomId ? roomId.replace(/^pb-/, '').toUpperCase() : '';
@@ -55,7 +51,14 @@ const JOIN_ERRORS: Record<string, string> = {
   not_found: '방을 찾을 수 없어요 (코드 확인, 또는 방이 사라짐)',
   bad_code: '방 코드 형식이 올바르지 않아요 (영문·숫자 4~12자)',
   in_progress: '매치가 진행 중이라 지금은 들어갈 수 없어요 (끝나고 다시 시도)',
+  left_match: 'Leave Room으로 나간 매치에는 다시 들어갈 수 없어요 (매치가 끝나면 입장 가능)',
+  team_full: '원래 팀에 자리가 없어 복귀할 수 없어요',
 };
+
+/** 자동 재접속 간격 (ms): 1·2·3·5·8·10초 → 약 29초 (서버 30초 유예 안 + 지난 뒤에도 기록 복구) */
+const RECONNECT_DELAYS_MS = [1000, 2000, 3000, 5000, 8000, 10000];
+/** 다시 시도해도 결과가 같은 거절 (자동 재접속 중단) */
+const NO_RETRY = new Set(['not_found', 'left_match', 'team_full', 'in_progress', 'bad_code']);
 
 export interface NetSessionEvents {
   /** 원격 플레이어가 생김 (상태를 처음 받음) / 사라짐 (룸을 나감) */
@@ -108,6 +111,15 @@ export class NetSession {
   timeLimitMs = 0;
   /** 다른 플레이어 입장·퇴장·끊김 알림 (화면 토스트) */
   onNotice: ((text: string) => void) | null = null;
+  /** 자동 재접속 중 (시도 번호 1부터, 0 = 다음 시도 대기) */
+  reconnecting = false;
+  reconnectAttempt = 0;
+  readonly reconnectMax = RECONNECT_DELAYS_MS.length;
+  /** 자동 재접속 성공 → 게임으로 복귀 (Game이 연결) */
+  onReconnected: (() => void) | null = null;
+  /** 마지막 입장 거절 이유 코드 (서버 reason) */
+  lastErrorCode = '';
+  private reconnectToken = 0;
   /** 직접 나간 계정 (나가기 뒤 SDK가 보내는 연결 끊김 알림은 무시) */
   private readonly departed = new Set<string>();
   /** 연결 유실(30초 유예) 중인 원격 계정 → 새 상태가 오면 해제 */
@@ -125,9 +137,10 @@ export class NetSession {
     this.client.onDisconnect = (r) => this.handleLeft(`게임 서버 연결 끊김${r ? ` (${r})` : ''}`);
     this.client.onRoomDisconnect = (r) => this.handleLeft(`룸 서버 연결 끊김${r ? ` (${r})` : ''}`);
     this.client.onStatus = () => this.events.onRoomInfo();
-    // 탭 닫기·새로고침: 바로 퇴장 알림 (응답 기다리지 않음). SDK 소켓도 1001로 닫혀 서버가 즉시 onRoomLeave
+    // 탭 닫기·새로고침: 바로 퇴장 알림 (응답 기다리지 않음). SDK 소켓도 1001로 닫혀 서버가 즉시 onRoomLeave.
+    // Leave Room과 달리 quit 아님 → 같은 계정은 진행 중인 매치에 다시 들어올 수 있음
     addEventListener('pagehide', () => {
-      if (this.inRoom) this.client.fire('bye');
+      if (this.inRoom) this.client.fire('bye', [{ quit: false }]);
     });
   }
 
@@ -143,6 +156,16 @@ export class NetSession {
     const line = `[${event}] room=${this.roomId ?? this.lastRoomId ?? '-'} me=${short(this.me) || '-'} ${body}`;
     this.client.addLog('info', line);
     if (console_) console.info(`[net] ${new Date().toISOString()} ${line}`);
+  }
+
+  /**
+   * 화면 표시 이름 (킬로그·이름표·알림·결과). Verse8 SDK·문서에 닉네임 API가 없어(2026-10 확인) 자리+캐릭터로 만든 임시 이름.
+   * 계정(account)은 식별에만 쓰고 화면에 보이지 않음
+   */
+  displayName(account: string): string {
+    if (account === this.me) return '나';
+    const p = this.players[account] ?? this.gone[account] ?? this.result?.standings.find((s) => s.account === account);
+    return p ? `P${p.slot + 1} ${p.char.toUpperCase()}` : '플레이어';
   }
 
   /** 서버 시각 추정 (ms) */
@@ -219,7 +242,10 @@ export class NetSession {
   async joinByCode(characterId: string, code: string): Promise<boolean> {
     return this.enter(characterId, async () => {
       const r = await this.client.call<{ ok: boolean; roomId?: string; reason?: string; count?: number }>('findRoom', [code]);
-      if (!r.ok || !r.roomId) throw new Error(JOIN_ERRORS[r.reason ?? ''] ?? `입장 불가 (${r.reason ?? '알 수 없음'})`);
+      if (!r.ok || !r.roomId) {
+        this.lastErrorCode = r.reason ?? '';
+        throw new Error(JOIN_ERRORS[r.reason ?? ''] ?? `입장 불가 (${r.reason ?? '알 수 없음'})`);
+      }
       return r.roomId;
     });
   }
@@ -248,11 +274,55 @@ export class NetSession {
     return ok;
   }
 
-  /** 직접 나가기: 서버에 먼저 알려 상대 화면에서 바로 사라지게 (SDK leaveRoom만 쓰면 30초 유예) */
+  /**
+   * 자동 재접속 (예상치 못한 끊김 뒤): 1·2·3·5·8·10초 간격으로 최대 6번 같은 룸에 다시 입장.
+   * 성공하면 onReconnected (서버가 자리·팀·기록을 되살림), 같은 결과가 나올 거절(방 없음·직접 나감 등)이면 중단 → 수동 "다시 입장"
+   */
+  private async autoReconnect(): Promise<void> {
+    const token = ++this.reconnectToken;
+    this.reconnecting = true;
+    this.reconnectAttempt = 0;
+    this.events.onRoomInfo();
+    for (const delay of RECONNECT_DELAYS_MS) {
+      await new Promise((r) => setTimeout(r, delay));
+      // 사용자가 취소했거나 다른 방에 들어감
+      if (token !== this.reconnectToken || this.phase !== 'lobby') return;
+      this.reconnectAttempt++;
+      this.events.onRoomInfo();
+      const ok = await this.rejoin(this.characterId);
+      if (token !== this.reconnectToken) return;
+      if (ok) {
+        this.reconnecting = false;
+        this.onReconnected?.();
+        this.events.onRoomInfo();
+        return;
+      }
+      if (NO_RETRY.has(this.lastErrorCode)) break;
+    }
+    if (token !== this.reconnectToken) return;
+    this.reconnecting = false;
+    this.lastError = `자동 재접속 실패 — ${this.lastError || '서버 응답 없음'}`;
+    this.logEvent('Reconnection Gave Up', { attempts: this.reconnectAttempt, reason: this.lastErrorCode || this.lastError });
+    this.events.onRoomInfo();
+  }
+
+  /** 자동 재접속 취소 (사용자가 직접 다른 동작을 고름) */
+  cancelReconnect(): void {
+    if (!this.reconnecting) return;
+    this.reconnectToken++;
+    this.reconnecting = false;
+    this.events.onRoomInfo();
+  }
+
+  /**
+   * Leave Room: 서버에 먼저 알려 상대 화면에서 바로 사라지게 (SDK leaveRoom만 쓰면 30초 유예).
+   * quit → 진행 중인 이 매치에는 다시 못 들어옴 (새로고침·끊김과 구분)
+   */
   async leave(reason = '사용자가 나감'): Promise<void> {
+    this.cancelReconnect();
     if (this.phase === 'lobby') return;
     if (this.inRoom) {
-      await Promise.race([this.client.call('bye').catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
+      await Promise.race([this.client.call('bye', [{ quit: true }]).catch(() => undefined), new Promise((r) => setTimeout(r, 1500))]);
     }
     this.client.leaveRoom();
     this.handleLeft(reason, true);
@@ -263,6 +333,7 @@ export class NetSession {
     this.characterId = characterId;
     this.phase = 'joining';
     this.lastError = '';
+    this.lastErrorCode = '';
     this.events.onRoomInfo();
     try {
       if (!(await this.client.connect())) throw new Error(this.client.statusReason || '연결 실패');
@@ -273,11 +344,12 @@ export class NetSession {
       const hello = await this.client.call<NetRoomState & { slot: number; now: number; reason?: string }>('hello', [characterId]);
       this.serverClockOffset = hello.now - (t0 + Date.now()) / 2;
       if (hello.slot < 0) {
-        const why = hello.reason === 'in_progress' ? 'in_progress' : 'full';
-        this.client.addLog('warn', why === 'full' ? `정원 ${NET_MAX_PLAYERS}명 초과 → 나감` : '매치 진행 중 → 나감');
+        const why = hello.reason && JOIN_ERRORS[hello.reason] ? hello.reason : 'full';
+        this.client.addLog('warn', `입장 거절 (${why}) → 나감${why === 'full' ? ` (정원 ${NET_MAX_PLAYERS}명)` : ''}`);
         this.client.leaveRoom();
+        this.lastErrorCode = why;
         this.lastError = JOIN_ERRORS[why]!;
-        this.handleLeft(why === 'full' ? '정원 초과' : '매치 진행 중');
+        this.handleLeft(this.lastError);
         return false;
       }
       this.slot = hello.slot;
@@ -345,19 +417,19 @@ export class NetSession {
     c.onRoomMessage<{ account: string; slot: number }>('joined', (m) => {
       this.logEvent('Player Joined', { account: m.account, slot: m.slot });
       this.departed.delete(m.account);
-      if (m.account !== this.me) this.onNotice?.(`P${m.slot + 1} ${shortName(m.account)} 입장`);
+      if (m.account !== this.me) this.onNotice?.(`${this.displayName(m.account)} 입장`);
     });
-    c.onRoomMessage<{ account: string }>('left', (m) => {
-      this.logEvent('Player Left', { account: m.account, inMatch: this.inMatch });
+    c.onRoomMessage<{ account: string; quit?: boolean }>('left', (m) => {
+      this.logEvent('Player Left', { account: m.account, inMatch: this.inMatch, quit: m.quit === true });
       this.departed.add(m.account);
-      if (m.account !== this.me) this.onNotice?.(`${shortName(m.account)} 나감${this.inMatch ? ' — 기록은 결과에 남아요' : ''}`);
+      if (m.account !== this.me) this.onNotice?.(`${this.displayName(m.account)} 나감${this.inMatch ? (m.quit ? ' — 기록은 결과에 남아요' : ' — 다시 돌아올 수 있어요') : ''}`);
       this.dropRemote(m.account);
     });
     c.onRoomMessage<{ account: string }>('dc', (m) => {
       if (m.account === this.me || this.departed.has(m.account)) return;
       this.logEvent('Connection Lost', { account: m.account, grace: '30s' });
       this.lost.add(m.account);
-      this.onNotice?.(`${shortName(m.account)} 연결 끊김 — 30초 안에 돌아오지 않으면 퇴장`);
+      this.onNotice?.(`${this.displayName(m.account)} 연결 끊김 — 재접속 대기 중`);
       this.events.onRemoteDisconnect(m.account);
       this.events.onRoomInfo();
     });
@@ -400,6 +472,7 @@ export class NetSession {
 
   private handleLeft(reason: string, byUser = false): void {
     if (this.phase === 'lobby') return;
+    const wasInRoom = this.phase === 'in-room';
     // 연결이 끊겨 나온 경우에도 룸 구독을 정리 (안 하면 다시 들어갈 때 구독이 겹쳐 탄 연출·명중 이벤트가 두 번 처리됨)
     this.client.dropRoom();
     if (byUser) writeLastRoom(null);
@@ -419,6 +492,8 @@ export class NetSession {
     this.client.addLog(byUser ? 'info' : 'warn', `룸에서 나옴: ${reason}`);
     this.events.onLeftRoom(reason, byUser);
     this.events.onRoomInfo();
+    // 룸 안에 있다가 예상치 못하게 끊김 → 자동 재접속 (입장 실패·직접 나감은 제외)
+    if (!byUser && wasInRoom && this.lastRoomId) void this.autoReconnect();
   }
 
   // ---------------- 전송 ----------------

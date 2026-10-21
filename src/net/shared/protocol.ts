@@ -219,6 +219,10 @@ export interface NetStanding {
   k: number;
   d: number;
   left?: boolean;
+  /** Leave Room으로 직접 나감 → 이 매치에는 다시 못 들어옴 (끊김·새로고침은 false) */
+  quit?: boolean;
+  /** 나갈 때 체력 (복귀하면 그대로, 0 = 쓰러진 채 나감 → 가득 찬 체력으로 부활) */
+  hp?: number;
 }
 
 /** 서버가 확정한 매치 결과 (모든 클라이언트에 같은 값) */
