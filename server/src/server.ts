@@ -1,49 +1,65 @@
 /**
- * POP! BATTLE — Verse8 Agent8 GameServer: 최대 4인 실시간 테스트 룸 (기술 검증용 최소 구현)
+ * POP! BATTLE — Verse8 Agent8 GameServer: 멀티플레이 룸 (최대 4인) + 게임 모드 (TDM 2v2 / FFA 4인 / 자유 테스트)
  *
  * 역할 분담
  *  - 이동: 클라이언트가 50ms마다 상태 패킷('st', throttle 호출)을 보냄 → 룸 사용자 상태(s)에 저장 → SDK가 다른 클라이언트에 푸시.
  *  - 사격 연출: 같은 패킷에 실린 탄(s) → 'fx' 브로드캐스트.
- *  - 피해: 클라이언트는 "맞혔다"는 주장(h)만 보냄. 피해량·체력·사망·킬/데스·리스폰은 서버가 계산·소유 (룸 상태 players).
- *    서버는 물리 월드(맵 콜라이더)가 없어 시야(벽 관통)는 검사하지 못함 → 거리·사거리·연사 속도·생존·보호만 검증.
+ *  - 피해: 클라이언트는 "맞혔다"는 주장(h)만 보냄. 피해량·체력·사망·킬/데스·팀 점수·리스폰·승패는 서버가 계산·소유 (룸 상태).
+ *    서버는 물리 월드(맵 콜라이더)가 없어 시야(벽 관통)는 검사하지 못함 → 거리·사거리·연사 속도·생존·보호·아군만 검증.
+ *  - 매치 단계: lobby → countdown(3초) → playing → result → lobby. 시각은 서버 Date.now 기준(startAt·endAt),
+ *    단계 전환과 제한 시간 종료는 $roomTick(200ms)이, 목표 킬 달성 종료는 피해 처리 안에서 확정.
  *
  * 런타임 제약 (공식 문서): 요청마다 새 인스턴스, 타이머 없음, 모든 메서드가 공개 엔드포인트.
  * 읽기-수정-쓰기는 $lock(`room:<id>`)으로 직렬화.
  */
 import {
+  isNetMode,
   NET_CHARACTER_HP,
   NET_DEFAULT_HP,
   NET_MAX_PLAYERS,
-  NET_MIN_PLAYERS,
+  NET_MODE_RULES,
   NET_ROOM_PREFIX,
+  NET_TEAM_SIZE,
   NET_TIMING,
   NET_VALIDATION,
   NET_WEAPONS,
   netDamage,
   type NetHitClaim,
   type NetHitResult,
+  type NetMatchPhase,
+  type NetMatchResult,
+  type NetMode,
   type NetPlayerRecord,
   type NetPlayers,
   type NetRejected,
+  type NetRoomState,
   type NetShot,
+  type NetStanding,
+  type NetTeam,
 } from '../../src/net/shared/protocol';
 
 const NO_ROOM = '__no_room__';
 const ROOM_CODE = /^pb-[a-z0-9]{4,12}$/;
-/** 글로벌 상태의 룸 요약 키 (룸 밖 매칭 함수가 참가 인원·진행 상태를 읽음) */
+/** 글로벌 상태의 룸 요약 키 (룸 밖 매칭 함수가 참가 인원·모드·진행 상태를 읽음) */
 const MIRROR = (roomId: string) => `room_${roomId}`;
 /** 요약이 이보다 오래되면 정리 (onRoomDestroy가 best-effort라 남을 수 있음) */
 const MIRROR_TTL_MS = 6 * 60 * 60 * 1000;
-
-type RoomPhase = 'lobby' | 'playing';
+const TEAMS: NetTeam[] = ['BLUE', 'RED'];
 
 interface RoomMirror {
   n: number;
-  phase: RoomPhase;
+  phase: NetMatchPhase;
+  mode: NetMode;
   t: number;
 }
 
 /** 'ABC123' 또는 'pb-abc123' → 'pb-abc123' */
+/** 호출한 클라이언트의 룸 (룸 밖이면 null — SDK는 룸 밖에서 '__no_room__'을 줌) */
+function roomOf(): string | null {
+  const r = $sender.roomId;
+  return r && r !== NO_ROOM ? r : null;
+}
+
 function normalizeCode(code: unknown): string {
   const c = typeof code === 'string' ? code.trim().toLowerCase() : '';
   if (ROOM_CODE.test(c)) return c;
@@ -57,16 +73,101 @@ function pickHost(players: NetPlayers): string | null {
   return best;
 }
 
-/** 룸 상태(참가자·방장·진행) 저장 + 글로벌 요약 갱신. 룸 락 안에서 호출 */
-async function saveRoom(roomId: string, players: NetPlayers, host: string | null, phase: RoomPhase, extra: Record<string, unknown> = {}): Promise<void> {
-  await $room.updateRoomState({ players, host, phase, ...extra }, { returnState: false });
-  const m: RoomMirror = { n: Object.keys(players).length, phase, t: Date.now() };
-  await $global.updateGlobalState({ [MIRROR(roomId)]: m }, { returnState: false });
+function teamCount(players: NetPlayers, team: NetTeam): number {
+  return Object.values(players).filter((p) => p.team === team).length;
 }
 
-async function readRoom(): Promise<{ players: NetPlayers; host: string | null; phase: RoomPhase; startedAt: number }> {
-  const st = (await $room.getRoomState(['players', 'host', 'phase', 'startedAt'])) || {};
-  return { players: st.players || {}, host: st.host ?? null, phase: st.phase === 'playing' ? 'playing' : 'lobby', startedAt: st.startedAt || 0 };
+/** TDM 새 참가자 팀: 인원이 적은 팀 (같으면 BLUE). 꽉 차면 null */
+function pickTeam(players: NetPlayers): NetTeam | null {
+  const b = teamCount(players, 'BLUE');
+  const r = teamCount(players, 'RED');
+  if (b >= NET_TEAM_SIZE && r >= NET_TEAM_SIZE) return null;
+  return b <= r ? 'BLUE' : 'RED';
+}
+
+/** 모드에 맞게 팀 다시 배정 (TDM: 기존 팀 유지하되 팀당 2명을 넘으면 옮김, 그 외: 팀 없음) */
+function assignTeams(players: NetPlayers, mode: NetMode): void {
+  const list = Object.values(players).sort((a, b) => a.slot - b.slot);
+  if (!NET_MODE_RULES[mode].teams) {
+    for (const p of list) p.team = null;
+    return;
+  }
+  const counts: Record<NetTeam, number> = { BLUE: 0, RED: 0 };
+  for (const p of list) {
+    if (p.team && counts[p.team] < NET_TEAM_SIZE) counts[p.team]++;
+    else p.team = null;
+  }
+  for (const p of list) {
+    if (p.team) continue;
+    const t: NetTeam = counts.BLUE <= counts.RED ? 'BLUE' : 'RED';
+    p.team = t;
+    counts[t]++;
+  }
+}
+
+function emptyRoom(): NetRoomState {
+  return { players: {}, host: null, mode: 'test', phase: 'lobby', startAt: 0, endAt: 0, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} };
+}
+
+async function readRoom(): Promise<NetRoomState> {
+  const st = ((await $room.getRoomState(['players', 'host', 'mode', 'phase', 'startAt', 'endAt', 'teamScore', 'result', 'gone'])) || {}) as Partial<NetRoomState>;
+  const r = emptyRoom();
+  return {
+    players: st.players || r.players,
+    host: st.host ?? null,
+    mode: isNetMode(st.mode) ? st.mode : r.mode,
+    phase: st.phase === 'countdown' || st.phase === 'playing' || st.phase === 'result' ? st.phase : 'lobby',
+    startAt: st.startAt || 0,
+    endAt: st.endAt || 0,
+    teamScore: st.teamScore || r.teamScore,
+    result: st.result ?? null,
+    gone: st.gone || {},
+  };
+}
+
+/** 룸 상태 전체 저장 + 글로벌 요약 갱신. 룸 락 안에서 호출 */
+async function saveRoom(roomId: string, r: NetRoomState): Promise<void> {
+  await $room.updateRoomState({ ...r }, { returnState: false });
+  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, t: Date.now() };
+  await $global.updateGlobalState({ [MIRROR(roomId)]: m });
+}
+
+/** 피해가 들어가는 시간인지 (카운트다운 끝 ~ 제한 시간 전). 틱이 늦어도 시각으로 판단 */
+function isLive(r: NetRoomState, now: number): boolean {
+  if (r.phase !== 'countdown' && r.phase !== 'playing') return false;
+  if (now < r.startAt) return false;
+  return !(r.endAt > 0 && now >= r.endAt);
+}
+
+function standingOf(acc: string, p: NetPlayerRecord): NetStanding {
+  return { account: acc, slot: p.slot, char: p.char, team: p.team ?? null, k: p.k, d: p.d };
+}
+
+/** 매치 종료 확정 (한 번만): 순위·승자·무승부 → 결과 단계 */
+function finishMatch(r: NetRoomState, reason: 'score' | 'time', now: number): void {
+  if (r.phase !== 'countdown' && r.phase !== 'playing') return;
+  const standings = [...Object.entries(r.players).map(([a, p]) => standingOf(a, p)), ...Object.values(r.gone)].sort(
+    (a, b) => b.k - a.k || a.d - b.d || a.slot - b.slot,
+  );
+  let winners: string[] = [];
+  let winnerTeam: NetTeam | null = null;
+  let draw = false;
+  if (r.mode === 'tdm') {
+    const { BLUE, RED } = r.teamScore;
+    draw = BLUE === RED;
+    winnerTeam = draw ? null : BLUE > RED ? 'BLUE' : 'RED';
+    winners = winnerTeam ? standings.filter((s) => s.team === winnerTeam).map((s) => s.account) : [];
+  } else {
+    const top = standings[0]?.k ?? 0;
+    const tops = standings.filter((s) => s.k === top);
+    draw = tops.length > 1;
+    winners = tops.map((s) => s.account);
+  }
+  const result: NetMatchResult = { mode: r.mode, reason, teamScore: { ...r.teamScore }, winners, winnerTeam, draw, standings, endedAt: now };
+  r.result = result;
+  r.phase = 'result';
+  // 결과 화면: 모두 살아 있는 상태로 (쓰러진 채 대기하지 않게), 기록은 그대로
+  for (const p of Object.values(r.players)) Object.assign(p, { dead: false, hp: p.max, respawnAt: 0 });
 }
 
 function finite(n: unknown, lim = 1e4): n is number {
@@ -149,10 +250,17 @@ function sanitizeHits(list: unknown): NetHitClaim[] {
   return out;
 }
 
+type HelloResult = {
+  slot: number;
+  /** slot -1일 때 이유 ('full' | 'in_progress') */
+  reason?: string;
+  now: number;
+} & NetRoomState;
+
 export class Server {
   // ---------------- 매칭 (룸 밖에서 호출) ----------------
 
-  /** 새 테스트 룸 id. 실제 생성은 첫 플레이어가 joinRoom 할 때 (SDK 규칙). 오래된 룸 요약도 정리 */
+  /** 새 룸 id. 실제 생성은 첫 플레이어가 joinRoom 할 때 (SDK 규칙). 오래된 룸 요약도 정리 */
   async createRoom(): Promise<{ ok: true; roomId: string }> {
     const now = Date.now();
     const all = (await $global.getGlobalState()) || {};
@@ -164,31 +272,33 @@ export class Server {
   /**
    * 코드로 입장 전 확인: 있는 룸이고 자리가 남았는지 (글로벌 요약 = 실제 참가자 기록 수).
    * 나가기(bye) 직후에도 SDK는 30초 동안 그 사람을 룸 사용자로 세므로 사용자 수 대신 참가자 기록을 본다.
-   * 최종 정원 판정은 onRoomJoin(자리 배정)
+   * TDM·FFA 매치 진행 중에는 새로 들어올 수 없음 (중도 입장 정책 미정). 최종 판정은 hello(자리 배정)
    */
-  async findRoom(code: string): Promise<{ ok: boolean; roomId?: string; reason?: string; count?: number; phase?: RoomPhase }> {
+  async findRoom(code: string): Promise<{ ok: boolean; roomId?: string; reason?: string; count?: number; phase?: NetMatchPhase; mode?: NetMode }> {
     const id = normalizeCode(code);
     if (!id) return { ok: false, reason: 'bad_code' };
     const m = ((await $global.getGlobalState([MIRROR(id)])) || {})[MIRROR(id)] as RoomMirror | undefined;
     const users = await $global.countRoomUsers(id);
     if (!m || users <= 0 || m.n <= 0) return { ok: false, reason: 'not_found', count: 0 };
-    if (m.n >= NET_MAX_PLAYERS) return { ok: false, reason: 'full', count: m.n };
-    return { ok: true, roomId: id, count: m.n, phase: m.phase };
+    if (m.n >= NET_MAX_PLAYERS) return { ok: false, reason: 'full', count: m.n, mode: m.mode };
+    if (m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing')) return { ok: false, reason: 'in_progress', count: m.n, mode: m.mode };
+    return { ok: true, roomId: id, count: m.n, phase: m.phase, mode: m.mode };
   }
 
-  /** 빠른 매칭: 자리가 남은 테스트 룸이 있으면 그 룸, 없으면 새 룸 */
+  /** 빠른 매칭: 자리가 남은 대기실(또는 자유 테스트) 룸이 있으면 그 룸, 없으면 새 룸 */
   async quickMatch(): Promise<{ ok: true; roomId: string; waiting: boolean }> {
     const all = (await $global.getGlobalState()) || {};
     for (const [k, v] of Object.entries(all)) {
       const m = v as RoomMirror;
       if (!k.startsWith('room_') || !m || m.n <= 0 || m.n >= NET_MAX_PLAYERS || Date.now() - m.t > MIRROR_TTL_MS) continue;
+      if (m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing')) continue;
       const id = k.slice('room_'.length);
       if ((await $global.countRoomUsers(id)) > 0) return { ok: true, roomId: id, waiting: true };
     }
     return { ok: true, roomId: newRoomId(), waiting: false };
   }
 
-  /** RTT 측정 (룸 안팎 모두) */
+  /** RTT 측정·서버 시각 (룸 안팎 모두) */
   async ping(t: number): Promise<{ t: number; s: number }> {
     return { t: finite(t, 1e13) ? t : 0, s: Date.now() };
   }
@@ -199,14 +309,12 @@ export class Server {
     const slot = await $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       if (r.players[account]) return r.players[account]!.slot;
-      const s = freeSlot(r.players);
-      // 정원 초과: onRoomJoin에서 거절하면 SDK가 재시도만 반복함(문서) → 자리 없이 관전자로 두고 클라이언트가 스스로 나감
+      const s = this.admit(r, account);
       if (s < 0) return -1;
-      r.players[account] = newRecord(s, Date.now());
-      await saveRoom(roomId, r.players, r.host && r.players[r.host] ? r.host : pickHost(r.players), r.phase);
+      await saveRoom(roomId, r);
       return s;
     });
-    $room.broadcastToRoom('joined', { account, slot });
+    if (slot >= 0) $room.broadcastToRoom('joined', { account, slot });
   }
 
   async onRoomDisconnect(roomId: string, account: string): Promise<void> {
@@ -222,84 +330,181 @@ export class Server {
     await $global.clearGlobalState([MIRROR(roomId)]);
   }
 
-  /** 참가자 기록 제거 (방장이면 남은 사람에게 넘김, 아무도 없으면 대기 상태로). @returns 제거했으면 true */
+  /**
+   * 매치 단계 진행 (활성 룸마다 200ms, 공식 문서): 카운트다운 끝 → playing, 제한 시간 끝 → 결과.
+   * 대부분의 틱은 단계·시각만 읽고 끝남 (락·쓰기 없음)
+   */
+  async $roomTick(_delta: number, roomId: string): Promise<void> {
+    const st = ((await $room.getRoomState(['phase', 'startAt', 'endAt'])) || {}) as Partial<NetRoomState>;
+    if (st.phase !== 'countdown' && st.phase !== 'playing') return;
+    const now = Date.now();
+    const toPlaying = st.phase === 'countdown' && now >= (st.startAt ?? 0);
+    const timeUp = (st.endAt ?? 0) > 0 && now >= st.endAt!;
+    if (!toPlaying && !timeUp) return;
+    await $lock(`room:${roomId}`, async () => {
+      const r = await readRoom();
+      const t = Date.now();
+      if (r.endAt > 0 && t >= r.endAt) finishMatch(r, 'time', t);
+      else if (r.phase === 'countdown' && t >= r.startAt) r.phase = 'playing';
+      else return;
+      await saveRoom(roomId, r);
+    });
+  }
+
+  /** 참가자 기록 제거 (매치 중이면 기록을 결과용으로 보존, 방장이면 남은 사람에게 넘김). @returns 제거했으면 true */
   private async removePlayer(roomId: string, account: string): Promise<boolean> {
     return $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
-      if (!r.players[account]) return false;
+      const p = r.players[account];
+      if (!p) return false;
+      if (r.phase === 'countdown' || r.phase === 'playing') r.gone[account] = { ...standingOf(account, p), left: true };
       delete r.players[account];
-      const host = r.host === account || !r.host ? pickHost(r.players) : r.host;
-      await saveRoom(roomId, r.players, host, Object.keys(r.players).length === 0 ? 'lobby' : r.phase);
+      if (r.host === account || !r.host || !r.players[r.host]) r.host = pickHost(r.players);
+      if (Object.keys(r.players).length === 0) Object.assign(r, { phase: 'lobby', result: null, gone: {}, startAt: 0, endAt: 0 });
+      await saveRoom(roomId, r);
       return true;
     });
   }
 
+  /** 새 참가자 자리·팀 배정 (락 안). @returns 자리, 못 들어오면 -1 */
+  private admit(r: NetRoomState, account: string): number {
+    // TDM·FFA 매치 중 새 참가자는 받지 않음 (자유 테스트는 중간 입장 허용)
+    if (r.mode !== 'test' && (r.phase === 'countdown' || r.phase === 'playing')) return -1;
+    const slot = freeSlot(r.players);
+    // 정원 초과: onRoomJoin에서 거절하면 SDK가 재시도만 반복함(문서) → 자리 없이 두고 클라이언트가 스스로 나감
+    if (slot < 0) return -1;
+    const rec = newRecord(slot, Date.now());
+    rec.team = NET_MODE_RULES[r.mode].teams ? pickTeam(r.players) : null;
+    r.players[account] = rec;
+    if (!r.host || !r.players[r.host]) r.host = pickHost(r.players);
+    return slot;
+  }
+
   // ---------------- 룸 안 ----------------
 
-  /** 입장 직후: 캐릭터(최대 체력) 등록. @returns 자리(-1 = 정원 초과 관전자), 서버 시각, 현재 참가자·방장·진행 상태 */
-  async hello(char: string): Promise<{ slot: number; now: number; players: NetPlayers; host: string | null; phase: RoomPhase; startedAt: number }> {
+  /** 입장 직후: 캐릭터(최대 체력) 등록. @returns 자리(-1 = 못 들어옴, reason), 서버 시각, 룸 전체 상태 */
+  async hello(char: string): Promise<HelloResult> {
     const me = $sender.account;
-    if ($sender.roomId === NO_ROOM) throw new Error('not in room');
-    const roomId = $sender.roomId;
+    if (!roomOf()) throw new Error('not in room');
+    const roomId = roomOf()!;
     return $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
-      const players = r.players;
-      let p = players[me];
-      let host = r.host;
-      const out = (slot: number) => ({ slot, now: Date.now(), players, host, phase: r.phase, startedAt: r.startedAt });
+      let p = r.players[me];
       if (!p) {
-        // 나가기(bye) 뒤 30초 유예 안에 다시 들어오면 SDK가 onRoomJoin을 다시 부르지 않음(세션 이어짐) → 여기서 빈자리 배정
-        const slot = freeSlot(players);
-        if (slot < 0) return out(-1);
-        p = players[me] = newRecord(slot, Date.now());
-        host = host && players[host] ? host : pickHost(players);
-        await saveRoom(roomId, players, host, r.phase);
+        // 나가기(bye) 뒤 30초 유예 안에 다시 들어오면 SDK가 onRoomJoin을 다시 부르지 않음(세션 이어짐) → 여기서 자리 배정
+        const inProgress = r.mode !== 'test' && (r.phase === 'countdown' || r.phase === 'playing');
+        const slot = this.admit(r, me);
+        if (slot < 0) return { ...r, slot: -1, reason: inProgress ? 'in_progress' : 'full', now: Date.now() };
+        p = r.players[me]!;
+        await saveRoom(roomId, r);
         $room.broadcastToRoom('joined', { account: me, slot });
       }
-      if (typeof char === 'string' && char in NET_CHARACTER_HP) {
+      if (typeof char === 'string' && char in NET_CHARACTER_HP && (char !== p.char || p.max !== NET_CHARACTER_HP[char])) {
         const max = NET_CHARACTER_HP[char]!;
         // 다친 상태로 캐릭터만 바꿔 회복하는 것 방지: 가득 찬 상태일 때만 새 최대치로 채움
         const full = !p.dead && p.hp >= p.max;
         p.char = char;
         p.max = max;
         p.hp = full ? max : Math.min(p.hp, max);
-        await $room.updateRoomState({ players }, { returnState: false });
+        await $room.updateRoomState({ players: r.players }, { returnState: false });
       }
-      return out(p.slot);
+      return { ...r, slot: p.slot, now: Date.now() };
     });
   }
 
-  /** 방장이 테스트 시작: 2명 이상일 때만. 체력·기록 초기화 후 진행 상태 공유 (모든 클라이언트가 룸 상태로 동시에 시작) */
-  async startTest(): Promise<{ ok: boolean; reason?: string }> {
-    if ($sender.roomId === NO_ROOM) return { ok: false, reason: 'not_in_room' };
+  /** 방장: 게임 모드 변경 (대기실·결과 화면에서만, 매치 중 변경 불가). 팀은 모드에 맞게 다시 배정 */
+  async setMode(mode: string): Promise<{ ok: boolean; reason?: string }> {
+    if (!roomOf()) return { ok: false, reason: 'not_in_room' };
+    if (!isNetMode(mode)) return { ok: false, reason: 'bad_mode' };
     const me = $sender.account;
-    const roomId = $sender.roomId;
+    const roomId = roomOf()!;
     return $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       if (r.host !== me) return { ok: false, reason: 'not_host' };
-      if (Object.keys(r.players).length < NET_MIN_PLAYERS) return { ok: false, reason: 'need_2_players' };
+      if (r.phase === 'countdown' || r.phase === 'playing') return { ok: false, reason: 'in_progress' };
+      r.mode = mode;
+      assignTeams(r.players, mode);
+      await saveRoom(roomId, r);
+      return { ok: true };
+    });
+  }
+
+  /** TDM 대기실: 자기 팀 바꾸기 (상대 팀에 자리가 있을 때만) */
+  async switchTeam(): Promise<{ ok: boolean; reason?: string }> {
+    if (!roomOf()) return { ok: false, reason: 'not_in_room' };
+    const me = $sender.account;
+    const roomId = roomOf()!;
+    return $lock(`room:${roomId}`, async () => {
+      const r = await readRoom();
+      const p = r.players[me];
+      if (!p || r.mode !== 'tdm') return { ok: false, reason: 'not_tdm' };
+      if (r.phase === 'countdown' || r.phase === 'playing') return { ok: false, reason: 'in_progress' };
+      const to = TEAMS.find((t) => t !== p.team)!;
+      if (teamCount(r.players, to) >= NET_TEAM_SIZE) return { ok: false, reason: 'team_full' };
+      p.team = to;
+      await saveRoom(roomId, r);
+      return { ok: true };
+    });
+  }
+
+  /**
+   * 방장: 매치 시작. TDM = 4명·팀 2/2, FFA = 4명, 자유 테스트 = 2명 이상.
+   * 기록·체력 초기화 → 3초 카운트다운(startAt)·제한 시간(endAt)을 서버 시각으로 공유 → 모든 클라이언트가 같은 시점에 시작
+   */
+  async startMatch(): Promise<{ ok: boolean; reason?: string }> {
+    if (!roomOf()) return { ok: false, reason: 'not_in_room' };
+    const me = $sender.account;
+    const roomId = roomOf()!;
+    return $lock(`room:${roomId}`, async () => {
+      const r = await readRoom();
+      if (r.host !== me) return { ok: false, reason: 'not_host' };
+      if (r.phase === 'countdown' || r.phase === 'playing') return { ok: false, reason: 'in_progress' };
+      const rule = NET_MODE_RULES[r.mode];
+      const n = Object.keys(r.players).length;
+      if (n < rule.requiredPlayers) return { ok: false, reason: `need_${rule.requiredPlayers}_players` };
+      if (rule.teams && (teamCount(r.players, 'BLUE') !== NET_TEAM_SIZE || teamCount(r.players, 'RED') !== NET_TEAM_SIZE)) return { ok: false, reason: 'teams_unbalanced' };
       const now = Date.now();
+      const startAt = now + NET_TIMING.countdownMs;
       for (const p of Object.values(r.players)) {
-        Object.assign(p, { hp: p.max, dead: false, respawnAt: 0, k: 0, d: 0, prot: now + NET_TIMING.startProtectionMs });
+        Object.assign(p, { hp: p.max, dead: false, respawnAt: 0, k: 0, d: 0, prot: startAt });
         delete p.rb;
       }
-      await saveRoom(roomId, r.players, r.host, 'playing', { startedAt: now });
+      Object.assign(r, { phase: 'countdown', startAt, endAt: rule.timeLimitMs > 0 ? startAt + rule.timeLimitMs : 0, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} });
+      await saveRoom(roomId, r);
+      return { ok: true };
+    });
+  }
+
+  /** 이전 이름 (2인 테스트 클라이언트 호환) */
+  async startTest(): Promise<{ ok: boolean; reason?: string }> {
+    return this.startMatch();
+  }
+
+  /** 결과 화면 → 대기실 (누구나, 결과 단계에서만) */
+  async toLobby(): Promise<{ ok: boolean }> {
+    if (!roomOf()) return { ok: false };
+    const roomId = roomOf()!;
+    return $lock(`room:${roomId}`, async () => {
+      const r = await readRoom();
+      if (r.phase !== 'result') return { ok: r.phase === 'lobby' };
+      Object.assign(r, { phase: 'lobby', gone: {} });
+      await saveRoom(roomId, r);
       return { ok: true };
     });
   }
 
   /** 직접 나가기: 기록을 바로 지우고 알림 (SDK leaveRoom은 끊김과 구분이 안 돼 30초 유예를 기다리므로 먼저 호출) */
   async bye(): Promise<{ ok: boolean }> {
-    if ($sender.roomId === NO_ROOM) return { ok: false };
+    if (!roomOf()) return { ok: false };
     const me = $sender.account;
-    const removed = await this.removePlayer($sender.roomId, me);
+    const removed = await this.removePlayer(roomOf()!, me);
     if (removed) $room.broadcastToRoom('left', { account: me });
     return { ok: removed };
   }
 
   /** 상태 패킷 (throttle, 응답 없음): 이동 저장 + 탄 연출 중계 + 명중 검증·피해 */
   async st(pkt: any): Promise<void> {
-    if ($sender.roomId === NO_ROOM) return;
+    if (!roomOf()) return;
     const state = sanitizeState(pkt);
     if (!state) return;
     const me = $sender.account;
@@ -307,41 +512,39 @@ export class Server {
     const shots = sanitizeShots(pkt.s);
     const hits = sanitizeHits(pkt.h);
     if (shots.length > 0) $room.broadcastToRoom('fx', { a: me, s: shots });
-    if (shots.length > 0 || hits.length > 0) await this.combat($sender.roomId, me, state.p as [number, number, number], shots, hits);
+    if (shots.length > 0 || hits.length > 0) await this.combat(roomOf()!, me, state.p as [number, number, number], shots, hits);
   }
 
-  /** 자멸·낙사 (공격자 없는 사망) */
+  /** 자멸·낙사 (공격자 없는 사망): 데스만 +1, 킬·팀 점수 변화 없음 (기존 싱글플레이 규칙과 같음). 매치 진행 중에만 */
   async selfDeath(cause: string): Promise<{ ok: boolean }> {
-    if ($sender.roomId === NO_ROOM) return { ok: false };
+    if (!roomOf()) return { ok: false };
     const me = $sender.account;
     const c = cause === 'fall' ? 'fall' : 'suicide';
-    const result = await $lock(`room:${$sender.roomId}`, async () => {
-      const state = (await $room.getRoomState(['players'])) || {};
-      const players: NetPlayers = state.players || {};
-      const p = players[me];
-      if (!p || p.dead) return null;
+    const result = await $lock(`room:${roomOf()!}`, async () => {
+      const r = await readRoom();
+      const p = r.players[me];
       const now = Date.now();
+      if (!p || p.dead || !isLive(r, now)) return null;
       p.dead = true;
       p.hp = 0;
       p.d++;
       // 낙사는 기존 게임처럼 바로 부활 가능
       p.respawnAt = now + (c === 'fall' ? 0 : NET_TIMING.respawnDelayMs);
-      await $room.updateRoomState({ players }, { returnState: false });
-      const r: NetHitResult = { a: null, v: me, w: null, dmg: 0, hp: 0, hd: false, kill: true, cause: c };
-      return r;
+      await $room.updateRoomState({ players: r.players }, { returnState: false });
+      const res: NetHitResult = { a: null, v: me, w: null, dmg: 0, hp: 0, hd: false, kill: true, cause: c };
+      return res;
     });
     if (result) $room.broadcastToRoom('hits', { r: [result] });
     return { ok: !!result };
   }
 
-  /** 리스폰 요청: 서버 시각으로 대기 시간이 지났을 때만 */
+  /** 리스폰 요청: 서버 시각으로 대기 시간이 지났을 때만. 보호 2초 */
   async respawn(): Promise<{ ok: boolean; hp?: number; wait?: number }> {
-    if ($sender.roomId === NO_ROOM) return { ok: false };
+    if (!roomOf()) return { ok: false };
     const me = $sender.account;
-    const res = await $lock(`room:${$sender.roomId}`, async () => {
-      const state = (await $room.getRoomState(['players'])) || {};
-      const players: NetPlayers = state.players || {};
-      const p = players[me];
+    const res = await $lock(`room:${roomOf()!}`, async () => {
+      const r = await readRoom();
+      const p = r.players[me];
       if (!p) return { ok: false };
       if (!p.dead) return { ok: true, hp: p.hp };
       const now = Date.now();
@@ -350,14 +553,14 @@ export class Server {
       p.dead = false;
       p.hp = p.max;
       p.prot = now + NET_TIMING.spawnProtectionMs;
-      await $room.updateRoomState({ players }, { returnState: false });
+      await $room.updateRoomState({ players: r.players }, { returnState: false });
       return { ok: true, hp: p.hp };
     });
     if (res.ok) $room.broadcastToRoom('spawn', { a: me, hp: res.hp });
     return res;
   }
 
-  /** 명중 검증 + 피해 (룸 락 안에서 체력 읽기-수정-쓰기) */
+  /** 명중 검증 + 피해 + 킬/데스·팀 점수 + 목표 달성 종료 (룸 락 안에서 읽기-수정-쓰기) */
   private async combat(roomId: string, me: string, myPos: [number, number, number], shots: NetShot[], hits: NetHitClaim[]): Promise<void> {
     const victims = [...new Set(hits.map((h) => h.v))].filter((v) => v !== me);
     const posOf = new Map<string, number[]>();
@@ -379,11 +582,12 @@ export class Server {
         hits.forEach((h) => reject(h, 'not_player'));
         return;
       }
-      // 대기실(시작 전)에서는 피해 없음
-      if (r.phase !== 'playing') {
-        hits.forEach((h) => reject(h, 'not_started'));
+      // 대기실·카운트다운·결과 화면에서는 피해 없음
+      if (!isLive(r, now)) {
+        hits.forEach((h) => reject(h, r.phase === 'result' || (r.endAt > 0 && now >= r.endAt) ? 'match_over' : 'not_started'));
         return;
       }
+      const rule = NET_MODE_RULES[r.mode];
       let changed = false;
       if (shots.length > 0 && att.prot > now) {
         // 공격하면 리스폰 보호 해제 (기존 게임 규칙)
@@ -394,11 +598,11 @@ export class Server {
       const rb = (att.rb ??= { tokens: NET_VALIDATION.burstShots, t: now });
       let allowedShots = 0;
       for (const s of shots) {
-        const rule = NET_WEAPONS[s.w]!;
-        const rate = (rule.rpm / 60) * NET_VALIDATION.rateSlack;
+        const wr = NET_WEAPONS[s.w]!;
+        const rate = (wr.rpm / 60) * NET_VALIDATION.rateSlack;
         rb.tokens = Math.min(NET_VALIDATION.burstShots, rb.tokens + ((now - rb.t) / 1000) * rate);
         rb.t = now;
-        const cost = 1 / rule.pellets;
+        const cost = 1 / wr.pellets;
         if (rb.tokens + 1e-6 >= cost) {
           rb.tokens -= cost;
           allowedShots++;
@@ -409,6 +613,10 @@ export class Server {
       const charShots = Math.min(allowedShots, shots.filter((s) => s.h === 1).length);
       let budget = charShots;
       for (const h of hits) {
+        if (r.phase === 'result') {
+          reject(h, 'match_over');
+          continue;
+        }
         if (att.dead) {
           reject(h, 'attacker_dead');
           continue;
@@ -422,12 +630,17 @@ export class Server {
           reject(h, 'bad_target');
           continue;
         }
+        // TDM: 아군 피해 없음
+        if (rule.teams && vic.team && vic.team === att.team) {
+          reject(h, 'friendly');
+          continue;
+        }
         if (vic.dead) {
           reject(h, 'victim_dead');
           continue;
         }
-        const rule = NET_WEAPONS[h.w]!;
-        if (h.d > rule.range + NET_VALIDATION.rangeSlack) {
+        const wr = NET_WEAPONS[h.w]!;
+        if (h.d > wr.range + NET_VALIDATION.rangeSlack) {
           reject(h, 'out_of_range');
           continue;
         }
@@ -437,7 +650,7 @@ export class Server {
           continue;
         }
         const serverDist = dist(myPos, vp);
-        if (Math.abs(serverDist - h.d) > NET_VALIDATION.distanceTolerance || serverDist > rule.range + NET_VALIDATION.rangeSlack + NET_VALIDATION.distanceTolerance) {
+        if (Math.abs(serverDist - h.d) > NET_VALIDATION.distanceTolerance || serverDist > wr.range + NET_VALIDATION.rangeSlack + NET_VALIDATION.distanceTolerance) {
           reject(h, 'distance_mismatch');
           continue;
         }
@@ -450,15 +663,24 @@ export class Server {
         vic.hp = Math.max(0, Math.round((vic.hp - dmg) * 100) / 100);
         const kill = vic.hp <= 0;
         if (kill) {
+          // 한 번의 사망에 한 번만 집계: dead 표시 → 같은 대상의 다음 명중은 victim_dead로 거부
           vic.dead = true;
           vic.respawnAt = now + NET_TIMING.respawnDelayMs;
           vic.d++;
           att.k++;
+          if (rule.teams && att.team) r.teamScore[att.team]++;
         }
         changed = true;
         results.push({ a: me, v: h.v, w: h.w, dmg, hp: vic.hp, hd: h.hd === 1, kill, cause: 'weapon' });
+        // 목표 달성 → 즉시 종료 (같은 패킷의 남은 명중은 match_over)
+        if (kill && rule.scoreToWin > 0) {
+          const score = rule.teams && att.team ? r.teamScore[att.team] : att.k;
+          if (score >= rule.scoreToWin) finishMatch(r, 'score', now);
+        }
       }
-      if (changed) await $room.updateRoomState({ players }, { returnState: false });
+      // 피해 처리는 자주 일어나므로 룸 상태만 쓰고, 종료(단계 변경) 때만 글로벌 요약까지
+      if (r.phase === 'result') await saveRoom(roomId, r);
+      else if (changed) await $room.updateRoomState({ players, teamScore: r.teamScore }, { returnState: false });
     });
     if (results.length > 0) $room.broadcastToRoom('hits', { r: results });
     if (rejected.length > 0) $room.sendMessageToUser('rej', me, { r: rejected });

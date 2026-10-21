@@ -4,8 +4,38 @@
 
 /** 룸 정원 (멀티플레이 테스트: 최대 4명) */
 export const NET_MAX_PLAYERS = 4;
-/** 테스트 시작에 필요한 최소 인원 */
+/** 자유 테스트 모드 시작에 필요한 최소 인원 */
 export const NET_MIN_PLAYERS = 2;
+/** TDM 팀당 최대 인원 */
+export const NET_TEAM_SIZE = 2;
+
+/** 게임 모드: 팀 데스매치(2v2) / 개인전(4인) / 자유 테스트(기존 1v1~4인 테스트, 시간·점수 제한 없음) */
+export type NetMode = 'tdm' | 'ffa' | 'test';
+/** 매치 단계 (서버 소유): 대기실 → 카운트다운 → 진행 → 결과 → 대기실 */
+export type NetMatchPhase = 'lobby' | 'countdown' | 'playing' | 'result';
+export type NetTeam = 'BLUE' | 'RED';
+
+export interface NetModeRule {
+  label: string;
+  short: string;
+  /** 시작에 필요한 인원 (이 인원 이상, TDM은 팀별 NET_TEAM_SIZE명씩) */
+  requiredPlayers: number;
+  /** 제한 시간 (ms, 0 = 없음) */
+  timeLimitMs: number;
+  /** 목표 킬 (TDM = 팀 킬, FFA = 개인 킬, 0 = 없음) */
+  scoreToWin: number;
+  teams: boolean;
+}
+
+export const NET_MODE_RULES: Record<NetMode, NetModeRule> = {
+  tdm: { label: 'Team Deathmatch', short: 'TDM 2v2', requiredPlayers: 4, timeLimitMs: 180_000, scoreToWin: 20, teams: true },
+  ffa: { label: 'Free For All', short: 'FFA 4인', requiredPlayers: 4, timeLimitMs: 180_000, scoreToWin: 15, teams: false },
+  test: { label: '자유 테스트', short: 'TEST', requiredPlayers: NET_MIN_PLAYERS, timeLimitMs: 0, scoreToWin: 0, teams: false },
+};
+
+export function isNetMode(m: unknown): m is NetMode {
+  return m === 'tdm' || m === 'ffa' || m === 'test';
+}
 /** 테스트 룸 id 접두사 (빠른 매칭이 다른 룸을 건드리지 않게) */
 export const NET_ROOM_PREFIX = 'pb-';
 
@@ -18,8 +48,8 @@ export const NET_TIMING = {
   respawnDelayMs: 2500,
   /** 리스폰 보호 (ms) = COMBAT.player.spawnProtection */
   spawnProtectionMs: 2000,
-  /** 테스트 시작 직후 보호 (ms): 시작 카운트다운(1초) 동안 피해 없음 */
-  startProtectionMs: 1500,
+  /** 매치 시작 카운트다운 (ms): 3 → 2 → 1 → GO */
+  countdownMs: 3000,
   /** RTT 측정 간격 (ms). 일반 호출은 함수 이름당 초당 10회 제한 */
   pingIntervalMs: 1000,
 } as const;
@@ -169,11 +199,54 @@ export interface NetPlayerRecord {
   prot: number;
   k: number;
   d: number;
+  /** TDM 팀 (FFA·테스트는 null) */
+  team?: NetTeam | null;
   /** 연사 검증 토큰 (서버 내부) */
   rb?: { tokens: number; t: number };
 }
 
 export type NetPlayers = Record<string, NetPlayerRecord>;
+
+/** 결과 화면 한 줄 (매치 중 나간 사람도 남김) */
+export interface NetStanding {
+  account: string;
+  slot: number;
+  char: string;
+  team: NetTeam | null;
+  k: number;
+  d: number;
+  left?: boolean;
+}
+
+/** 서버가 확정한 매치 결과 (모든 클라이언트에 같은 값) */
+export interface NetMatchResult {
+  mode: NetMode;
+  reason: 'score' | 'time';
+  teamScore: Record<NetTeam, number>;
+  /** 이긴 계정들 (TDM = 이긴 팀 전원, FFA = 공동 1위 포함) */
+  winners: string[];
+  winnerTeam: NetTeam | null;
+  draw: boolean;
+  /** 순위 (킬 많은 순 → 데스 적은 순) */
+  standings: NetStanding[];
+  endedAt: number;
+}
+
+/** 룸 공용 상태 (서버 소유, 모든 클라이언트에 푸시) */
+export interface NetRoomState {
+  players: NetPlayers;
+  host: string | null;
+  mode: NetMode;
+  phase: NetMatchPhase;
+  /** GO 시각 (서버 ms) */
+  startAt: number;
+  /** 제한 시간 끝 (서버 ms, 0 = 없음) */
+  endAt: number;
+  teamScore: Record<NetTeam, number>;
+  result: NetMatchResult | null;
+  /** 매치 중 나간 사람 기록 (결과에 포함) */
+  gone: Record<string, NetStanding>;
+}
 
 /** 서버 → 룸 'hits' 메시지의 1건 */
 export interface NetHitResult {

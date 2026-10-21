@@ -5,6 +5,12 @@ import { SnapshotBuffer } from './SnapshotBuffer';
 import {
   NET_MAX_PLAYERS,
   NET_TIMING,
+  type NetMatchPhase,
+  type NetMatchResult,
+  type NetMode,
+  type NetRoomState,
+  type NetStanding,
+  type NetTeam,
   type NetHitClaim,
   type NetHitResult,
   type NetPlayers,
@@ -14,8 +20,6 @@ import {
 } from './shared/protocol';
 
 export type RoomPhase = 'lobby' | 'joining' | 'in-room';
-/** 서버 룸의 테스트 진행 상태 (대기실 / 시작됨) */
-export type TestPhase = 'lobby' | 'playing';
 
 /** 룸 코드 표시용 ('pb-abc123' → 'ABC123') */
 export function displayCode(roomId: string | null): string {
@@ -26,6 +30,7 @@ const JOIN_ERRORS: Record<string, string> = {
   full: `방이 가득 찼어요 (${NET_MAX_PLAYERS}/${NET_MAX_PLAYERS})`,
   not_found: '방을 찾을 수 없어요 (코드 확인, 또는 방이 사라짐)',
   bad_code: '방 코드 형식이 올바르지 않아요 (영문·숫자 4~12자)',
+  in_progress: '매치가 진행 중이라 지금은 들어갈 수 없어요 (끝나고 다시 시도)',
 };
 
 export interface NetSessionEvents {
@@ -60,12 +65,17 @@ export class NetSession {
   players: NetPlayers = {};
   rejected = 0;
   lastRejectReason = '';
-  /** 마지막 hello 때 서버 시각 - 로컬 시각 (참고용) */
+  /** 서버 시각 - 로컬 Date.now (hello·ping 때 갱신, 카운트다운·남은 시간 계산용) */
   serverClockOffset = 0;
-  /** 서버 룸: 방장 계정·진행 상태·시작 시각 */
+  /** 서버 룸: 방장·게임 모드·매치 단계·GO 시각·종료 시각·팀 점수·결과·나간 사람 기록 */
   host: string | null = null;
-  testPhase: TestPhase = 'lobby';
-  startedAt = 0;
+  mode: NetMode = 'test';
+  matchPhase: NetMatchPhase = 'lobby';
+  startAt = 0;
+  endAt = 0;
+  teamScore: Record<NetTeam, number> = { BLUE: 0, RED: 0 };
+  result: NetMatchResult | null = null;
+  gone: Record<string, NetStanding> = {};
   /** 마지막 입장 실패·연결 오류 (UI 표시용, 서버가 준 원인 그대로) */
   lastError = '';
   /** 마지막으로 들어갔던 룸 (재입장용) */
@@ -89,6 +99,16 @@ export class NetSession {
     addEventListener('pagehide', () => {
       if (this.inRoom) this.client.fire('bye');
     });
+  }
+
+  /** 서버 시각 추정 (ms) */
+  serverNow(): number {
+    return Date.now() + this.serverClockOffset;
+  }
+
+  /** 매치가 돌아가는 중 (카운트다운·진행) */
+  get inMatch(): boolean {
+    return this.matchPhase === 'countdown' || this.matchPhase === 'playing';
   }
 
   get isHost(): boolean {
@@ -118,8 +138,37 @@ export class NetSession {
 
   // ---------------- 룸 흐름 ----------------
 
-  async createRoom(characterId: string): Promise<boolean> {
-    return this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('createRoom')).roomId);
+  /** 방 만들기 + 방장으로 모드 지정 (서버가 모드·팀을 확정해 룸 상태로 알려 줌) */
+  async createRoom(characterId: string, mode: NetMode = 'test'): Promise<boolean> {
+    const ok = await this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('createRoom')).roomId);
+    if (ok && this.mode !== mode) await this.setMode(mode);
+    return ok;
+  }
+
+  /** 방장: 모드 변경 (대기실·결과에서만) */
+  async setMode(mode: NetMode): Promise<{ ok: boolean; reason?: string }> {
+    return this.hostCall('setMode', [mode]);
+  }
+
+  /** TDM 대기실: 내 팀 바꾸기 */
+  async switchTeam(): Promise<{ ok: boolean; reason?: string }> {
+    return this.hostCall('switchTeam', []);
+  }
+
+  /** 결과 화면 → 모두 대기실로 */
+  async toLobby(): Promise<{ ok: boolean; reason?: string }> {
+    return this.hostCall('toLobby', []);
+  }
+
+  private async hostCall(name: string, args: unknown[]): Promise<{ ok: boolean; reason?: string }> {
+    try {
+      const r = await this.client.call<{ ok: boolean; reason?: string }>(name, args);
+      if (!r.ok) this.client.addLog('warn', `${name} 거부: ${r.reason}`);
+      return r;
+    } catch (e) {
+      this.client.addLog('error', `${name}: ${errText(e)}`);
+      return { ok: false, reason: errText(e) };
+    }
   }
 
   async joinByCode(characterId: string, code: string): Promise<boolean> {
@@ -134,16 +183,9 @@ export class NetSession {
     return this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('quickMatch')).roomId);
   }
 
-  /** 방장만: 테스트 시작 (서버가 2명 확인 후 진행 상태를 룸에 공유) */
-  async startTest(): Promise<{ ok: boolean; reason?: string }> {
-    try {
-      const r = await this.client.call<{ ok: boolean; reason?: string }>('startTest');
-      if (!r.ok) this.client.addLog('warn', `시작 거부: ${r.reason}`);
-      return r;
-    } catch (e) {
-      this.client.addLog('error', `startTest: ${errText(e)}`);
-      return { ok: false, reason: errText(e) };
-    }
+  /** 방장만: 매치 시작 (서버가 모드별 인원·팀 확인 후 카운트다운·종료 시각을 룸에 공유) */
+  async startMatch(): Promise<{ ok: boolean; reason?: string }> {
+    return this.hostCall('startMatch', []);
   }
 
   /** 직접 나가기: 서버에 먼저 알려 상대 화면에서 바로 사라지게 (SDK leaveRoom만 쓰면 30초 유예) */
@@ -167,13 +209,15 @@ export class NetSession {
       const roomId = await pickRoom();
       await this.client.joinRoom(roomId);
       this.subscribe();
-      const hello = await this.client.call<{ slot: number; now: number; players: NetPlayers; host: string | null; phase: TestPhase; startedAt: number }>('hello', [characterId]);
-      this.serverClockOffset = hello.now - Date.now();
+      const t0 = Date.now();
+      const hello = await this.client.call<NetRoomState & { slot: number; now: number; reason?: string }>('hello', [characterId]);
+      this.serverClockOffset = hello.now - (t0 + Date.now()) / 2;
       if (hello.slot < 0) {
-        this.client.addLog('warn', `정원 ${NET_MAX_PLAYERS}명 초과 → 관전자 자리라 나감`);
+        const why = hello.reason === 'in_progress' ? 'in_progress' : 'full';
+        this.client.addLog('warn', why === 'full' ? `정원 ${NET_MAX_PLAYERS}명 초과 → 나감` : '매치 진행 중 → 나감');
         this.client.leaveRoom();
-        this.lastError = JOIN_ERRORS.full!;
-        this.handleLeft('정원 초과');
+        this.lastError = JOIN_ERRORS[why]!;
+        this.handleLeft(why === 'full' ? '정원 초과' : '매치 진행 중');
         return false;
       }
       this.slot = hello.slot;
@@ -181,7 +225,7 @@ export class NetSession {
       this.lastRoomId = roomId;
       this.applyRoom(hello);
       this.applyPlayers(hello.players);
-      this.client.addLog('info', `자리 ${hello.slot} · 참가자 ${Object.keys(hello.players).length}명 · 방장 ${hello.host ?? '-'} · ${hello.phase}`);
+      this.client.addLog('info', `자리 ${hello.slot} · 참가자 ${Object.keys(hello.players).length}명 · 방장 ${hello.host ?? '-'} · ${hello.mode} · ${hello.phase}`);
       this.events.onRoomInfo();
       return true;
     } catch (e) {
@@ -246,10 +290,15 @@ export class NetSession {
     });
   }
 
-  private applyRoom(state: { host?: string | null; phase?: string; startedAt?: number }): void {
+  private applyRoom(state: Partial<NetRoomState>): void {
     if (state.host !== undefined) this.host = state.host;
-    if (state.phase) this.testPhase = state.phase === 'playing' ? 'playing' : 'lobby';
-    if (state.startedAt !== undefined) this.startedAt = state.startedAt;
+    if (state.mode) this.mode = state.mode;
+    if (state.phase) this.matchPhase = state.phase;
+    if (state.startAt !== undefined) this.startAt = state.startAt;
+    if (state.endAt !== undefined) this.endAt = state.endAt;
+    if (state.teamScore) this.teamScore = state.teamScore;
+    if (state.result !== undefined) this.result = state.result;
+    if (state.gone) this.gone = state.gone;
   }
 
   private applyPlayers(players: NetPlayers): void {
@@ -271,7 +320,8 @@ export class NetSession {
     this.phase = 'lobby';
     this.slot = -1;
     this.host = null;
-    this.testPhase = 'lobby';
+    this.matchPhase = 'lobby';
+    this.result = null;
     this.lost.clear();
     if (!byUser && !this.lastError) this.lastError = reason;
     for (const acc of [...this.remotes.keys()]) this.dropRemote(acc);
@@ -313,9 +363,14 @@ export class NetSession {
       this.pingTimer = 0;
       this.pingInFlight = true;
       const t0 = performance.now();
+      const d0 = Date.now();
       this.client
         .call<{ t: number; s: number }>('ping', [t0])
-        .then(() => this.client.counters.addRtt(performance.now() - t0))
+        .then((r) => {
+          this.client.counters.addRtt(performance.now() - t0);
+          // 서버 시각 추정 (왕복의 가운데). 시뮬 지연이 켜져 있으면 그만큼 흔들림
+          if (r && typeof r.s === 'number') this.serverClockOffset = r.s - (d0 + Date.now()) / 2;
+        })
         .catch((e) => this.client.addLog('error', `ping: ${errText(e)}`))
         .finally(() => (this.pingInFlight = false));
     }

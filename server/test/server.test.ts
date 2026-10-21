@@ -1,5 +1,6 @@
 /**
- * 2인 테스트 룸 서버 로직 (로컬 하네스: npx -y @agent8/gameserver-node test).
+ * 멀티플레이 룸·게임 모드 서버 로직 (로컬 하네스: npx -y @agent8/gameserver-node test).
+ * 매치는 3초 카운트다운 뒤부터 피해가 들어가므로 시작 뒤 spin(COUNTDOWN)으로 기다린다.
  * 하네스는 실제 네트워크 없이 같은 isolated-vm 런타임에서 훅·함수를 호출한다 → 지연·패킷·푸시 동작은 여기서 검증되지 않음.
  */
 
@@ -12,6 +13,8 @@ function spin(ms: number): void {
     /* wait */
   }
 }
+
+const COUNTDOWN = 3050;
 
 function state(p: [number, number, number], extra: Record<string, unknown> = {}) {
   return { q: 1, t: 1000, p, v: [0, 0, 0], y: 0, a: [0, 0, 1], pi: 0, m: 0, f: 1, w: 'rifle', c: 'blue', rl: 0, ms: 0, bp: 0, ads: 0, k: 0, ...extra };
@@ -28,8 +31,8 @@ async function setupPair(server: any) {
   // 방장(alice, 먼저 입장)이 테스트 시작
   server.connect({ account: 'alice', roomId: ROOM });
   expect((await server.startTest()).ok).toBe(true);
+  spin(COUNTDOWN);
   server.connect({ account: 'bob', roomId: ROOM });
-  // bob이 한 발 쏴서 보호 해제 (테스트가 기다리지 않게)
   await server.st(state([0, 0, 10], { s: [{ w: 'rifle', f: [0, 1, 10], e: [5, 1, 20], h: 0 }] }));
   server.connect({ account: 'alice', roomId: ROOM });
 }
@@ -92,6 +95,7 @@ describe('room lifecycle', () => {
     server.connect({ account: 'alice', roomId: ROOM });
     await server.hello('blue');
     expect((await server.startTest()).ok).toBe(true);
+    spin(COUNTDOWN);
     server.connect({ account: 'bob', roomId: ROOM });
     await server.st(state([0, 0, 10], { s: [{ w: 'rifle', f: [0, 1, 10], e: [5, 1, 20], h: 0 }] }));
     server.connect({ account: 'carol', roomId: ROOM });
@@ -188,13 +192,22 @@ describe('server-authoritative damage', () => {
     expect((await players(server)).bob.hp).toBe(64);
   });
 
-  test('protected victim takes no damage', async (server) => {
+  test('during countdown and right after respawn (2s protection) no damage', async (server) => {
     await server.simulateJoin(ROOM, 'alice');
     await server.simulateJoin(ROOM, 'bob');
-    server.connect({ account: 'alice', roomId: ROOM });
-    await server.startTest();
     server.connect({ account: 'bob', roomId: ROOM });
     await server.st(state([0, 0, 10]));
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.startTest();
+    // 카운트다운 중
+    await server.st(state([0, 0, 0], { s: [{ w: 'rifle', f: [0, 1, 0], e: [0, 1, 10], h: 1 }], h: [{ v: 'bob', w: 'rifle', hd: 0, d: 10 }] }));
+    expect((await players(server)).bob.hp).toBe(100);
+    spin(COUNTDOWN);
+    await server.st(state([0, 0, 0], { w: 'sniper', s: [{ w: 'sniper', f: [0, 1, 0], e: [0, 1, 10], h: 1 }], h: [{ v: 'bob', w: 'sniper', hd: 1, d: 10 }] }));
+    expect((await players(server)).bob.dead).toBe(true);
+    spin(2600);
+    server.connect({ account: 'bob', roomId: ROOM });
+    expect((await server.respawn()).ok).toBe(true);
     server.connect({ account: 'alice', roomId: ROOM });
     await server.st(state([0, 0, 0], { s: [{ w: 'rifle', f: [0, 1, 0], e: [0, 1, 10], h: 1 }], h: [{ v: 'bob', w: 'rifle', hd: 0, d: 10 }] }));
     expect((await players(server)).bob.hp).toBe(100);
@@ -232,8 +245,13 @@ describe('test room flow', () => {
     server.connect({ account: 'alice', roomId: ROOM });
     expect((await server.startTest()).ok).toBe(true);
     const after = await server.hello('blue');
-    expect(after.phase).toBe('playing');
-    expect(after.startedAt).toBeGreaterThan(0);
+    expect(after.phase).toBe('countdown');
+    expect(after.startAt).toBeGreaterThan(Date.now());
+    expect(after.endAt).toBe(0);
+    // 카운트다운이 지나면 틱이 playing으로
+    spin(COUNTDOWN);
+    await server.simulateTick(ROOM, 200);
+    expect((await server.hello('blue')).phase).toBe('playing');
   });
 
   test('no damage before start (lobby)', async (server) => {
@@ -284,5 +302,157 @@ describe('test room flow', () => {
     for (const a of ['alice', 'bob', 'carol', 'dave']) await server.simulateJoin(ROOM, a);
     server.connect({ account: 'erin', roomId: ROOM });
     expect((await server.hello('blue')).slot).toBe(-1);
+  });
+});
+
+// ---------------- 게임 모드 (TDM 2v2 / FFA 4인) ----------------
+
+const POS: Record<string, [number, number, number]> = { alice: [0, 0, 0], bob: [2, 0, 0], carol: [0, 0, 2], dave: [2, 0, 2] };
+
+/** 4명 입장·위치 등록 후 방장(alice)이 모드 지정 */
+async function room4(server: any, mode: string) {
+  for (const a of ['alice', 'bob', 'carol', 'dave']) await server.simulateJoin(ROOM, a);
+  for (const a of ['alice', 'bob', 'carol', 'dave']) {
+    server.connect({ account: a, roomId: ROOM });
+    await server.hello('blue');
+    await server.st(state(POS[a]!));
+  }
+  server.connect({ account: 'alice', roomId: ROOM });
+  return server.setMode(mode);
+}
+
+function dist2(a: string, b: string): number {
+  const p = POS[a]!;
+  const q = POS[b]!;
+  return Math.round(Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) * 100) / 100;
+}
+
+/** 샷건 한 번(펠릿 8발 × 15 = 120)으로 처치 (모두 BLUE 100HP) */
+async function shotgunKill(server: any, att: string, vic: string) {
+  server.connect({ account: att, roomId: ROOM });
+  const p = POS[att]!;
+  const q = POS[vic]!;
+  const s = Array.from({ length: 8 }, () => ({ w: 'shotgun', f: [p[0], 1, p[2]], e: [q[0], 1, q[2]], h: 1 }));
+  const h = Array.from({ length: 8 }, () => ({ v: vic, w: 'shotgun', hd: 0, d: dist2(att, vic) }));
+  await server.st(state(p, { w: 'shotgun', s, h }));
+}
+
+/** 죽은 사람들 리스폰 + 빗나간 한 발로 리스폰 보호 해제 */
+async function respawnAll(server: any, who: string[]) {
+  spin(2600);
+  for (const a of who) {
+    server.connect({ account: a, roomId: ROOM });
+    expect((await server.respawn()).ok).toBe(true);
+    const p = POS[a]!;
+    await server.st(state(p, { s: [{ w: 'rifle', f: [p[0], 1, p[2]], e: [p[0] + 5, 1, p[2] + 30], h: 0 }] }));
+  }
+}
+
+async function roomState(server: any) {
+  server.connect({ account: 'alice', roomId: ROOM });
+  return server.hello('blue');
+}
+
+describe('team deathmatch', () => {
+  test('teams 2/2, start rules, no team switch into a full team', async (server) => {
+    for (const a of ['alice', 'bob', 'carol']) await server.simulateJoin(ROOM, a);
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.setMode('tdm')).ok).toBe(true);
+    expect((await server.startMatch()).reason).toBe('need_4_players');
+    await server.simulateJoin(ROOM, 'dave');
+    const r = await roomState(server);
+    expect(r.mode).toBe('tdm');
+    expect(r.players.alice.team).toBe('BLUE');
+    expect(r.players.bob.team).toBe('RED');
+    expect(r.players.carol.team).toBe('BLUE');
+    expect(r.players.dave.team).toBe('RED');
+    expect((await server.switchTeam()).reason).toBe('team_full');
+    server.connect({ account: 'bob', roomId: ROOM });
+    expect((await server.setMode('ffa')).reason).toBe('not_host');
+  });
+
+  test('friendly fire blocked, team score, 20 team kills ends with BLUE win; then back to lobby', async (server) => {
+    expect((await room4(server, 'tdm')).ok).toBe(true);
+    expect((await server.startMatch()).ok).toBe(true);
+    const c = await roomState(server);
+    expect(c.phase).toBe('countdown');
+    expect(c.endAt - c.startAt).toBe(180000);
+    spin(COUNTDOWN);
+    // 아군(carol) 공격 → 거부
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.st(state(POS.alice!, { s: [{ w: 'rifle', f: [0, 1, 0], e: [0, 1, 2], h: 1 }], h: [{ v: 'carol', w: 'rifle', hd: 0, d: 2 }] }));
+    expect((await roomState(server)).players.carol.hp).toBe(100);
+    for (let round = 0; round < 10; round++) {
+      await shotgunKill(server, 'alice', 'bob');
+      await shotgunKill(server, 'carol', 'dave');
+      const st = await roomState(server);
+      expect(st.teamScore.BLUE).toBe((round + 1) * 2);
+      if (round < 9) {
+        expect(st.phase === 'result').toBe(false);
+        await respawnAll(server, ['bob', 'dave']);
+      }
+    }
+    const end = await roomState(server);
+    expect(end.phase).toBe('result');
+    expect(end.result.mode).toBe('tdm');
+    expect(end.result.reason).toBe('score');
+    expect(end.result.winnerTeam).toBe('BLUE');
+    expect(end.result.draw).toBe(false);
+    expect(end.result.teamScore).toEqual({ BLUE: 20, RED: 0 });
+    expect(end.result.winners.sort()).toEqual(['alice', 'carol']);
+    expect(end.players.alice.k).toBe(10);
+    expect(end.players.bob.d).toBe(10);
+    // 결과 뒤에는 피해 없음
+    await respawnAll(server, ['bob']);
+    await shotgunKill(server, 'alice', 'bob');
+    expect((await roomState(server)).players.bob.hp).toBe(100);
+    expect((await server.toLobby()).ok).toBe(true);
+    expect((await roomState(server)).phase).toBe('lobby');
+  });
+});
+
+describe('free for all', () => {
+  test('15 kills ends; leaver kept in result; joining mid-match blocked', async (server) => {
+    expect((await room4(server, 'ffa')).ok).toBe(true);
+    const r = await roomState(server);
+    expect(r.players.bob.team).toBe(null);
+    expect((await server.startMatch()).ok).toBe(true);
+    spin(COUNTDOWN);
+    let kills = 0;
+    // 1라운드: 3명 처치 후 dave 퇴장 (킬·데스 보존)
+    for (const v of ['bob', 'carol', 'dave']) await shotgunKill(server, 'alice', v);
+    kills += 3;
+    server.connect({ account: 'dave', roomId: ROOM });
+    expect((await server.bye()).ok).toBe(true);
+    expect((await server.findRoom(ROOM)).reason).toBe('in_progress');
+    while (kills < 15) {
+      await respawnAll(server, ['bob', 'carol']);
+      for (const v of ['bob', 'carol']) {
+        if (kills >= 15) break;
+        await shotgunKill(server, 'alice', v);
+        kills++;
+      }
+    }
+    const end = await roomState(server);
+    expect(end.phase).toBe('result');
+    expect(end.result.mode).toBe('ffa');
+    expect(end.result.winners).toEqual(['alice']);
+    expect(end.result.draw).toBe(false);
+    expect(end.result.standings[0].account).toBe('alice');
+    expect(end.result.standings[0].k).toBe(15);
+    const dave = end.result.standings.find((s: any) => s.account === 'dave');
+    expect(dave.left).toBe(true);
+    expect(dave.d).toBe(1);
+  });
+
+  test('self death counts a death only, no kill or score', async (server) => {
+    expect((await room4(server, 'ffa')).ok).toBe(true);
+    await server.startMatch();
+    spin(COUNTDOWN);
+    server.connect({ account: 'bob', roomId: ROOM });
+    expect((await server.selfDeath('fall')).ok).toBe(true);
+    const st = await roomState(server);
+    expect(st.players.bob.d).toBe(1);
+    expect(Object.values(st.players).reduce((n: number, p: any) => n + p.k, 0)).toBe(0);
   });
 });

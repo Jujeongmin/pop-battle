@@ -104,8 +104,8 @@ export class NetGameMode {
   }
 
   /** 원격 플레이어 발·눈 (스폰 선택용) */
-  hostiles(): RemotePlayer[] {
-    return [...this.remotes.values()].filter((r) => r.alive && r.hasState);
+  hostiles(myTeam: string | null = null): RemotePlayer[] {
+    return [...this.remotes.values()].filter((r) => r.alive && r.hasState && !r.hidden && (myTeam === null || r.team !== myTeam));
   }
 
   // ---------------- 매 프레임 ----------------

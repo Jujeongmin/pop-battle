@@ -19,7 +19,8 @@ const _head = new THREE.Vector3();
 
 export class RemotePlayer implements Damageable {
   readonly id: string;
-  readonly team = 'remote';
+  /** 진영: TDM = 서버 팀(BLUE/RED), 그 외 = 계정별 (모두 적) */
+  team = 'remote';
   readonly body: RAPIER.RigidBody;
   readonly collider: RAPIER.Collider;
   readonly hitboxes: CharacterHitboxes;

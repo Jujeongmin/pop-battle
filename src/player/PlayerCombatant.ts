@@ -12,7 +12,8 @@ import type { PlayerController } from './PlayerController';
 export class PlayerCombatant implements Combatant {
   readonly id = 'player';
   readonly name = 'PLAYER';
-  readonly team = TEAMS.player;
+  /** 진영 (싱글플레이 = players, 멀티 TDM = BLUE/RED — Game이 서버 팀으로 바꿈) */
+  team: string = TEAMS.player;
   /** 체력: 캐릭터 능력치 최대 체력 (캐릭터를 바꾸면 Game이 setMaxHp) */
   readonly health: Health;
   readonly hitboxes: CharacterHitboxes;
@@ -64,6 +65,7 @@ export class PlayerCombatant implements Combatant {
   /** 발사 순간 공격자 정보 (같은 객체를 재사용) */
   attacker(muzzle: THREE.Vector3): AttackerInfo {
     this.attackerInfo.position.copy(muzzle);
+    this.attackerInfo.team = this.team;
     return this.attackerInfo;
   }
 

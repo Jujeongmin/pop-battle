@@ -103,6 +103,12 @@ export class Match {
     this.stats.respawned(id);
   }
 
+  /** 외부(멀티플레이 서버)가 종료를 확정: 결과 계산·onFinish 없이 상태만 FINISHED (전투·리스폰 정지) */
+  endExternally(): void {
+    if (this.state === 'FINISHED') return;
+    this.setState('FINISHED');
+  }
+
   /** 종료 확정: PLAYING에서 한 번만 (타이머·킬 동시 발생해도 먼저 온 쪽 하나) */
   private finish(reason: FinishReason): void {
     if (this.state !== 'PLAYING') return;

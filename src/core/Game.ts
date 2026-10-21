@@ -5,7 +5,7 @@ import { WeaponModelLibrary } from '../assets/weaponModels';
 import type { Bot } from '../bots/Bot';
 import { BotManager } from '../bots/BotManager';
 import { BOT } from '../config/bots';
-import { COMBAT } from '../config/combat';
+import { COMBAT, TEAMS } from '../config/combat';
 import { FFA_RULES, NET_TEST_RULES } from '../config/match';
 import { NET_MODE } from '../net/netConfig';
 import { NetGameMode, type NetGameContext } from '../net/NetGameMode';
@@ -13,7 +13,8 @@ import { NetDebugPanel } from '../net/NetDebugPanel';
 import { MultiplayerMenu } from '../net/MultiplayerMenu';
 import { NetTestHud } from '../net/NetTestHud';
 import type { LocalState } from '../net/NetSession';
-import { checkNetRules, NET_MODES } from '../net/shared/protocol';
+import { checkNetRules, NET_MODE_RULES, NET_MODES, NET_TIMING, type NetMode } from '../net/shared/protocol';
+import type { MatchRules } from '../config/match';
 import {
   BOT_CHARACTERS,
   CHARACTER_IDS,
@@ -61,7 +62,7 @@ import { PlayerController } from '../player/PlayerController';
 import { CharacterDebug, type DebugParticipant } from '../ui/CharacterDebug';
 import { DebugPanel } from '../ui/DebugPanel';
 import type { DeathCause, KillFeedEvent } from '../ui/KillFeed';
-import { Hud } from '../ui/Hud';
+import { Hud, type MatchHudInfo } from '../ui/Hud';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MAP_ID } from '../config/maps';
 import type { GameMap, SpawnPoint } from '../world/GameMap';
@@ -167,6 +168,8 @@ export class Game {
   /** 테스트 시작 때 자리별 스폰 (한 번만 사용) */
   private netSpawn: SpawnPoint | null = null;
   private mpRefreshTimer = 0;
+  /** 마지막으로 반영한 서버 모드·팀 (바뀔 때만 외형 다시 적용) */
+  private netModeKey = '';
   /** 리스폰 요청 중 (서버 승인 대기) */
   private netRespawnPending = false;
   /** 이번 프레임 자세 값 (네트워크 상태 패킷용) */
@@ -1296,8 +1299,8 @@ export class Game {
     // 멀티 테스트: 서버가 시작 상태를 공유하기 전에는 시작하지 않음 (방장 Start Test → 룸 상태)
     if (this.netGame) {
       const s = this.net?.session;
-      if (!s?.inRoom || s.testPhase !== 'playing') return;
-      this.beginNetTest();
+      if (!s?.inRoom || !s.inMatch) return;
+      this.beginNetMatch();
       return;
     }
     this.beginMatch();
@@ -1325,10 +1328,12 @@ export class Game {
   }
 
   /** HUD 매치 정보 (남은 시간·내 킬/데스·순위·목표) */
-  private matchHud() {
+  private matchHud(): MatchHudInfo {
     const m = this.match;
     const me = m.stats.get(this.combatant.id);
+    const net = this.netGame ? this.netScoreHud() : undefined;
     return {
+      net,
       state: m.state,
       timeLeft: m.timeLeft,
       countdown: m.countdownLeft,
@@ -1446,7 +1451,7 @@ export class Game {
         if (this.physics.lineClear(b.getEye(eye), p)) seen = true;
       }
       // 네트워크 원격 플레이어도 같은 규칙 (보간 위치 기준)
-      for (const r of this.net?.hostiles() ?? []) {
+      for (const r of this.net?.hostiles(this.netGame && COMBAT.hostility === 'teams' ? this.combatant.team : null) ?? []) {
         const d = Math.hypot(r.renderFeet.x - s.x, r.renderFeet.z - s.z);
         if (d < 2.5) blocked = true;
         minHostile = Math.min(minHostile, d);
@@ -1504,10 +1509,22 @@ export class Game {
       leftUnexpectedly: () => this.netGame && !this.netLeftByUser && !this.net?.session.inRoom && !!this.net?.session.lastError,
       locked: () => this.input.isLocked,
       matchStarted: () => this.match.state !== 'WAITING',
-      create: async () => {
+      localTeam: () => this.net?.session.players[this.net.session.me]?.team ?? null,
+      create: async (mode) => {
         const net = this.ensureNet();
         this.netLeftByUser = false;
-        if (await net.session.createRoom(this.avatar.character.id)) this.enterNetGame();
+        if (await net.session.createRoom(this.avatar.character.id, mode)) this.enterNetGame();
+      },
+      setMode: async (mode) => {
+        const r = await this.ensureNet().session.setMode(mode);
+        if (!r.ok) this.mpMenu?.setNotice(`모드 변경 실패: ${this.netReason(r.reason)}`);
+      },
+      switchTeam: async () => {
+        const r = await this.ensureNet().session.switchTeam();
+        if (!r.ok) this.mpMenu?.setNotice(`팀 변경 실패: ${this.netReason(r.reason)}`);
+      },
+      toLobby: async () => {
+        await this.ensureNet().session.toLobby();
       },
       join: async (code) => {
         const net = this.ensureNet();
@@ -1522,10 +1539,9 @@ export class Game {
         if (await net.session.joinByCode(this.avatar.character.id, id)) this.enterNetGame();
       },
       start: async () => {
-        const r = await this.ensureNet().session.startTest();
+        const r = await this.ensureNet().session.startMatch();
         if (!r.ok) {
-          const why: Record<string, string> = { not_host: '방장만 시작할 수 있어요', need_2_players: '두 명 이상 있어야 시작할 수 있어요' };
-          this.mpMenu?.setNotice(`시작 실패: ${why[r.reason ?? ''] ?? r.reason ?? '알 수 없음'}`);
+          this.mpMenu?.setNotice(`시작 실패: ${this.netReason(r.reason)}`);
           return;
         }
         // 버튼 클릭(사용자 동작) 직후라 포인터 잠금 요청 가능 → 방장은 바로 조작
@@ -1542,8 +1558,13 @@ export class Game {
   /** 메뉴·시작 카드 표시 갱신 + 서버 시작 상태 반영 (주기적으로 호출, 바뀐 게 없으면 DOM 그대로) */
   private refreshMultiplayerMenu(): void {
     const s = this.net?.session;
-    // 서버가 시작 상태를 공유함 → 로컬 매치 시작 (방장은 잠금과 함께, 손님은 클릭하면)
-    if (this.netGame && s?.inRoom && s.testPhase === 'playing' && this.match.state === 'WAITING' && this.input.isLocked) this.beginNetTest();
+    if (this.netGame && s?.inRoom) {
+      this.applyNetMode();
+      // 서버 매치 단계를 로컬 매치에 반영: 시작(카운트다운) / 종료(결과) / 대기실 복귀
+      if (s.inMatch && this.match.state === 'WAITING') this.beginNetMatch();
+      else if (s.matchPhase === 'result' && (this.match.state === 'COUNTDOWN' || this.match.state === 'PLAYING')) this.endNetMatch();
+      else if (s.matchPhase === 'lobby' && this.match.state !== 'WAITING') this.resetNetMatch();
+    }
     this.mpMenu?.refresh();
     this.hud.setMultiplayerCovered(!!this.mpMenu?.covering);
   }
@@ -1568,17 +1589,17 @@ export class Game {
       this.teams.delete(b.id);
     }
     this.bots.removeAll();
-    COMBAT.hostility = NET_TEST_RULES.hostility;
     this.resetNetMatch();
+    this.applyNetMode();
     this.hud.setCharacter(this.avatar.character.id, true);
-    this.hud.setModeLine('멀티플레이 테스트 (최대 4인) · 봇 없음');
+    this.hud.setModeLine('멀티플레이 (최대 4인) · 봇 없음');
     this.netHud = new NetTestHud(this.container, this.ensureNet().session, () => ({ hp: this.combatant.health.hp, max: this.combatant.health.maxHp }));
     this.refreshMultiplayerMenu();
   }
 
   /** 멀티 테스트 매치를 대기 상태로 새로 만듦 (입장·재입장·나간 뒤) */
   private resetNetMatch(): void {
-    this.match = new Match(NET_TEST_RULES, {
+    this.match = new Match(this.netRules(), {
       onStateChange: (state, prev) => this.onMatchState(state, prev),
       onFinish: (result) => this.onMatchFinish(result),
     });
@@ -1588,20 +1609,133 @@ export class Game {
     this.dead = false;
     this.deathTimer = 0;
     this.killedBy = null;
+    this.combatant.health.reset(0);
+    this.combatant.hitboxes.setEnabled(true);
     this.appearances.get(this.combatant.id)?.setDead(false);
     this.hud.clearKillFeed();
   }
 
-  /** 서버가 시작을 알림 → 자리별 스폰에서 카운트다운부터 (두 화면이 같은 룸 상태를 보고 시작) */
-  private beginNetTest(): void {
+  /**
+   * 멀티 매치용 로컬 규칙: 표시 이름·카운트다운만 쓰고, 종료(시간·목표 킬)는 서버가 확정하므로 로컬 제한은 끔
+   */
+  private netRules(): MatchRules {
+    const mode: NetMode = this.net?.session.mode ?? 'test';
+    return {
+      ...NET_TEST_RULES,
+      label: NET_MODE_RULES[mode].label,
+      hostility: mode === 'tdm' ? 'teams' : 'ffa',
+      countdown: NET_TIMING.countdownMs / 1000,
+      timeLimit: 1e6,
+      scoreToWin: 1e6,
+    };
+  }
+
+  /** 서버 모드·팀을 게임에 반영: 적대 규칙(TDM 아군 피해 없음), 팀 색(TDM만), 이름표 아군 표시. 바뀔 때만 */
+  private applyNetMode(): void {
+    const net = this.net;
+    const s = net?.session;
+    if (!net || !s) return;
+    const tdm = s.mode === 'tdm';
+    const me = s.players[s.me];
+    const key = `${s.mode}|${Object.entries(s.players).map(([a, p]) => `${a}:${p.team ?? ''}`).join(',')}|${[...net.remotes.keys()].join(',')}`;
+    if (key === this.netModeKey) return;
+    this.netModeKey = key;
+    COMBAT.hostility = tdm ? 'teams' : 'ffa';
+    this.combatant.team = tdm && me?.team ? me.team : TEAMS.player;
+    this.appearanceMode = tdm ? 'TDM' : 'FFA';
+    this.teams.clear();
+    if (tdm && me?.team) this.teams.set(this.combatant.id, me.team);
+    for (const r of net.remotes.values()) {
+      const t = s.players[r.account]?.team ?? null;
+      // 캐릭터 이름(RED 등)과 팀은 별개: 팀은 서버 기록만 따름
+      r.team = tdm && t ? t : `ffa:${r.account}`;
+      if (tdm && t) this.teams.set(r.id, t);
+      r.label.ally = tdm && !!t && t === me?.team;
+    }
+    for (const id of this.appearances.keys()) this.applyAppearance(id);
+    if (this.match.state === 'WAITING') this.match = new Match(this.netRules(), {
+      onStateChange: (state, prev) => this.onMatchState(state, prev),
+      onFinish: (result) => this.onMatchFinish(result),
+    });
+    this.match.stats.register({ id: this.combatant.id, name: '나', isLocal: true });
+    for (const r of net.remotes.values()) this.match.stats.register({ id: r.id, name: r.name, isLocal: false });
+  }
+
+  /** 서버 거부 사유 → 안내 문구 */
+  private netReason(reason: string | undefined): string {
+    const why: Record<string, string> = {
+      not_host: '방장만 할 수 있어요',
+      need_2_players: '두 명 이상 있어야 시작할 수 있어요',
+      need_4_players: '4명이 모두 들어와야 시작할 수 있어요',
+      teams_unbalanced: '팀 인원을 2:2로 맞춰 주세요',
+      in_progress: '매치가 진행 중이에요',
+      team_full: '그 팀은 이미 2명이에요',
+      not_tdm: '팀 데스매치에서만 팀을 바꿀 수 있어요',
+    };
+    return why[reason ?? ''] ?? reason ?? '알 수 없음';
+  }
+
+  /** 서버 매치 종료(결과) → 로컬 전투 정지, 결과 화면을 위해 포인터 잠금 해제 */
+  private endNetMatch(): void {
+    this.match.endExternally();
+    this.aim.reset('death');
+    this.weapons.cancelReaim();
+    this.weapons.weapon.cancelReload();
+    this.input.releaseLock();
+  }
+
+  /** 상단 점수판 (서버 값만 사용): TDM 팀 점수 / FFA 선두·내 킬 / 남은 시간 */
+  private netScoreHud(): MatchHudInfo['net'] {
+    const s = this.net?.session;
+    if (!s) return undefined;
+    const rule = NET_MODE_RULES[s.mode];
+    const all = [...Object.entries(s.players).map(([a, p]) => ({ a, k: p.k, d: p.d })), ...Object.values(s.gone).map((g) => ({ a: g.account, k: g.k, d: g.d }))];
+    const me = s.players[s.me];
+    const sorted = [...all].sort((x, y) => y.k - x.k || x.d - y.d);
+    const now = s.serverNow();
+    const timeLeft = s.endAt > 0 ? Math.max(0, Math.min(rule.timeLimitMs, s.endAt - Math.max(now, s.startAt)) / 1000) : null;
+    return {
+      mode: s.mode,
+      blue: s.teamScore.BLUE,
+      red: s.teamScore.RED,
+      myTeam: me?.team ?? null,
+      leader: sorted[0]?.k ?? 0,
+      goal: rule.scoreToWin,
+      mine: me?.k ?? 0,
+      myDeaths: me?.d ?? 0,
+      rank: Math.max(1, sorted.findIndex((x) => x.a === s.me) + 1),
+      players: all.length,
+      timeLeft,
+    };
+  }
+
+  /**
+   * 서버가 매치 시작(카운트다운)을 알림 → 스폰에서 카운트다운부터. 모든 화면이 서버 GO 시각(startAt)에 맞춰 시작.
+   * TDM: 자기 팀 스폰 구역(BLUE = 남쪽, RED = 북쪽)에서 팀 안 순서대로, 리스폰도 자기 팀 구역. FFA·테스트: 자리별로 흩어져 시작
+   */
+  private beginNetMatch(): void {
     const s = this.net?.session;
     if (!s || this.match.state !== 'WAITING') return;
-    // 자리별 스폰: P1 남쪽 중앙, P2 북쪽 중앙, P3 남쪽 오른쪽, P4 북쪽 왼쪽 (서로 멀리, 가림막 뒤)
+    this.applyNetMode();
     const { teamA, teamB } = this.map.spawns;
-    const bySlot = [teamA[0], teamB[0], teamA[4] ?? teamA[1], teamB[3] ?? teamB[1]];
-    this.netSpawn = bySlot[s.slot] ?? null;
+    const myTeam = s.players[s.me]?.team ?? null;
+    if (s.mode === 'tdm' && myTeam) {
+      const list = myTeam === 'BLUE' ? teamA : teamB;
+      const mates = Object.entries(s.players)
+        .filter(([, p]) => p.team === myTeam)
+        .sort((a, b) => a[1].slot - b[1].slot);
+      const idx = Math.max(0, mates.findIndex(([a]) => a === s.me));
+      this.spawnPool = list;
+      this.netSpawn = [list[0], list[4] ?? list[1]][idx] ?? list[0] ?? null;
+    } else {
+      this.spawnPool = [...teamA, ...teamB];
+      const bySlot = [teamA[0], teamB[0], teamA[4] ?? teamA[1], teamB[3] ?? teamB[1]];
+      this.netSpawn = bySlot[s.slot] ?? null;
+    }
     this.beginMatch();
-    s.client.addLog('info', `테스트 시작 (자리 ${s.slot + 1} 스폰)`);
+    // 서버 GO 시각에 맞춘 카운트다운 (늦게 받은 쪽은 그만큼 짧게, 이미 지났으면 바로 시작)
+    this.match.countdownLeft = Math.max(0, (s.startAt - s.serverNow()) / 1000);
+    s.client.addLog('info', `매치 시작 ${s.mode}${myTeam ? ` ${myTeam}팀` : ''} (자리 ${s.slot + 1}) · GO까지 ${this.match.countdownLeft.toFixed(1)}s`);
   }
 
   /** 네트워크 게임 모드 (처음 방 만들기/입장 때 생성) */

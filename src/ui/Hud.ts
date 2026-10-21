@@ -17,6 +17,23 @@ export interface MatchHudInfo {
   players: number;
   scoreToWin: number;
   label: string;
+  /** 멀티플레이 매치 점수판 (서버 값). 있으면 개인 킬/데스·순위 대신 표시 */
+  net?: NetScoreHud;
+}
+
+/** 멀티플레이 점수판: TDM = BLUE 8 — 6 RED, FFA = LEADER 7 / 15, 남은 시간 (null = 제한 없음) */
+export interface NetScoreHud {
+  mode: 'tdm' | 'ffa' | 'test';
+  blue: number;
+  red: number;
+  myTeam: 'BLUE' | 'RED' | null;
+  leader: number;
+  goal: number;
+  mine: number;
+  myDeaths: number;
+  rank: number;
+  players: number;
+  timeLeft: number | null;
 }
 
 export interface HudFrame {
@@ -153,7 +170,7 @@ export class Hud {
   private locked = false;
   /** 결과 화면 "다시 플레이" 버튼 */
   onReplay: (() => void) | null = null;
-  /** 시작 카드 "Multiplayer Test" 버튼 */
+  /** 시작 카드 "Multiplayer" 버튼 */
   onMultiplayer: (() => void) | null = null;
   /** 우측 상단 실시간 킬로그 */
   private readonly killFeed: KillFeed;
@@ -183,6 +200,8 @@ export class Hud {
         <div class="mb-kd"><span><b class="mb-k">0</b>킬</span><span><b class="mb-d">0</b>데스</span></div>
         <div class="mb-center"><div class="mb-time">3:00</div><div class="mb-goal">개인전 · 15킬 먼저</div></div>
         <div class="mb-rank"><b>1</b>위<small>/ 4</small></div>
+        <div class="mb-net-left"></div>
+        <div class="mb-net-right"></div>
       </div>
       <div class="countdown"></div>
       <div class="result hidden">
@@ -207,7 +226,7 @@ export class Hud {
             <div class="lo-note"></div>
           </div>
           <p class="mode-line">개인전 4인 · 3분 · 15킬 먼저 달성하면 승리</p>
-          <div><button type="button" class="mp-open">Multiplayer Test</button></div>
+          <div><button type="button" class="mp-open">Multiplayer</button></div>
           <p>화면을 클릭해서 시작</p>
           <ul>
             <li><b>WASD</b> 이동 · <b>W 두 번</b> 달리기 · <b>Shift</b> 슬라이딩 · <b>Space</b> 점프</li>
@@ -435,6 +454,11 @@ export class Hud {
   /** 상단 매치 바 (남은 시간·킬/데스·순위·목표) + 카운트다운 숫자 */
   private updateMatch(m: MatchHudInfo): void {
     this.matchBar.classList.toggle('hidden', m.state === 'WAITING');
+    this.matchBar.classList.toggle('net', !!m.net);
+    if (m.net) {
+      this.updateNetScore(m);
+      return;
+    }
     const t = Math.ceil(m.timeLeft);
     const time = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     const key = `${time}|${m.kills}|${m.deaths}|${m.rank}|${m.players}|${m.scoreToWin}|${m.state}`;
@@ -455,6 +479,53 @@ export class Hud {
         const el = this.countdownEl;
         el.classList.remove('go');
         el.textContent = n;
+        el.animate(
+          [
+            { opacity: 1, transform: 'translate(-50%, -50%) scale(1.5)' },
+            { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: 0.25 },
+            { opacity: 0.9, transform: 'translate(-50%, -50%) scale(1)' },
+          ],
+          { duration: 1000, easing: 'ease-out', fill: 'forwards' },
+        );
+      }
+    }
+  }
+
+  /** 멀티플레이 점수판 (서버 값). 카운트다운 숫자는 싱글플레이와 같은 연출 */
+  private updateNetScore(m: MatchHudInfo): void {
+    const n = m.net!;
+    const t = n.timeLeft === null ? null : Math.ceil(n.timeLeft);
+    const time = t === null ? '—' : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+    const key = `net|${time}|${n.mode}|${n.blue}|${n.red}|${n.myTeam}|${n.leader}|${n.mine}|${n.myDeaths}|${n.rank}|${n.players}|${m.state}`;
+    if (key !== this.lastMatchKey) {
+      this.lastMatchKey = key;
+      const left = this.matchBar.querySelector('.mb-net-left') as HTMLElement;
+      const right = this.matchBar.querySelector('.mb-net-right') as HTMLElement;
+      const goal = this.matchBar.querySelector('.mb-goal') as HTMLElement;
+      this.matchBar.querySelector('.mb-time')!.textContent = time;
+      const b = (v: number | string) => `<b>${v}</b>`;
+      if (n.mode === 'tdm') {
+        left.innerHTML = `<span class="mb-team blue${n.myTeam === 'BLUE' ? ' mine' : ''}">BLUE ${b(n.blue)}</span>`;
+        right.innerHTML = `<span class="mb-team red${n.myTeam === 'RED' ? ' mine' : ''}">${b(n.red)} RED</span>`;
+        goal.textContent = `팀 데스매치 · ${n.goal}킬 먼저${n.myTeam ? ` · 내 팀 ${n.myTeam}` : ''}`;
+      } else if (n.mode === 'ffa') {
+        left.innerHTML = `<span class="mb-team">LEADER ${b(n.leader)} / ${n.goal}</span>`;
+        right.innerHTML = `<span class="mb-team">나 ${b(n.mine)}킬 · ${b(n.rank)}위/${n.players}</span>`;
+        goal.textContent = `개인전 · ${n.goal}킬 먼저`;
+      } else {
+        left.innerHTML = `<span class="mb-team">${b(n.mine)}킬 ${b(n.myDeaths)}데스</span>`;
+        right.innerHTML = `<span class="mb-team">${b(n.rank)}위/${n.players}</span>`;
+        goal.textContent = '자유 테스트 · 제한 없음';
+      }
+      this.matchBar.classList.toggle('hurry', m.state === 'PLAYING' && t !== null && t <= 10);
+    }
+    if (m.state === 'COUNTDOWN') {
+      const c = String(Math.max(1, Math.ceil(m.countdown)));
+      if (c !== this.lastCountdown) {
+        this.lastCountdown = c;
+        const el = this.countdownEl;
+        el.classList.remove('go');
+        el.textContent = c;
         el.animate(
           [
             { opacity: 1, transform: 'translate(-50%, -50%) scale(1.5)' },
