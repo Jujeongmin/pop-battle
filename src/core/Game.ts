@@ -69,7 +69,7 @@ import type { GameMap, SpawnPoint } from '../world/GameMap';
 import { ArenaMap } from '../world/maps/ArenaMap';
 import { TestMap } from '../world/TestMap';
 import { TestTarget } from '../world/TestTarget';
-import { KeyboardMouseInput } from './Input';
+import { GameInput } from './GameInput';
 import { JoystickAutoSprint } from './JoystickAutoSprint';
 
 /** 새로고침 뒤 메뉴에 "이전 방 다시 입장"을 보이기 위한 마지막 룸 (NetSession과 같은 키, 탭 단위) */
@@ -94,7 +94,8 @@ export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly timer = new THREE.Timer();
-  private readonly input: KeyboardMouseInput;
+  /** 키보드·마우스 + 모바일 터치 (같은 InputState로 합침) */
+  private readonly input: GameInput;
   private readonly hud: Hud;
   private readonly audio = new AudioManager();
   private readonly resizeObserver = new ResizeObserver(() => this.resize());
@@ -198,8 +199,14 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.appendChild(this.renderer.domElement);
-    this.input = new KeyboardMouseInput(this.renderer.domElement);
+    this.input = new GameInput(this.renderer.domElement, container);
     this.hud = new Hud(container);
+    // 모바일 터치 조작: HUD 배치(버튼 자리 비움)·슬롯 터치·터치 설정
+    this.hud.setTouchMode(this.input.touchMode);
+    this.input.onTouchModeChange = (on) => this.hud.setTouchMode(on);
+    this.hud.onSlotTap = (i) => this.input.touch.pressSlot(i + 1);
+    this.hud.onTouchSettings = () => this.input.touch.openSettings();
+    this.hud.onTouchStart = () => this.input.requestLock();
     this.input.onLockChange = (locked) => {
       this.hud.setLocked(locked);
       // 브라우저 자동 재생 정책: 사용자 클릭(포인터 잠금) 뒤에 오디오 시작
@@ -423,6 +430,7 @@ export class Game {
   };
 
   private update(dt: number): void {
+    this.input.beginFrame();
     const input = this.input.state;
     this.updateFps(dt);
 
@@ -716,6 +724,12 @@ export class Game {
       this.container.clientHeight,
     );
     this.debugPanel.setStatus(debugLines.join('\n'));
+    // 터치 버튼 상태 표시 (재장전 중·ADS 켜짐·근접무기)
+    if (this.input.touch.active) {
+      this.input.touch.setReloading(w.reloading);
+      this.input.touch.setAiming(this.aim.isAiming);
+      this.input.touch.setMelee(this.weapons.isMelee);
+    }
     // 네트워크 전송은 이번 프레임 최종 상태로 (50ms마다)
     this.net?.update(dt, this.player.justJumped, this.player.justLanded);
     this.netPanel?.update(dt);

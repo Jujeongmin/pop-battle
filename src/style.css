@@ -54,7 +54,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 .lock-card ul { margin: 10px 0; padding-left: 18px; font-size: 14px; line-height: 1.7; }
 .lock-card .mode-line { display: inline-block; padding: 3px 12px; border-radius: 12px; background: var(--yellow); font-size: 14px; }
 .lock-card .touch-guide { display: none; }
-@media (pointer: coarse) { .lock-card .touch-guide { display: block; } .lock-card ul:not(.touch-guide) { display: none; } }
 .lock-card .warn { font-size: 12px; font-weight: 600; color: #b5475d; }
 
 .debug-panel {
@@ -538,3 +537,127 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 /* 결과 화면이 뜨면 하단 카드·슬롯·알림 숨김 */
 .match-over .hp, .match-over .slots, .match-over .weapon-card, .match-over .hud-notice,
 .match-done .hp, .match-done .slots, .match-done .weapon-card, .match-done .crosshair, .match-done .reload { display: none; }
+
+/* ================= 모바일 터치 조작 (가로 화면) =================
+   --tu = 화면 높이 400px 기준 배율(0.75~1.3, TouchInput이 설정), --stick / --btn = 사용자 크기 설정 */
+.touch-layer {
+  --tu: 1; --stick: 1; --btn: 1;
+  --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
+  position: absolute; inset: 0; z-index: 8; touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+.touch-layer.hidden { display: none; }
+.tc-stick {
+  --r: calc(58px * var(--tu) * var(--stick));
+  position: absolute; left: calc(var(--safe-l) + 28px + var(--r)); top: calc(100% - var(--safe-b) - 26px - var(--r));
+  width: calc(var(--r) * 2); height: calc(var(--r) * 2); margin: calc(var(--r) * -1) 0 0 calc(var(--r) * -1);
+  border-radius: 50%; background: rgba(255, 255, 255, .18); border: 3px solid rgba(255, 255, 255, .55);
+  box-shadow: 0 3px 0 rgba(39, 50, 92, .18); pointer-events: none; opacity: .55; transition: opacity .12s;
+}
+.tc-stick.live { opacity: 1; background: rgba(255, 255, 255, .26); }
+.tc-knob {
+  position: absolute; left: 50%; top: 50%; width: calc(var(--r) * .9); height: calc(var(--r) * .9);
+  margin: calc(var(--r) * -.45) 0 0 calc(var(--r) * -.45); border-radius: 50%;
+  background: linear-gradient(180deg, #fffdf8, #ffe9b8); border: 3px solid #fff; box-shadow: 0 3px 0 rgba(39, 50, 92, .3);
+}
+.tc-btn {
+  --s: 60px;
+  position: absolute; display: grid; place-items: center; padding: 0; margin: 0;
+  width: calc(var(--s) * var(--tu) * var(--btn)); height: calc(var(--s) * var(--tu) * var(--btn));
+  border-radius: 50%; border: 3px solid rgba(255, 255, 255, .85); color: var(--ink);
+  background: rgba(255, 250, 242, .72); box-shadow: 0 4px 0 rgba(39, 50, 92, .25);
+  font: 900 calc(14px * var(--tu) * var(--btn)) var(--font); touch-action: none; cursor: pointer;
+}
+.tc-btn svg { width: 48%; height: 48%; }
+.tc-btn.down { transform: translateY(3px) scale(.94); box-shadow: 0 1px 0 rgba(39, 50, 92, .25); background: #fff; }
+/* 오른쪽 아래 엄지 호: 사격(크게) 중심, 위·왼쪽으로 점프·ADS·슬라이딩·재장전 */
+.tc-fire { --s: 92px; right: calc(var(--safe-r) + 26px * var(--tu)); bottom: calc(var(--safe-b) + 30px * var(--tu)); background: rgba(255, 92, 120, .85); color: #fff; }
+.tc-fire.down { background: #ff4d6d; }
+.tc-jump { right: calc(var(--safe-r) + 20px * var(--tu)); bottom: calc(var(--safe-b) + (30px + 92px * var(--btn) + 16px) * var(--tu)); }
+.tc-ads { right: calc(var(--safe-r) + (26px + 92px * var(--btn) + 12px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 70px * var(--btn)) * var(--tu)); }
+.tc-ads.on { background: var(--yellow); }
+.tc-slide { right: calc(var(--safe-r) + (26px + 92px * var(--btn) + 22px) * var(--tu)); bottom: calc(var(--safe-b) + 14px * var(--tu)); }
+.tc-reload { --s: 50px; right: calc(var(--safe-r) + (26px + 92px * var(--btn) - 4px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 140px * var(--btn)) * var(--tu)); }
+.tc-reload.busy svg { animation: tc-spin .7s linear infinite; }
+@keyframes tc-spin { to { transform: rotate(360deg); } }
+.touch-layer.melee .tc-ads, .touch-layer.melee .tc-reload { opacity: .35; }
+.tc-pause {
+  position: absolute; left: calc(var(--safe-l) + 10px); top: calc(var(--safe-t) + 10px);
+  width: 44px; height: 44px; border-radius: 12px; border: 2px solid #fff;
+  background: rgba(39, 50, 92, .55); display: flex; gap: 5px; align-items: center; justify-content: center; padding: 0; touch-action: none;
+}
+.tc-pause i { width: 5px; height: 40%; border-radius: 3px; background: #fff; }
+
+/* HUD: 터치 모드 배치 (왼쪽 아래 조이스틱 · 오른쪽 아래 버튼 자리를 비움) */
+.hud.touch .hp { top: calc(var(--pad-y) + var(--safe-t)); bottom: auto; left: calc(var(--safe-l) + 64px); }
+.hud.touch .weapon-card {
+  top: calc(var(--pad-y) + var(--safe-t) + 74px * var(--u)); bottom: auto; right: auto; left: calc(var(--safe-l) + 64px);
+  min-width: 0; padding: calc(5px * var(--u)) calc(10px * var(--u)) calc(5px * var(--u)) calc(6px * var(--u));
+}
+.hud.touch .wc-icon { width: calc(48px * var(--u)); height: calc(32px * var(--u)); }
+.hud.touch .slots { bottom: calc(var(--pad-y) + var(--safe-b)); }
+/* 조작 중에만 슬롯 바를 터치 레이어 위로 (일시정지 카드 위에 겹치지 않게) */
+.hud.touch.playing .slots { z-index: 9; pointer-events: auto; }
+/* 작은 가로 화면: 시작·일시정지 카드는 스크롤, 카드 자체를 눌러도 시작 */
+.hud.touch .lock-card { pointer-events: auto; max-height: calc(100% - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.hud.touch .lock-card ul { margin: 6px 0; font-size: 12px; line-height: 1.5; }
+.hud.touch .slot { min-height: 44px; padding: 6px 12px 6px 6px; touch-action: none; }
+.hud.touch .slot-name { display: none; }
+.hud.touch .slot-icon svg { width: 40px; height: 16px; }
+.hud .touch-only, .hud .touch-settings-open { display: none; }
+.hud.touch .touch-only { display: inline; }
+.hud.touch .pc-only { display: none; }
+.hud.touch .lock-card .touch-guide { display: block; }
+.hud.touch .lock-card ul:not(.touch-guide) { display: none; }
+.hud:not(.touch) .lock-card .touch-guide { display: none; }
+.touch-settings-open { pointer-events: auto; cursor: pointer; font: inherit; font-weight: 900; font-size: 15px; margin: 8px 0 2px 8px; padding: 9px 16px; border-radius: 14px; border: 0; background: var(--blue); color: #fff; box-shadow: 0 3px 0 rgba(39, 50, 92, .22); }
+.hud.touch .touch-settings-open { display: inline-block; }
+
+/* 터치 설정 창 */
+.tc-settings { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(39, 50, 92, .4); pointer-events: auto; }
+.tc-settings-card { width: min(420px, 92vw); padding: 16px 18px; border-radius: 20px; background: var(--cream); box-shadow: 0 6px 0 rgba(39, 50, 92, .25); display: grid; gap: 10px; }
+.tc-settings-title { font-size: 20px; color: var(--blue); }
+.tc-settings-row { display: grid; grid-template-columns: 7.5em 1fr 3.5em; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; }
+.tc-settings-row input { width: 100%; height: 28px; }
+.tc-settings-val { text-align: right; font-variant-numeric: tabular-nums; }
+.tc-settings-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.tc-settings-btn { font: inherit; font-weight: 900; padding: 9px 16px; border-radius: 12px; border: 0; background: #fff; color: var(--ink); box-shadow: 0 3px 0 rgba(39, 50, 92, .2); }
+.tc-settings-btn.primary { background: var(--blue); color: #fff; }
+
+/* 세로 화면: 회전 안내 (게임은 계속 돌고, 가로로 돌리면 사라짐) */
+.rotate-hint { display: none; }
+@media (orientation: portrait) {
+  .touch-mode .rotate-hint {
+    display: grid; place-items: center; position: absolute; inset: 0; z-index: 60; text-align: center;
+    background: rgba(39, 50, 92, .88); color: #fff; padding: 24px;
+  }
+  .rotate-hint b { display: block; font-size: 64px; line-height: 1; animation: tc-turn 1.6s ease-in-out infinite; }
+  .rotate-hint p { margin: 12px 0 4px; font-size: 22px; font-weight: 900; }
+  .rotate-hint span { font-size: 14px; opacity: .8; }
+}
+@keyframes tc-turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(90deg); } }
+
+/* 킬로그 가독성 (2026-10-21): 기존 대비 약 1.5배. 크기는 em 하나로 비례 (글자·아이콘·패널·여백), 화면 배율 --u로 반응형.
+   1280×720 = 19px (기존 13px), 큰 화면 최대 23px, 작은 가로 폰 최소 14px. 위치(우측 상단)·개수·시간·애니메이션은 그대로 */
+.killfeed {
+  top: calc(var(--pad-y) + var(--safe-t)); right: calc(var(--pad-x) + var(--safe-r));
+  gap: max(4px, calc(6px * var(--u)));
+  max-width: min(560px, 40vw);
+  font-size: clamp(14px, calc(19px * var(--u)), 23px);
+}
+.kf-row {
+  font-size: 1em; gap: .45em; padding: .28em .75em; border-radius: .8em; line-height: 1.2;
+  background: rgba(30, 36, 64, .68); box-shadow: 0 .14em 0 rgba(20, 24, 46, .28);
+}
+.kf-icons { gap: .2em; }
+.kf-icon { height: 1.3em; width: auto; transform: none; }
+.kf-head { width: 1em; height: 1em; }
+.kf-name { max-width: 9em; text-shadow: 0 1px 2px rgba(0, 0, 0, .45); }
+.kf-row.local-kill { box-shadow: 0 .14em 0 rgba(20, 24, 46, .28), 0 0 0 2px rgba(255, 215, 94, .85) inset; }
+.kf-row.local-death .kf-victim { padding: 0 .35em; border-radius: .4em; }
+/* 좁은·낮은 화면: 점수판과 겹치지 않게 폭 제한, 긴 이름은 줄임표 */
+@media (max-width: 900px), (max-height: 520px) {
+  .killfeed { max-width: 36vw; }
+  .kf-name { max-width: 6.5em; }
+}

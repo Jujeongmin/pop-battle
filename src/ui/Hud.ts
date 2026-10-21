@@ -213,6 +213,12 @@ export class Hud {
   onReplay: (() => void) | null = null;
   /** 시작 카드 "Multiplayer" 버튼 */
   onMultiplayer: (() => void) | null = null;
+  /** 터치 모드: 무기 슬롯을 눌렀을 때 (0부터) */
+  onSlotTap: ((index: number) => void) | null = null;
+  /** 시작 카드 "터치 설정" 버튼 (터치 모드에서만 보임) */
+  onTouchSettings: (() => void) | null = null;
+  /** 터치 모드: 시작 카드 자체(버튼 밖)를 눌러 시작·재개 (작은 화면에서 카드가 화면을 거의 덮음) */
+  onTouchStart: (() => void) | null = null;
   /** 우측 상단 실시간 킬로그 */
   private readonly killFeed: KillFeed;
 
@@ -287,8 +293,8 @@ export class Hud {
             <div class="lo-note"></div>
           </div>
           <p class="mode-line">개인전 4인 · 3분 · 15킬 먼저 달성하면 승리</p>
-          <div><button type="button" class="mp-open">Multiplayer</button></div>
-          <p>화면을 클릭해서 시작</p>
+          <div><button type="button" class="mp-open">Multiplayer</button><button type="button" class="touch-settings-open">터치 설정</button></div>
+          <p><span class="pc-only">화면을 클릭해서 시작</span><span class="touch-only">화면을 터치해서 시작</span></p>
           <ul>
             <li><b>WASD</b> 이동 · <b>W 두 번</b> 달리기 · <b>Shift</b> 슬라이딩 · <b>Space</b> 점프</li>
             <li><b>좌클릭</b> 사격 · <b>우클릭</b> 조준 켜기/끄기 · <b>R</b> 재장전</li>
@@ -296,7 +302,8 @@ export class Hud {
             <li><b>K</b> 사망 테스트 · <b>\`</b> 디버그 패널</li>
           </ul>
           <ul class="touch-guide">
-            <li>모바일: <b>가상 조이스틱</b> 이동 · <b>조이스틱 전방 유지</b> 달리기 · <b>슬라이딩 버튼</b> 슬라이딩</li>
+            <li><b>왼쪽</b> 조이스틱 이동(앞으로 계속 밀면 달리기) · <b>오른쪽</b> 드래그 시점</li>
+            <li><b>●</b> 사격(끌면 조준 이동) · <b>ADS</b> · <b>▲</b> 점프 · 슬라이딩 · <b>↻</b> 재장전 · 아래 슬롯 무기 · <b>II</b> 일시정지</li>
           </ul>
         </div>
       </div>`;
@@ -348,6 +355,16 @@ export class Hud {
     q<HTMLButtonElement>('.mp-open').addEventListener('click', (e) => {
       e.stopPropagation();
       this.onMultiplayer?.();
+    });
+    // click = 끌지 않고 톡 누름 (카드를 스크롤하는 동작으로는 시작하지 않음)
+    q<HTMLDivElement>('.lock-card').addEventListener('click', (e) => {
+      if (!this.root.classList.contains('touch')) return;
+      if ((e.target as HTMLElement).closest('button, input, select')) return;
+      this.onTouchStart?.();
+    });
+    q<HTMLButtonElement>('.touch-settings-open').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onTouchSettings?.();
     });
     q<HTMLButtonElement>('.res-replay').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -465,6 +482,11 @@ export class Hud {
     this.root.querySelector('.loadout:not(.char-select) .lo-title')!.textContent = locked ? '주무기 (고정)' : '주무기 선택';
   }
 
+  /** 모바일 터치 조작: 터치 버튼 자리를 비운 배치 + 슬롯 터치 + 시작 카드 안내·설정 버튼 */
+  setTouchMode(on: boolean): void {
+    this.root.classList.toggle('touch', on);
+  }
+
   /** 멀티플레이 화면이 덮고 있으면 시작 카드 숨김 */
   setMultiplayerCovered(covered: boolean): void {
     this.lockOverlay.classList.toggle('mp-covered', covered);
@@ -477,6 +499,8 @@ export class Hud {
 
   setLocked(locked: boolean): void {
     this.locked = locked;
+    // 조작 중 (터치 모드 슬롯 바 입력은 이때만)
+    this.root.classList.toggle('playing', locked);
     // 결과 화면이 떠 있으면 시작 안내 카드는 숨김 (결과 화면의 버튼으로 다시 시작)
     this.lockOverlay.classList.toggle('hidden', locked || this.resultShown);
   }
@@ -818,6 +842,13 @@ export class Hud {
         el.querySelector('b')!.textContent = s.key;
         el.querySelector('.slot-name')!.textContent = s.name;
         el.title = s.name;
+        // 터치 모드에서만 눌림 (PC는 HUD가 입력을 받지 않음)
+        el.addEventListener('pointerdown', (e) => {
+          if (!this.root.classList.contains('touch')) return;
+          e.preventDefault();
+          e.stopPropagation();
+          this.onSlotTap?.(Number(s.key) - 1);
+        });
         this.slotsEl.appendChild(el);
       }
     }
