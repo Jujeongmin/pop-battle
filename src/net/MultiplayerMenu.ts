@@ -119,7 +119,7 @@ export class MultiplayerMenu {
     c.append(el('div', 'mp-kicker', 'POP! BATTLE'), el('h2', 'mp-title', 'MULTIPLAYER TEST'));
     const s = this.host.session();
     if (v === 'busy') {
-      c.append(el('p', 'mp-status', '서버에 연결하는 중…'));
+      c.append(el('p', 'mp-status', s?.inRoom ? '처리하는 중…' : '서버에 연결하는 중…'));
       return;
     }
     if (v === 'home') return this.renderHome(c, s);
