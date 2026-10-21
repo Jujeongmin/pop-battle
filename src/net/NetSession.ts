@@ -30,6 +30,26 @@ export function displayCode(roomId: string | null): string {
   return roomId ? roomId.replace(/^pb-/, '').toUpperCase() : '';
 }
 
+/** 마지막 룸 (새로고침 뒤 "다시 입장"용, 탭 단위) */
+const LAST_ROOM_KEY = 'popbattle.lastRoom';
+
+function readLastRoom(): string | null {
+  try {
+    return sessionStorage.getItem(LAST_ROOM_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeLastRoom(id: string | null): void {
+  try {
+    if (id) sessionStorage.setItem(LAST_ROOM_KEY, id);
+    else sessionStorage.removeItem(LAST_ROOM_KEY);
+  } catch {
+    /* 저장소를 못 쓰면 새로고침 뒤 복귀 버튼만 안 뜸 */
+  }
+}
+
 const JOIN_ERRORS: Record<string, string> = {
   full: `방이 가득 찼어요 (${NET_MAX_PLAYERS}/${NET_MAX_PLAYERS})`,
   not_found: '방을 찾을 수 없어요 (코드 확인, 또는 방이 사라짐)',
@@ -83,7 +103,9 @@ export class NetSession {
   /** 마지막 입장 실패·연결 오류 (UI 표시용, 서버가 준 원인 그대로) */
   lastError = '';
   /** 마지막으로 들어갔던 룸 (재입장용) */
-  lastRoomId: string | null = null;
+  lastRoomId: string | null = readLastRoom();
+  /** 이번 매치 제한 시간 (서버, ms) */
+  timeLimitMs = 0;
   /** 다른 플레이어 입장·퇴장·끊김 알림 (화면 토스트) */
   onNotice: ((text: string) => void) | null = null;
   /** 직접 나간 계정 (나가기 뒤 SDK가 보내는 연결 끊김 알림은 무시) */
@@ -107,6 +129,20 @@ export class NetSession {
     addEventListener('pagehide', () => {
       if (this.inRoom) this.client.fire('bye');
     });
+  }
+
+  /**
+   * 테스트 이벤트 로그: 시간·룸·나·이벤트·상태값. 패널 로그에는 모두, 브라우저 콘솔에는 console이 true인 것만 (이동 패킷은 남기지 않음).
+   * 계정은 앞뒤만, 인증 토큰은 다루지 않음
+   */
+  logEvent(event: string, data: Record<string, unknown> = {}, console_ = true): void {
+    const short = (v: unknown) => (typeof v === 'string' && v.length > 14 && v.startsWith('0x') ? `${v.slice(0, 6)}…${v.slice(-4)}` : v);
+    const body = Object.entries(data)
+      .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : short(v)}`)
+      .join(' ');
+    const line = `[${event}] room=${this.roomId ?? this.lastRoomId ?? '-'} me=${short(this.me) || '-'} ${body}`;
+    this.client.addLog('info', line);
+    if (console_) console.info(`[net] ${new Date().toISOString()} ${line}`);
   }
 
   /** 서버 시각 추정 (ms) */
@@ -150,6 +186,7 @@ export class NetSession {
   async createRoom(characterId: string, mode: NetMode = 'test'): Promise<boolean> {
     const ok = await this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('createRoom')).roomId);
     if (ok && this.mode !== mode) await this.setMode(mode);
+    if (ok) this.logEvent('Room Created', { mode });
     return ok;
   }
 
@@ -192,8 +229,23 @@ export class NetSession {
   }
 
   /** 방장만: 매치 시작 (서버가 모드별 인원·팀 확인 후 카운트다운·종료 시각을 룸에 공유) */
-  async startMatch(): Promise<{ ok: boolean; reason?: string }> {
-    return this.hostCall('startMatch', []);
+  async startMatch(timeLimitSec?: number): Promise<{ ok: boolean; reason?: string }> {
+    return this.hostCall('startMatch', timeLimitSec ? [{ timeLimitSec }] : []);
+  }
+
+  /** 끊긴 뒤 같은 룸으로 다시 입장 (같은 계정이면 서버가 자리·팀·기록을 되살림) */
+  async rejoin(characterId: string): Promise<boolean> {
+    const id = this.lastRoomId;
+    if (!id) return false;
+    this.logEvent('Reconnection Attempted', { room: id });
+    const ok = await this.joinByCode(characterId, id);
+    this.logEvent(ok ? 'Reconnected' : 'Reconnection Failed', ok ? { slot: this.slot, phase: this.matchPhase } : { reason: this.lastError });
+    // 방이 이미 사라졌으면 복귀 버튼을 지움
+    if (!ok && this.lastError === JOIN_ERRORS.not_found) {
+      this.lastRoomId = null;
+      writeLastRoom(null);
+    }
+    return ok;
   }
 
   /** 직접 나가기: 서버에 먼저 알려 상대 화면에서 바로 사라지게 (SDK leaveRoom만 쓰면 30초 유예) */
@@ -231,9 +283,10 @@ export class NetSession {
       this.slot = hello.slot;
       this.phase = 'in-room';
       this.lastRoomId = roomId;
+      writeLastRoom(roomId);
       this.applyRoom(hello);
       this.applyPlayers(hello.players);
-      this.client.addLog('info', `자리 ${hello.slot} · 참가자 ${Object.keys(hello.players).length}명 · 방장 ${hello.host ?? '-'} · ${hello.mode} · ${hello.phase}`);
+      this.logEvent('Room Joined', { slot: hello.slot, players: Object.keys(hello.players).length, host: hello.host, mode: hello.mode, phase: hello.phase, k: hello.players[this.me]?.k, d: hello.players[this.me]?.d });
       this.events.onRoomInfo();
       return true;
     } catch (e) {
@@ -277,22 +330,32 @@ export class NetSession {
     c.onRoomMessage<{ a: string; s: NetShot[] }>('fx', (m) => {
       if (m.a !== this.me) this.events.onRemoteShots(m.a, m.s);
     }, true);
-    c.onRoomMessage<{ r: NetHitResult[] }>('hits', (m) => this.events.onHits(m.r));
-    c.onRoomMessage<{ a: string; hp: number }>('spawn', (m) => this.events.onSpawn(m.a, m.hp));
+    c.onRoomMessage<{ r: NetHitResult[] }>('hits', (m) => {
+      for (const h of m.r) {
+        // 피해는 패널 로그만 (연사 중 콘솔이 넘치지 않게), 처치는 콘솔에도
+        if (h.kill) this.logEvent('Player Killed', { attacker: h.a ?? h.cause, victim: h.v, weapon: h.w, headshot: h.hd });
+        else this.logEvent('Damage Applied', { attacker: h.a, victim: h.v, weapon: h.w, dmg: h.dmg, hp: h.hp, headshot: h.hd }, false);
+      }
+      this.events.onHits(m.r);
+    });
+    c.onRoomMessage<{ a: string; hp: number }>('spawn', (m) => {
+      this.logEvent('Player Respawned', { account: m.a, hp: m.hp });
+      this.events.onSpawn(m.a, m.hp);
+    });
     c.onRoomMessage<{ account: string; slot: number }>('joined', (m) => {
-      c.addLog('info', `입장: ${m.account} (자리 ${m.slot})`);
+      this.logEvent('Player Joined', { account: m.account, slot: m.slot });
       this.departed.delete(m.account);
       if (m.account !== this.me) this.onNotice?.(`P${m.slot + 1} ${shortName(m.account)} 입장`);
     });
     c.onRoomMessage<{ account: string }>('left', (m) => {
-      c.addLog('info', `퇴장: ${m.account}`);
+      this.logEvent('Player Left', { account: m.account, inMatch: this.inMatch });
       this.departed.add(m.account);
       if (m.account !== this.me) this.onNotice?.(`${shortName(m.account)} 나감${this.inMatch ? ' — 기록은 결과에 남아요' : ''}`);
       this.dropRemote(m.account);
     });
     c.onRoomMessage<{ account: string }>('dc', (m) => {
       if (m.account === this.me || this.departed.has(m.account)) return;
-      c.addLog('warn', `연결 유실(30초 유예): ${m.account}`);
+      this.logEvent('Connection Lost', { account: m.account, grace: '30s' });
       this.lost.add(m.account);
       this.onNotice?.(`${shortName(m.account)} 연결 끊김 — 30초 안에 돌아오지 않으면 퇴장`);
       this.events.onRemoteDisconnect(m.account);
@@ -308,7 +371,12 @@ export class NetSession {
   private applyRoom(state: Partial<NetRoomState>): void {
     if (state.host !== undefined) this.host = state.host;
     if (state.mode) this.mode = state.mode;
+    if (state.phase && state.phase !== this.matchPhase && this.inRoom) {
+      if (state.phase === 'countdown') this.logEvent('Match Started', { mode: state.mode ?? this.mode, startAt: state.startAt, endAt: state.endAt, timeLimitMs: state.timeLimitMs });
+      if (state.phase === 'result') this.logEvent('Match Ended', { reason: state.result?.reason, teamScore: state.result?.teamScore, winners: state.result?.winners.length, draw: state.result?.draw });
+    }
     if (state.phase) this.matchPhase = state.phase;
+    if (state.timeLimitMs !== undefined) this.timeLimitMs = state.timeLimitMs;
     if (state.startAt !== undefined) this.startAt = state.startAt;
     if (state.endAt !== undefined) this.endAt = state.endAt;
     if (state.teamScore) this.teamScore = state.teamScore;
@@ -332,6 +400,10 @@ export class NetSession {
 
   private handleLeft(reason: string, byUser = false): void {
     if (this.phase === 'lobby') return;
+    // 연결이 끊겨 나온 경우에도 룸 구독을 정리 (안 하면 다시 들어갈 때 구독이 겹쳐 탄 연출·명중 이벤트가 두 번 처리됨)
+    this.client.dropRoom();
+    if (byUser) writeLastRoom(null);
+    else if (this.phase === 'in-room') this.logEvent('Connection Lost', { reason, self: true });
     this.phase = 'lobby';
     this.slot = -1;
     this.host = null;

@@ -1,6 +1,6 @@
 // 멀티플레이 테스트 HUD (검증용 최소 정보). 측정하지 못한 값은 '-'로 두고 임의 값을 넣지 않는다.
 import { displayCode, type NetSession } from './NetSession';
-import { NET_MAX_PLAYERS } from './shared/protocol';
+import { NET_MAX_PLAYERS, NET_MODE_RULES } from './shared/protocol';
 
 export class NetTestHud {
   readonly root = document.createElement('div');
@@ -10,6 +10,7 @@ export class NetTestHud {
     container: HTMLElement,
     private readonly session: NetSession,
     private readonly localHp: () => { hp: number; max: number },
+    private readonly fps: () => number,
   ) {
     this.root.className = 'net-test-hud';
     container.appendChild(this.root);
@@ -53,6 +54,9 @@ export class NetTestHud {
       ['Room', displayCode(s.roomId) || '-'],
       ['Player', s.slot >= 0 ? `P${s.slot + 1} · ${short(s.me)}${s.isHost ? ' ★' : ''}` : short(s.me) || '-'],
       ['Players', `${Object.keys(s.players).length}/${NET_MAX_PLAYERS}`],
+      ['Mode', NET_MODE_RULES[s.mode].short],
+      ['Match', `${s.matchPhase}${s.endAt > 0 && s.inMatch ? ` · 남은 ${Math.max(0, Math.ceil((s.endAt - Math.max(s.serverNow(), s.startAt)) / 1000))}s (서버)` : ''}${s.timeLimitMs > 0 && s.timeLimitMs !== NET_MODE_RULES[s.mode].timeLimitMs ? ' [테스트 시간]' : ''}`],
+      ['FPS', String(Math.round(this.fps()))],
       ['Server', online ? 'Connected' : 'Disconnected', online ? 'ok' : 'bad'],
       ['RTT', k.rtt.samples > 0 ? `${Math.round(k.rtt.last)}ms (평균 ${Math.round(k.rtt.avg)})${sim ? ' SIM' : ''}` : '-'],
       ['My HP', me ? `${Math.round(lh.hp)}/${lh.max}${me.dead ? ' 사망' : ''}` : '-'],

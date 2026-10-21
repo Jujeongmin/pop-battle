@@ -33,6 +33,9 @@ export const NET_MODE_RULES: Record<NetMode, NetModeRule> = {
   test: { label: '자유 테스트', short: 'TEST', requiredPlayers: NET_MIN_PLAYERS, timeLimitMs: 0, scoreToWin: 0, teams: false },
 };
 
+/** 개발 빌드 테스트용 제한 시간 범위 (초). 기본 규칙(3분)은 그대로 */
+export const NET_TEST_TIME_LIMIT_SEC = { min: 20, max: 180 } as const;
+
 export function isNetMode(m: unknown): m is NetMode {
   return m === 'tdm' || m === 'ffa' || m === 'test';
 }
@@ -242,6 +245,8 @@ export interface NetRoomState {
   startAt: number;
   /** 제한 시간 끝 (서버 ms, 0 = 없음) */
   endAt: number;
+  /** 이번 매치 제한 시간 (ms, 0 = 없음). 기본은 모드 규칙, 개발 빌드 테스트용으로 짧게 시작할 수 있음 */
+  timeLimitMs: number;
   teamScore: Record<NetTeam, number>;
   result: NetMatchResult | null;
   /** 매치 중 나간 사람 기록 (결과에 포함) */

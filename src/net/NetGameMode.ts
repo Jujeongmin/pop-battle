@@ -117,6 +117,9 @@ export class NetGameMode {
     for (const [acc, r] of this.remotes) {
       // 연결 유실(30초 유예) 중인 상대는 숨김·판정 제외 (상태가 다시 오면 복구, 유예가 끝나면 퇴장으로 제거)
       r.setHidden(this.session.isLost(acc));
+      // 리스폰 보호 (서버 기록 기준) → 이름표 보호 표시
+      const rec = this.session.players[acc];
+      r.label.protected = !!rec && !rec.dead && rec.prot > this.session.serverNow();
       const buf = this.session.remotes.get(acc);
       r.update(dt, buf ? buf.sample(renderTime) : null, cam);
     }

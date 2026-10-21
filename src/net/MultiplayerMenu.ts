@@ -2,7 +2,7 @@
 // 대기실(팀·준비 상태·방장 Start Match) · 진행 중 일시정지 · 결과 화면 · 연결 끊김.
 // 표시는 전부 서버가 확인한 상태(NetSession)만 읽는다 — 클라이언트가 임의로 성공·결과를 만들지 않음.
 import { displayCode, type NetSession } from './NetSession';
-import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEAM_SIZE, type NetMode, type NetTeam } from './shared/protocol';
+import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEAM_SIZE, NET_TEST_TIME_LIMIT_SEC, type NetMode, type NetTeam } from './shared/protocol';
 
 export interface MultiplayerMenuHost {
   /** 세션 (첫 연결 전에는 null) */
@@ -25,7 +25,10 @@ export interface MultiplayerMenuHost {
   join(code: string): Promise<void>;
   setMode(mode: NetMode): Promise<void>;
   switchTeam(): Promise<void>;
-  start(): Promise<void>;
+  /** timeLimitSec: 개발 빌드 테스트용 제한 시간 (없으면 모드 규칙) */
+  start(timeLimitSec?: number): Promise<void>;
+  /** 새로고침 전에 있던 룸 코드 (같은 탭) */
+  lastRoomCode(): string | null;
   toLobby(): Promise<void>;
   leave(): Promise<void>;
   rejoin(): Promise<void>;
@@ -65,6 +68,8 @@ export class MultiplayerMenu {
   private codeValue = '';
   private lastKey = '';
   private createMode: NetMode = 'tdm';
+  /** 개발 빌드: 테스트용 제한 시간 (0 = 기본 3분) */
+  private testTime = 0;
 
   constructor(
     container: HTMLElement,
@@ -134,7 +139,7 @@ export class MultiplayerMenu {
           .map(([a, p]) => `${a}:${p.slot}:${p.char}:${p.team}:${p.k}:${p.d}:${s.isLost(a)}:${s.remotes.has(a)}`)
           .join('|')
       : '';
-    return [v, this.notice, this.createMode, s?.roomId, s?.host, s?.mode, s?.matchPhase, s?.result?.endedAt, s?.lastError, s?.client.status, ps, this.host.matchStarted(), this.host.characterName()].join('#');
+    return [v, this.notice, this.createMode, this.testTime, this.host.lastRoomCode(), s?.roomId, s?.host, s?.mode, s?.matchPhase, s?.result?.endedAt, s?.lastError, s?.client.status, ps, this.host.matchStarted(), this.host.characterName()].join('#');
   }
 
   private render(v: View): void {
@@ -175,6 +180,9 @@ export class MultiplayerMenu {
       el('p', 'mp-hint', modeRuleText(this.createMode)),
     );
     const create = this.button('Create Room', 'mp-primary', () => this.run(() => this.host.create(this.createMode)));
+    // 새로고침·끊김 뒤: 같은 탭에서 마지막으로 있던 룸으로 (진행 중 매치도 같은 계정이면 기록 그대로 복귀)
+    const last = this.host.lastRoomCode();
+    if (last) c.append(this.button(`이전 방 다시 입장 (${displayCode(last)})`, 'mp-primary', () => this.run(() => this.host.rejoin())));
     const row = el('div', 'mp-join');
     const input = el('input', 'mp-code-input');
     input.placeholder = 'Room Code';
@@ -273,7 +281,8 @@ export class MultiplayerMenu {
       const enough = n >= rule.requiredPlayers && (!rule.teams || (blue === NET_TEAM_SIZE && red === NET_TEAM_SIZE));
       const ready = enough && !anyLost;
       if (s.isHost) {
-        const start = this.button('Start Match', 'mp-primary', () => this.run(() => this.host.start()));
+        if (import.meta.env.DEV && rule.timeLimitMs > 0) c.append(this.testTimePicker());
+        const start = this.button('Start Match', 'mp-primary', () => this.run(() => this.host.start(this.testTime || undefined)));
         start.disabled = !ready;
         const hint = anyLost
           ? '연결이 끊긴 플레이어가 돌아오거나 나갈 때까지 기다려요'
@@ -327,6 +336,22 @@ export class MultiplayerMenu {
     c.append(table);
     c.append(this.button('Return to Lobby', 'mp-primary', () => this.run(() => this.host.toLobby())));
     c.append(this.button('Leave Room', 'mp-ghost', () => this.run(() => this.host.leave())));
+  }
+
+  /** 개발 빌드 전용: 시간 종료·무승부 확인용 짧은 제한 시간 (기본 규칙 3분은 그대로) */
+  private testTimePicker(): HTMLElement {
+    const row = el('div', 'mp-modes');
+    for (const [label, sec] of [['3분 (기본)', 0], ['60초', 60], [`${NET_TEST_TIME_LIMIT_SEC.min}초`, NET_TEST_TIME_LIMIT_SEC.min]] as const) {
+      row.appendChild(
+        this.button(label, `mp-mode${this.testTime === sec ? ' on' : ''}`, () => {
+          this.testTime = sec;
+          this.refresh(true);
+        }),
+      );
+    }
+    const wrap = el('div');
+    wrap.append(el('div', 'mp-label', '테스트용 제한 시간 (개발 빌드에서만)'), row);
+    return wrap;
   }
 
   private button(label: string, cls: string, fn: () => unknown): HTMLButtonElement {

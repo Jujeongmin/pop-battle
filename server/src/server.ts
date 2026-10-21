@@ -20,6 +20,7 @@ import {
   NET_MODE_RULES,
   NET_ROOM_PREFIX,
   NET_TEAM_SIZE,
+  NET_TEST_TIME_LIMIT_SEC,
   NET_TIMING,
   NET_VALIDATION,
   NET_WEAPONS,
@@ -51,6 +52,15 @@ interface RoomMirror {
   phase: NetMatchPhase;
   mode: NetMode;
   t: number;
+  /** 이번 매치 중 나간 계정 (같은 계정은 진행 중에도 돌아올 수 있음) */
+  gone?: string[];
+}
+
+/** 서버 로그 (Verse8 서버 콘솔). 이동 패킷은 남기지 않음, 계정은 앞뒤만 */
+function slog(event: string, roomId: string, data: Record<string, unknown> = {}): void {
+  const short = (a: unknown) => (typeof a === 'string' && a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+  const d = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, k === 'account' || k === 'attacker' || k === 'victim' ? short(v) : v]));
+  console.log(`[pop] ${new Date().toISOString()} ${event} room=${roomId} ${JSON.stringify(d)}`);
 }
 
 /** 'ABC123' 또는 'pb-abc123' → 'pb-abc123' */
@@ -106,11 +116,11 @@ function assignTeams(players: NetPlayers, mode: NetMode): void {
 }
 
 function emptyRoom(): NetRoomState {
-  return { players: {}, host: null, mode: 'test', phase: 'lobby', startAt: 0, endAt: 0, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} };
+  return { players: {}, host: null, mode: 'test', phase: 'lobby', startAt: 0, endAt: 0, timeLimitMs: 0, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} };
 }
 
 async function readRoom(): Promise<NetRoomState> {
-  const st = ((await $room.getRoomState(['players', 'host', 'mode', 'phase', 'startAt', 'endAt', 'teamScore', 'result', 'gone'])) || {}) as Partial<NetRoomState>;
+  const st = ((await $room.getRoomState(['players', 'host', 'mode', 'phase', 'startAt', 'endAt', 'timeLimitMs', 'teamScore', 'result', 'gone'])) || {}) as Partial<NetRoomState>;
   const r = emptyRoom();
   return {
     players: st.players || r.players,
@@ -119,6 +129,7 @@ async function readRoom(): Promise<NetRoomState> {
     phase: st.phase === 'countdown' || st.phase === 'playing' || st.phase === 'result' ? st.phase : 'lobby',
     startAt: st.startAt || 0,
     endAt: st.endAt || 0,
+    timeLimitMs: st.timeLimitMs || 0,
     teamScore: st.teamScore || r.teamScore,
     result: st.result ?? null,
     gone: st.gone || {},
@@ -128,7 +139,7 @@ async function readRoom(): Promise<NetRoomState> {
 /** 룸 상태 전체 저장 + 글로벌 요약 갱신. 룸 락 안에서 호출 */
 async function saveRoom(roomId: string, r: NetRoomState): Promise<void> {
   await $room.updateRoomState({ ...r }, { returnState: false });
-  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, t: Date.now() };
+  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, t: Date.now(), gone: Object.keys(r.gone) };
   await $global.updateGlobalState({ [MIRROR(roomId)]: m });
 }
 
@@ -281,7 +292,9 @@ export class Server {
     const users = await $global.countRoomUsers(id);
     if (!m || users <= 0 || m.n <= 0) return { ok: false, reason: 'not_found', count: 0 };
     if (m.n >= NET_MAX_PLAYERS) return { ok: false, reason: 'full', count: m.n, mode: m.mode };
-    if (m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing')) return { ok: false, reason: 'in_progress', count: m.n, mode: m.mode };
+    // 진행 중인 TDM·FFA: 이번 매치에서 나갔던 같은 계정(새로고침·끊김)만 돌아올 수 있음
+    const returning = !!m.gone?.includes($sender.account);
+    if (m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing') && !returning) return { ok: false, reason: 'in_progress', count: m.n, mode: m.mode };
     return { ok: true, roomId: id, count: m.n, phase: m.phase, mode: m.mode };
   }
 
@@ -315,15 +328,18 @@ export class Server {
       return s;
     });
     if (slot >= 0) $room.broadcastToRoom('joined', { account, slot });
+    slog('join', roomId, { account, slot });
   }
 
   async onRoomDisconnect(roomId: string, account: string): Promise<void> {
     // 30초 유예: 아직 룸 안 (재접속하면 그대로 이어짐)
     $room.broadcastToRoom('dc', { account, roomId });
+    slog('disconnect', roomId, { account });
   }
 
   async onRoomLeave(roomId: string, account: string): Promise<void> {
     if (await this.removePlayer(roomId, account)) $room.broadcastToRoom('left', { account });
+    slog('leave', roomId, { account });
   }
 
   async onRoomDestroy(roomId: string): Promise<void> {
@@ -348,6 +364,7 @@ export class Server {
       else if (r.phase === 'countdown' && t >= r.startAt) r.phase = 'playing';
       else return;
       await saveRoom(roomId, r);
+      if (r.phase === 'result') slog('match_end', roomId, { reason: 'time', mode: r.mode, teamScore: r.teamScore, winners: r.result?.winners.length, draw: r.result?.draw });
     });
   }
 
@@ -368,8 +385,23 @@ export class Server {
 
   /** 새 참가자 자리·팀 배정 (락 안). @returns 자리, 못 들어오면 -1 */
   private admit(r: NetRoomState, account: string): number {
+    const inMatch = r.phase === 'countdown' || r.phase === 'playing';
+    // 이번 매치에서 나갔던 같은 계정(새로고침·30초 넘는 끊김): 기록(자리·팀·킬/데스)을 되살려 복귀
+    const back = inMatch ? r.gone[account] : undefined;
+    if (back) {
+      const used = new Set(Object.values(r.players).map((p) => p.slot));
+      const slot = used.has(back.slot) ? freeSlot(r.players) : back.slot;
+      if (slot < 0) return -1;
+      const rec = newRecord(slot, Date.now());
+      const team = back.team && teamCount(r.players, back.team) < NET_TEAM_SIZE ? back.team : NET_MODE_RULES[r.mode].teams ? pickTeam(r.players) : null;
+      Object.assign(rec, { char: back.char, k: back.k, d: back.d, team });
+      r.players[account] = rec;
+      delete r.gone[account];
+      if (!r.host || !r.players[r.host]) r.host = pickHost(r.players);
+      return slot;
+    }
     // TDM·FFA 매치 중 새 참가자는 받지 않음 (자유 테스트는 중간 입장 허용)
-    if (r.mode !== 'test' && (r.phase === 'countdown' || r.phase === 'playing')) return -1;
+    if (r.mode !== 'test' && inMatch) return -1;
     const slot = freeSlot(r.players);
     // 정원 초과: onRoomJoin에서 거절하면 SDK가 재시도만 반복함(문서) → 자리 없이 두고 클라이언트가 스스로 나감
     if (slot < 0) return -1;
@@ -449,9 +481,10 @@ export class Server {
 
   /**
    * 방장: 매치 시작. TDM = 4명·팀 2/2, FFA = 4명, 자유 테스트 = 2명 이상.
-   * 기록·체력 초기화 → 3초 카운트다운(startAt)·제한 시간(endAt)을 서버 시각으로 공유 → 모든 클라이언트가 같은 시점에 시작
+   * 기록·체력 초기화 → 3초 카운트다운(startAt)·제한 시간(endAt)을 서버 시각으로 공유 → 모든 클라이언트가 같은 시점에 시작.
+   * opts.timeLimitSec: 테스트용 제한 시간 (20~180초, 클라이언트는 개발 빌드에서만 보냄). 없으면 모드 규칙(3분)
    */
-  async startMatch(): Promise<{ ok: boolean; reason?: string }> {
+  async startMatch(opts?: { timeLimitSec?: number }): Promise<{ ok: boolean; reason?: string }> {
     if (!roomOf()) return { ok: false, reason: 'not_in_room' };
     const me = $sender.account;
     const roomId = roomOf()!;
@@ -465,12 +498,16 @@ export class Server {
       if (rule.teams && (teamCount(r.players, 'BLUE') !== NET_TEAM_SIZE || teamCount(r.players, 'RED') !== NET_TEAM_SIZE)) return { ok: false, reason: 'teams_unbalanced' };
       const now = Date.now();
       const startAt = now + NET_TIMING.countdownMs;
+      const t = opts?.timeLimitSec;
+      const custom = typeof t === 'number' && Number.isFinite(t) && t >= NET_TEST_TIME_LIMIT_SEC.min && t <= NET_TEST_TIME_LIMIT_SEC.max && rule.timeLimitMs > 0;
+      const limit = custom ? Math.round(t) * 1000 : rule.timeLimitMs;
       for (const p of Object.values(r.players)) {
         Object.assign(p, { hp: p.max, dead: false, respawnAt: 0, k: 0, d: 0, prot: startAt });
         delete p.rb;
       }
-      Object.assign(r, { phase: 'countdown', startAt, endAt: rule.timeLimitMs > 0 ? startAt + rule.timeLimitMs : 0, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} });
+      Object.assign(r, { phase: 'countdown', startAt, endAt: limit > 0 ? startAt + limit : 0, timeLimitMs: limit, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} });
       await saveRoom(roomId, r);
+      slog('match_start', roomId, { mode: r.mode, players: Object.keys(r.players).length, timeLimitMs: limit, custom });
       return { ok: true };
     });
   }
@@ -679,9 +716,12 @@ export class Server {
         }
       }
       // 피해 처리는 자주 일어나므로 룸 상태만 쓰고, 종료(단계 변경) 때만 글로벌 요약까지
-      if (r.phase === 'result') await saveRoom(roomId, r);
-      else if (changed) await $room.updateRoomState({ players, teamScore: r.teamScore }, { returnState: false });
+      if (r.phase === 'result') {
+        await saveRoom(roomId, r);
+        slog('match_end', roomId, { reason: 'score', mode: r.mode, teamScore: r.teamScore, winners: r.result?.winners.length, draw: r.result?.draw });
+      } else if (changed) await $room.updateRoomState({ players, teamScore: r.teamScore }, { returnState: false });
     });
+    for (const k of results.filter((x) => x.kill)) slog('kill', roomId, { attacker: k.a, victim: k.v, weapon: k.w, headshot: k.hd });
     if (results.length > 0) $room.broadcastToRoom('hits', { r: results });
     if (rejected.length > 0) $room.sendMessageToUser('rej', me, { r: rejected });
   }

@@ -221,6 +221,12 @@ export class NetClient {
     this.addLog('info', `룸 입장 ${roomId}`);
   }
 
+  /** 룸 구독만 정리 (연결이 이미 끊겼을 때). 다시 들어가면 구독이 두 번 걸리지 않게 */
+  dropRoom(): void {
+    for (const off of this.offs.splice(0)) off();
+    this.roomId = null;
+  }
+
   leaveRoom(): void {
     for (const off of this.offs.splice(0)) off();
     if (this.roomId && this.server) {

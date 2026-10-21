@@ -72,6 +72,15 @@ import { TestTarget } from '../world/TestTarget';
 import { KeyboardMouseInput } from './Input';
 import { JoystickAutoSprint } from './JoystickAutoSprint';
 
+/** 새로고침 뒤 메뉴에 "이전 방 다시 입장"을 보이기 위한 마지막 룸 (NetSession과 같은 키, 탭 단위) */
+function readLastRoomCode(): string | null {
+  try {
+    return sessionStorage.getItem('popbattle.lastRoom');
+  } catch {
+    return null;
+  }
+}
+
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 
@@ -1533,13 +1542,12 @@ export class Game {
       },
       rejoin: async () => {
         const net = this.ensureNet();
-        const id = net.session.lastRoomId;
-        if (!id) return;
         this.netLeftByUser = false;
-        if (await net.session.joinByCode(this.avatar.character.id, id)) this.enterNetGame();
+        if (await net.session.rejoin(this.avatar.character.id)) this.enterNetGame();
       },
-      start: async () => {
-        const r = await this.ensureNet().session.startMatch();
+      lastRoomCode: () => this.net?.session.lastRoomId ?? readLastRoomCode(),
+      start: async (timeLimitSec) => {
+        const r = await this.ensureNet().session.startMatch(timeLimitSec);
         if (!r.ok) {
           this.mpMenu?.setNotice(`시작 실패: ${this.netReason(r.reason)}`);
           return;
@@ -1593,7 +1601,7 @@ export class Game {
     this.applyNetMode();
     this.hud.setCharacter(this.avatar.character.id, true);
     this.hud.setModeLine('멀티플레이 (최대 4인) · 봇 없음');
-    this.netHud = new NetTestHud(this.container, this.ensureNet().session, () => ({ hp: this.combatant.health.hp, max: this.combatant.health.maxHp }));
+    this.netHud = new NetTestHud(this.container, this.ensureNet().session, () => ({ hp: this.combatant.health.hp, max: this.combatant.health.maxHp }), () => this.fps);
     // 다른 플레이어 퇴장·연결 끊김을 화면에 알림
     this.ensureNet().session.onNotice = (text) => this.netHud?.toast(text);
     this.refreshMultiplayerMenu();

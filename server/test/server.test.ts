@@ -424,6 +424,8 @@ describe('free for all', () => {
     kills += 3;
     server.connect({ account: 'dave', roomId: ROOM });
     expect((await server.bye()).ok).toBe(true);
+    // 진행 중 매치: 새 계정은 거부 (나간 dave 자신은 돌아올 수 있음 — reconnection 테스트)
+    server.connect({ account: 'erin', roomId: '__no_room__' });
     expect((await server.findRoom(ROOM)).reason).toBe('in_progress');
     while (kills < 15) {
       await respawnAll(server, ['bob', 'carol']);
@@ -454,5 +456,69 @@ describe('free for all', () => {
     const st = await roomState(server);
     expect(st.players.bob.d).toBe(1);
     expect(Object.values(st.players).reduce((n: number, p: any) => n + p.k, 0)).toBe(0);
+  });
+});
+
+describe('match timer and reconnection', () => {
+  test('test time limit outside 20..180 s falls back to the 3 min rule', async (server) => {
+    expect((await room4(server, 'tdm')).ok).toBe(true);
+    expect((await server.startMatch({ timeLimitSec: 5 })).ok).toBe(true);
+    const r = await roomState(server);
+    expect(r.timeLimitMs).toBe(180000);
+    expect(r.endAt - r.startAt).toBe(180000);
+  });
+
+  test('TDM time up at 20 s: tie → DRAW, players can no longer be damaged', async (server) => {
+    expect((await room4(server, 'tdm')).ok).toBe(true);
+    expect((await server.startMatch({ timeLimitSec: 20 })).ok).toBe(true);
+    const r = await roomState(server);
+    expect(r.timeLimitMs).toBe(20000);
+    expect(r.endAt - r.startAt).toBe(20000);
+    spin(r.endAt - Date.now() + 50);
+    await server.simulateTick(ROOM, 200);
+    const end = await roomState(server);
+    expect(end.phase).toBe('result');
+    expect(end.result.reason).toBe('time');
+    expect(end.result.draw).toBe(true);
+    expect(end.result.winnerTeam).toBe(null);
+  });
+
+  test('FFA time up with tied leaders → DRAW, winners are both leaders', async (server) => {
+    expect((await room4(server, 'ffa')).ok).toBe(true);
+    expect((await server.startMatch({ timeLimitSec: 20 })).ok).toBe(true);
+    spin(COUNTDOWN);
+    await shotgunKill(server, 'alice', 'bob');
+    await shotgunKill(server, 'carol', 'dave');
+    const r = await roomState(server);
+    spin(r.endAt - Date.now() + 50);
+    await server.simulateTick(ROOM, 200);
+    const end = await roomState(server);
+    expect(end.result.reason).toBe('time');
+    expect(end.result.draw).toBe(true);
+    expect(end.result.winners.sort()).toEqual(['alice', 'carol']);
+  });
+
+  test('same account returns into a running TDM after leaving (refresh): slot, team, K/D restored; others still blocked', async (server) => {
+    expect((await room4(server, 'tdm')).ok).toBe(true);
+    await server.startMatch();
+    spin(COUNTDOWN);
+    await shotgunKill(server, 'alice', 'bob');
+    // bob 새로고침 → 즉시 퇴장
+    await server.simulateLeave(ROOM, 'bob');
+    let r = await roomState(server);
+    expect(r.players.bob).toBe(undefined);
+    expect(r.gone.bob.d).toBe(1);
+    // 같은 계정은 찾기 허용, 다른 계정은 진행 중이라 거부
+    server.connect({ account: 'bob', roomId: '__no_room__' });
+    expect((await server.findRoom(ROOM)).ok).toBe(true);
+    server.connect({ account: 'erin', roomId: '__no_room__' });
+    expect((await server.findRoom(ROOM)).reason).toBe('in_progress');
+    await server.simulateJoin(ROOM, 'bob');
+    r = await roomState(server);
+    expect(r.players.bob.slot).toBe(1);
+    expect(r.players.bob.team).toBe('RED');
+    expect(r.players.bob.d).toBe(1);
+    expect(r.gone.bob).toBe(undefined);
+    expect(r.teamScore.BLUE).toBe(1);
   });
 });
