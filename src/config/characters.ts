@@ -133,6 +133,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
       shotgun: { weaponPositionOffset: [0.02, 0.02, 0.07] },
       // 스나이퍼는 개머리판이 길어 볼트 당김·반동 밀림 때 등 뒤로 나옴 → 시각용 밀림만 0.6배 (실제 반동·명중률 무관)
       sniper: { weaponPositionOffset: [0, 0.02, 0.1], recoilPullScale: 0.6 },
+      // 뿅망치: 기준 자세 그대로 (팔꿈치 약 118°, 손목 약 11°)
     }),
   white: def('white', 'WHITE', 'character_white.glb', [0.69066, 0.7466],
     { maxHp: 120, speed: 1.15, hitSize: 0.9 },
@@ -142,10 +143,13 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
       shotgun: { weaponPositionOffset: [0, 0, -0.04] },
       sniper: { reloadPositionOffset: [0, 0.04, 0] },
       pistol: { reloadPositionOffset: [0, 0.04, 0] },
+      // 뿅망치: 보정 없음. 긴 팔·좁은 어깨라 손이 허리 옆에서 팔이 거의 펴진 채(약 156°) 들고 있음 — 위치를 올려도 팔 각도가 거의 안 바뀜 (2026-10-21 화면 확인, 자연스러운 편)
     }),
   yellow: def('yellow', 'YELLOW', 'character-yellow-adjusted.glb', [0.63869, 0.49443],
     { maxHp: 110, speed: 1.0, hitSize: 1.0 },
-    { height: 1.0, shape: '밸런스형: 표준 키·체형 (기준)' }),
+    { height: 1.0, shape: '밸런스형: 표준 키·체형 (기준)' },
+    // 뿅망치: 손 3cm 위 (팔꿈치 약 119°)
+    { melee: { weaponPositionOffset: [0, 0.03, 0] } }),
   red: def('red', 'RED', 'character_6.glb', [0.1994, 0.16424],
     { maxHp: 120, speed: 1.05, hitSize: 1.0 },
     { height: 0.98, shape: '전투형: 넓은 어깨·탄탄한 상체·두꺼운 팔·좁은 허리' },
@@ -154,11 +158,17 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
       shotgun: { reloadPositionOffset: [-0.04, 0.04, 0] },
       sniper: { reloadPositionOffset: [0, 0.04, 0] },
       pistol: { reloadPositionOffset: [0, 0.04, 0] },
+      // 뿅망치: 짧은 팔(위팔+아래팔 약 0.19m)·넓은 어깨 → 손 6cm 위·4cm 뒤 (팔꿈치 155° → 114°)
+      melee: { weaponPositionOffset: [0, 0.06, -0.04] },
     }),
   pink: def('pink', 'PINK', 'character-pink-adjusted.glb', [0.29128, 0.23691],
     { maxHp: 115, speed: 0.95, hitSize: 1.05 },
     { height: 1.015, shape: '생존형: 둥근 몸통·통통한 배, 짧고 두꺼운 팔다리' },
-    { rifle: { reloadPositionOffset: [-0.04, 0.04, -0.06] } }),
+    {
+      rifle: { reloadPositionOffset: [-0.04, 0.04, -0.06] },
+      // 뿅망치: 짧고 두꺼운 팔 → 손 9cm 위·2cm 안쪽·4cm 뒤 (팔꿈치 157° → 130°)
+      melee: { weaponPositionOffset: [-0.02, 0.09, -0.04] },
+    }),
   black: def('black', 'BLACK', 'character_black.glb', [0.03574, 0.03084],
     { maxHp: 130, speed: 1.0, hitSize: 1.1 },
     { height: 1.1, shape: '최상위 탱커형: 가장 큰 체형·넓은 몸통·큰 배·두꺼운 팔다리' },
@@ -168,6 +178,8 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
       shotgun: { weaponPositionOffset: [0, 0, -0.04], reloadPositionOffset: [-0.04, 0.04, 0] },
       sniper: { reloadPositionOffset: [-0.04, 0.04, 0] },
       pistol: { reloadPositionOffset: [-0.04, 0.08, 0] },
+      // 뿅망치: 큰 몸통·짧은 팔 → 손 9cm 위·5cm 안쪽·4cm 뒤 (팔꿈치 175°(팔이 늘어남) → 약 130°)
+      melee: { weaponPositionOffset: [-0.05, 0.09, -0.04] },
     }),
 };
 

@@ -155,6 +155,8 @@ export class PlayerAvatar {
   private standTwist = 0;
   /** 이번 프레임 근접 공격 상체 비틀림 (위 축 회전, 라디안). 내려찍기 면도 같이 돌림 */
   private swingTorsoYaw = 0;
+  /** 근접 휘두르기에서 손이 내려치는 쪽으로 간 정도 (0 = 평소, 1 = 내려침) — 팔 길이 제한 비율 보간용 */
+  private meleeReach = 0;
   private slideWeight = 0;
   /** 캐릭터 스킨 메시 (로컬 플레이어 가림 처리는 LocalPlayerOcclusion이 따로 만든다. 봇 아바타는 쓰지 않음) */
   readonly bodyMeshes: THREE.Mesh[] = [];
@@ -921,6 +923,11 @@ export class PlayerAvatar {
       aimQ.multiply(_q2.setFromAxisAngle(_v3.set(0, 0, 1), d(m.bolt.rollDeg) * bolt));
     }
 
+    // 근접무기: 손 목표를 이 캐릭터의 팔 길이 안으로 (무기도 같이 따라옴)
+    if (m.swing?.maxArmReach) {
+      const [restFrac, strikeFrac] = m.swing.maxArmReach;
+      this.clampToArmReach(hold, THREE.MathUtils.lerp(restFrac, strikeFrac, this.meleeReach), m.swing.minArmReach ?? 0);
+    }
     // 근접무기: 이동 클립(조깅·점프)이 몸·머리를 앞으로 숙이면 망치 머리가 얼굴로 들어감 → 겹친 만큼 손을 몸 바깥쪽으로 밀어 냄
     if (m.swing?.headPoint) this.avoidHeadOverlap(m, aimQ, hold, bodyQ, s, _v4.addVectors(f.feet, this.headFromFeet));
 
@@ -977,6 +984,7 @@ export class PlayerAvatar {
     let pitch = sw.restPitchDeg;
     let yaw = sw.restYawDeg;
     let reach = 0;
+    this.meleeReach = 0;
     // 수직 내려찍기는 무기 방향을 applyOverheadSwing에서 따로 정함 (여기서는 평소 방향 + 손 이동만)
     const overhead = sw.style === 'overhead';
     if (p > 0) {
@@ -1018,6 +1026,7 @@ export class PlayerAvatar {
       hold.addScaledVector(_v3.set(-1, 0, 0).applyQuaternion(bodyQ), sw.windupLift[0] * lift);
       hold.addScaledVector(_v3.set(0, 0, 1).applyQuaternion(bodyQ), sw.windupLift[2] * lift);
     }
+    this.meleeReach = reach;
     // 내려칠 때 손 이동: strikeOffset(오른쪽, 위, 앞 m)이 있으면 그 값, 없으면 앞으로 strikeReach + 가운데로 0.08
     if (reach > 0) {
       const so = sw.strikeOffset;
@@ -1030,9 +1039,13 @@ export class PlayerAvatar {
         hold.addScaledVector(_v3.set(1, 0, 0).applyQuaternion(bodyQ), 0.08 * reach);
       }
     }
-    if (!sw.swingRollDeg || p <= 0) return 0;
-    const roll = p < sw.windupAt ? ease(0, sw.windupAt) : p < sw.strikeAt ? 1 : 1 - ease(sw.strikeAt, 1);
-    return d(sw.swingRollDeg) * roll;
+    // 손잡이 축 회전(손목 돌림): 들어 올릴 때 swingRollDeg, 내려찍을 때 strikeRollDeg (짧은 팔로 위·아래 자세 모두 손목이 덜 꺾이게)
+    const wr = sw.swingRollDeg ?? 0;
+    const sr = sw.strikeRollDeg ?? wr;
+    if ((wr === 0 && sr === 0) || p <= 0) return 0;
+    if (p < sw.windupAt) return d(wr) * ease(0, sw.windupAt);
+    if (p < sw.strikeAt) return d(THREE.MathUtils.lerp(wr, sr, ease(sw.windupAt, sw.strikeAt)));
+    return d(sr) * (1 - ease(sw.overheadFollowAt ?? sw.strikeAt, 1));
   }
 
   /**
@@ -1051,9 +1064,9 @@ export class PlayerAvatar {
     const right = new THREE.Vector3(-Math.cos(baseYaw), 0, Math.sin(baseYaw));
     const out = d(sw.overheadPlaneOutDeg ?? 0);
     const up = new THREE.Vector3().copy(UP).multiplyScalar(Math.cos(out)).addScaledVector(right, Math.sin(out));
-    // 면에 수직인 축 (평소 자세의 무기 X축과 같은 쪽으로)
+    // 면에 수직인 축: 조준 방향 기준으로 고정 (평소 자세의 무기 X축과 비교해 고르면, 망치가 몸 바로 바깥을 향할 때 그 값이 0 근처라
+    // 상체 비틀기만으로 축이 뒤집혀 휘두르는 도중 손목이 반대로 꺾였음 — 2026-10-21 화면 확인)
     const side = new THREE.Vector3().crossVectors(up, fwd).normalize();
-    if (side.dot(_v3.set(1, 0, 0).applyQuaternion(restQ)) < 0) side.negate();
     const planeQ = (deg: number, outQ: THREE.Quaternion): THREE.Quaternion => {
       const a = d(deg) + basePitch;
       const z = new THREE.Vector3().copy(fwd).multiplyScalar(Math.cos(a)).addScaledVector(up, Math.sin(a));
@@ -1127,6 +1140,25 @@ export class PlayerAvatar {
     this.rotateBoneWorld(this.bones.chest, UP, -d(yaw) * 0.6);
     this.rotateBoneWorld(this.bones.spine, rightAxis, -d(pitch) * 0.4);
     this.rotateBoneWorld(this.bones.chest, rightAxis, -d(pitch) * 0.6);
+  }
+
+  /**
+   * 오른손 목표가 쇄골 시작점에서 (쇄골+위팔+아래팔) × fraction보다 멀면 그 거리까지 쇄골 쪽으로 당긴다.
+   * (팔 IK가 쇄골을 목표 쪽으로 돌리므로 위팔 시작점이 아니라 쇄골 시작점 기준.)
+   * 손 보정(hands.right.shift, 손가락 방향)이 목표를 더 멀리 보내는 캐릭터는 그만큼 빼서 계산
+   */
+  private clampToArmReach(hold: THREE.Vector3, fraction: number, minFraction: number): void {
+    const b = this.bones;
+    const root = b.shoulderR.getWorldPosition(_v4);
+    const clavicle = root.distanceTo(b.upperArmR.getWorldPosition(_v3));
+    const ws = b.upperArmR.getWorldScale(_v3).x;
+    const arm = (this.restOffsets.get(b.lowerArmR)!.length() + this.restOffsets.get(b.handR)!.length()) * ws;
+    const max = (clavicle + arm) * fraction - Math.max(0, this.hands.right.shift);
+    const min = Math.min(max, (clavicle + arm) * minFraction);
+    const d = hold.distanceTo(root);
+    if (d < 1e-4) return;
+    if (d > max) hold.sub(root).multiplyScalar(max / d).add(root);
+    else if (d < min) hold.sub(root).multiplyScalar(min / d).add(root);
   }
 
   /**
