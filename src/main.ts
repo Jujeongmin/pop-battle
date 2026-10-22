@@ -2,11 +2,14 @@ import './style.css';
 import { CAMERA, CHARACTER, MOVEMENT } from './config/gameConfig';
 import { RIFLE, RIFLE_MOUNT } from './config/weapons';
 import { Game } from './core/Game';
+import { installUiDebug } from './ui/UiDebug';
 
 const app = document.getElementById('app')!;
 const loading = document.getElementById('loading');
 
 const game = new Game(app);
+// UI 진단 (Ctrl+Alt+U, 콘솔 __uiDebug()): 로컬·Verse8 에디터 화면 차이 확인용, 배포 빌드에도 포함
+installUiDebug(app);
 game
   .init((text) => {
     if (loading) loading.textContent = text;
