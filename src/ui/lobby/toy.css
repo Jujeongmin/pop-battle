@@ -803,3 +803,31 @@
 .lb-lobby:not(.lb-menu-open) .lb-nav { justify-content: space-between; }
 .lb-lobby:not(.lb-menu-open) .lb-nav-actions { flex: 0 0 auto; width: auto; margin-left: auto; }
 .lb-lobby:not(.lb-menu-open) .lb-nav .lb-nav-play { flex: 0 0 auto; width: clamp(128px, 16vw, 190px); }
+
+/* 준비 중 카드: 좁은 칸(PLAY 모드 격자)에서 글이 한두 글자씩 세로로 꺾이지 않게
+   → 격자 한 줄 전체를 쓰고, 배지는 글 아래 줄로 */
+.lb-lobby .lb-play-grid > .lb-soon { grid-column: 1 / -1; }
+.lb-lobby .lb-soon { grid-template-columns: 38px minmax(0, 1fr); }
+.lb-lobby .lb-soon-copy { min-width: 0; }
+.lb-lobby .lb-soon-copy p { word-break: keep-all; overflow-wrap: anywhere; }
+.lb-lobby .lb-soon .lb-soon-badge { grid-column: 2; justify-self: start; }
+
+/* 패널 본문: 내용이 높으면 줄어들지 말고 본문이 스크롤 (overflow가 있는 줄은 높이 0까지 눌려 카드가 잘렸음) */
+.lb-lobby .lb-panel-body > * { flex-shrink: 0; }
+
+/* 패널 제목: 한글 획이 얇아 외곽선(text-stroke)이 속 빈 글자처럼 보임 → 꽉 찬 흰 글자 + 아래 그림자 */
+.lb-lobby .lb-panel-title { color: #fff; -webkit-text-stroke: 0; text-shadow: 0 2px 0 var(--lb-ink), 0 0 1px var(--lb-ink); letter-spacing: .3px; }
+
+/* 섹션 제목: 연한 띠 + 왼쪽 굵은 줄(문서·대시보드 느낌) 대신 굵은 잉크 글씨 + 노란 마름모 표식 */
+.lb-lobby .lb-section {
+  display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 2px 0;
+  border: 0; background: none; color: var(--lb-ink); font-size: 14px; font-weight: 900; letter-spacing: .2px;
+}
+.lb-lobby .lb-section::before {
+  content: ''; flex: 0 0 auto; width: 9px; height: 9px; border: 2px solid var(--lb-ink); border-radius: 3px;
+  background: var(--lb-yellow); transform: rotate(45deg);
+}
+@media (max-width: 1000px), (max-height: 520px) {
+  .lb-lobby .lb-section { font-size: 12px; gap: 6px; }
+  .lb-lobby .lb-section::before { width: 7px; height: 7px; }
+}

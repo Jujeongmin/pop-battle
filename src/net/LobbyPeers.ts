@@ -53,6 +53,8 @@ export class LobbyPeers {
   private readonly items = new Map<string, Item>();
   private readonly layer = document.createElement('div');
   private disposed = false;
+  /** 정비소(CHARACTER) 쇼케이스 중: 다른 사람 캐릭터·이름표를 숨김 (미리보기 캐릭터와 겹치지 않게) */
+  private hidden = false;
 
   constructor(private readonly ctx: LobbyPeersContext) {
     this.layer.className = 'lobby-nametags';
@@ -97,9 +99,17 @@ export class LobbyPeers {
     for (const acc of [...this.items.keys()]) this.remove(acc);
   }
 
+  /** 다른 사람 캐릭터 잠시 숨기기 (보간·이동 데이터는 계속 받음) */
+  setHidden(hidden: boolean): void {
+    if (this.hidden === hidden) return;
+    this.hidden = hidden;
+    this.layer.style.display = hidden ? 'none' : '';
+    if (hidden) for (const item of this.items.values()) if (item.avatar) item.avatar.root.visible = false;
+  }
+
   /** 보간 지연만큼 늦은 시점의 상태로 자세·위치·이름표 갱신 */
   update(dt: number): void {
-    if (this.items.size === 0) return;
+    if (this.items.size === 0 || this.hidden) return;
     const cam = this.ctx.camera() as THREE.PerspectiveCamera;
     const renderTime = performance.now() - HUB_TIMING.interpDelayMs;
     const w = this.ctx.container.clientWidth;

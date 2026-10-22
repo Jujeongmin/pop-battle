@@ -2353,6 +2353,8 @@ export class Game {
       ? { x: this.renderFeet.x, y: this.renderFeet.y, z: this.renderFeet.z, yaw: this.bodyYaw, vx: v.x, vy: v.y, vz: v.z, m: Math.max(0, NET_MODES.indexOf(p.mode)), f }
       : null;
     hub.update(dt, local);
+    // 캐릭터 쇼케이스(정비소 미리보기) 중에는 다른 사람 캐릭터를 숨김
+    this.peers?.setHidden(this.showcaseBlend > 0);
     this.peers?.update(dt);
     // 개발 진단: 5초마다 로비 전송량·FPS (배포 빌드는 출력 없음)
     if (import.meta.env.DEV && hub.status === 'online') {
