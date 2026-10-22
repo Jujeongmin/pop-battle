@@ -55,14 +55,14 @@ export function isHubRoom(roomId: string | null | undefined): boolean {
 }
 
 export const HUB_TIMING = {
-  /** 위치 전송 최소 간격 (ms) = 최대 8회/초. 움직이지 않으면 보내지 않음 */
-  sendIntervalMs: 125,
+  /** 위치 전송 최소 간격 (ms) = 최대 6회/초 (2026-10-22 실측 뒤 8 → 6, 받는 메시지·처리 감소). 움직이지 않으면 보내지 않음 */
+  sendIntervalMs: 166,
   /** remoteFunction throttle 창 (ms) — 전송 간격보다 짧아야 버려지지 않음 */
-  throttleMs: 100,
+  throttleMs: 140,
   /** 서버가 받는 최소 간격 (ms) — 이보다 잦은 패킷은 버림 */
   minAcceptMs: 70,
   /** 원격 보간 지연 (ms) */
-  interpDelayMs: 250,
+  interpDelayMs: 280,
   /** 매칭 예약 유지 (ms): 자리를 잡고 이 시간 안에 실제로 들어와야 함 */
   reserveMs: 20_000,
 } as const;

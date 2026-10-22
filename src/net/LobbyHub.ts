@@ -74,8 +74,11 @@ export class LobbyHub {
   private wanted = false;
   private token = 0;
   private info = { char: 'blue', nick: '' };
-  /** 순번: 새로고침해도 커지게 시각 기반으로 시작 (상대 보간 버퍼가 옛 순번으로 보고 버리지 않게) */
-  private seq = Math.floor(Date.now() / 10);
+  /**
+   * 순번: 작은 수로 압축 (1부터). 새로고침하면 pagehide의 hubBye로 상대가 나를 지웠다가 새 버퍼로 다시 받으므로
+   * 순번이 처음부터 시작해도 버려지지 않음
+   */
+  private seq = 0;
   private sendTimer = 0;
   private last: NetHubPacket | null = null;
   private pendingFlags = 0;
@@ -153,10 +156,11 @@ export class LobbyHub {
     this.sendTimer += dt * 1000;
     if (this.sendTimer < HUB_TIMING.sendIntervalMs) return;
     this.sendTimer = 0;
+    // 압축: 위치·방향 cm·0.01rad, 속도 0.1m/s (보간·애니메이션에 충분, 서버 검사 그대로)
+    const r1 = (v: number) => Math.round(v * 10) / 10;
     const r2 = (v: number) => Math.round(v * 100) / 100;
-    const r3 = (v: number) => Math.round(v * 1000) / 1000;
     const f = (local.f & ~48) | this.pendingFlags;
-    const pkt: NetHubPacket = [0, Math.round(performance.now()), r3(local.x), r3(local.y), r3(local.z), r3(local.yaw), r2(local.vx), r2(local.vy), r2(local.vz), local.m, f];
+    const pkt: NetHubPacket = [0, Math.round(performance.now()), r2(local.x), r2(local.y), r2(local.z), r2(local.yaw), r1(local.vx), r1(local.vy), r1(local.vz), local.m, f];
     const l = this.last;
     // 멈춰 있고 이전과 같으면 건너뜀 (멈춘 자리는 마지막 패킷이 이미 알림)
     if (l && f === l[10] && local.m === l[9] && Math.abs(pkt[2] - l[2]) < 0.01 && Math.abs(pkt[3] - l[3]) < 0.01 && Math.abs(pkt[4] - l[4]) < 0.01 && Math.abs(pkt[5] - l[5]) < 0.02 && Math.hypot(pkt[6], pkt[7], pkt[8]) < 0.05) {

@@ -145,6 +145,8 @@ export class LobbyPeers {
           return;
         }
         if (this.ctx.lowPower()) avatar.root.traverse((o) => (o.castShadow = false));
+        // 로비에서는 무기를 쓰지 않음 → 원격 캐릭터 라이플은 숨김 (1명당 약 7천 삼각형·그리기 호출 절약)
+        avatar.rifle.visible = false;
         if (item.avatar) this.ctx.releaseAvatar(item.avatar);
         item.avatar = avatar;
         item.char = want;
