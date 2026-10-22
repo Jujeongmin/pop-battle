@@ -354,7 +354,8 @@ export class LobbySpace {
     const mid = (z0 + z1) / 2;
     for (let i = 0; i < Math.round(len / 0.8); i++) {
       const z = z0 + (i + 0.5) * (len / Math.round(len / 0.8));
-      this.boxMesh(cx, y - 0.15, z, 1.2, 0.3, len / Math.round(len / 0.8) - 0.06, 0, i % 2 ? 0xf4e2c8 : 0xe9d1b0);
+      // 다리 판 윗면은 섬 바닥보다 1.2cm 위 (양 끝이 섬 위에 0.5m 걸쳐 있어 같은 높이면 면이 겹쳐 깜빡임)
+      this.boxMesh(cx, y - 0.15 + 0.012, z, 1.2, 0.3, len / Math.round(len / 0.8) - 0.06, 0, i % 2 ? 0xf4e2c8 : 0xe9d1b0);
     }
     this.box(new THREE.Vector3(cx, y - 0.15, mid), new THREE.Vector3(0.6, 0.15, len / 2 + 0.5), 0, '로비 다리');
     for (const s of [-1, 1]) {

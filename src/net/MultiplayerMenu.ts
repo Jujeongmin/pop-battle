@@ -14,6 +14,8 @@ export interface MultiplayerMenuHost {
   characterLabel(id: string): string;
   /** 캐릭터 id → 대표 색 (CSS 색) */
   characterColor(id: string): string;
+  /** 실제 캐릭터 모델 얼굴·상반신 초상 (정사각 PNG data URL, 투명 배경). 처음엔 그리는 동안 기다림, 실패하면 reject → 색 원으로 */
+  characterPortrait(id: string): Promise<string>;
   /** 멀티 게임으로 전환됨 (봇 제거됨) */
   netGame(): boolean;
   /** 연결 끊김 등으로 룸에서 밀려남 (직접 나간 것 아님) */
@@ -172,7 +174,7 @@ export class MultiplayerMenu {
   private render(v: View): void {
     const c = this.card;
     c.textContent = '';
-    c.append(el('div', 'lb-mp-kicker', 'POP! BATTLE'), el('h2', 'lb-mp-title', 'MULTIPLAYER'));
+    c.append(el('div', 'lb-mp-kicker', 'POP! BATTLE'), el('h2', 'lb-mp-title', '멀티플레이'));
     const s = this.host.session();
     if (v === 'busy') {
       c.append(el('p', 'lb-mp-status', s?.inRoom ? '처리하는 중…' : '서버에 연결하는 중…'));
@@ -356,13 +358,26 @@ export class MultiplayerMenu {
     }
     const mine = entry.acc === s.me;
     const lost = s.isLost(entry.acc);
-    const swatch = el('i', 'lb-mp-char-swatch');
+    const swatch = el('span', 'lb-mp-char-swatch');
     swatch.style.setProperty('--lb-char-color', this.host.characterColor(entry.p.char));
+    void this.host.characterPortrait(entry.p.char).then((source) => {
+      if (!row.isConnected) return;
+      const image = el('img');
+      image.src = source;
+      image.alt = this.host.characterLabel(entry.p.char);
+      image.draggable = false;
+      swatch.appendChild(image);
+      swatch.classList.add('lb-mp-has-portrait');
+    }).catch(() => {
+      // 초상 렌더 실패 시 캐릭터 대표 색 실루엣을 유지한다.
+    });
     const copy = el('span', 'lb-mp-player-copy');
     // 닉네임(서버 검사 값) 우선, 없으면 자리 번호. 계정·캐릭터 id는 표시하지 않음
     const nick = s.nickOf(entry.acc) ?? (mine ? s.nick : null);
     const player = el('b', '', mine ? `${nick ?? '나'} (나)` : nick ?? `P${entry.p.slot + 1}`);
     const character = el('small', '', this.host.characterLabel(entry.p.char));
+    const team = s.mode === 'tdm' && entry.p.team ? ` · ${entry.p.team} 팀` : ' · 개인전';
+    character.append(team);
     copy.append(player, character);
     if (s.host === entry.acc) copy.append(el('em', '', '★ 방장'));
     const connection = el('span', lost ? 'lb-mp-connection lb-mp-lost' : 'lb-mp-connection', lost ? '연결 끊김 대기' : '연결됨');

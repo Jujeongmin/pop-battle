@@ -4,7 +4,7 @@
 declare const __BUILD_TIME__: string;
 
 /** lobby.css 앞부분(옛 규칙)·뒷부분(최신 규칙)에서 하나씩 고른 선택자: 뒤쪽이 없으면 CSS가 일부만 적용된 것 */
-const PROBE_SELECTORS = ['.lb-lobby', '.lb-nav-brand', '.lb-identity', '.lb-presence-retry', '.lb-return-button', '.lb-room-status', '.lobby-nametag'];
+const PROBE_SELECTORS = ['.lb-lobby', '.lb-nav-brand', '.lb-identity', '.lb-presence-retry', '.lb-room-status', '.lobby-nametag'];
 const MEDIA = ['(max-width: 1000px)', '(max-width: 900px)', '(max-width: 760px)', '(max-width: 720px)', '(max-height: 520px)', '(hover: hover)', '(hover: none) and (pointer: coarse)'];
 
 export function uiDebugInfo(container: HTMLElement): Record<string, unknown> {

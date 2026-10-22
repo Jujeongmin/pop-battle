@@ -3,7 +3,7 @@ import { comingSoon, el, type LobbyHost, type LobbyPanel, type LobbyWeapon } fro
 
 export class ShopPanel implements LobbyPanel {
   readonly id = 'shop';
-  readonly title = 'SHOP';
+  readonly title = '상점';
 
   constructor(private readonly host: LobbyHost) {}
 

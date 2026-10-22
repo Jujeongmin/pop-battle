@@ -3,6 +3,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { loadCharacterModel, loadGameAssets, type LoadedModel } from '../assets/loadAssets';
 import { WeaponModelLibrary } from '../assets/weaponModels';
 import { WeaponArt } from '../assets/weaponArt';
+import { CharacterArt } from '../assets/characterArt';
 import type { Bot } from '../bots/Bot';
 import { BotManager } from '../bots/BotManager';
 import { BOT } from '../config/bots';
@@ -210,6 +211,8 @@ export class Game {
   private killedBy: string | null = null;
   private weaponModels!: WeaponModelLibrary;
   private weaponArt!: WeaponArt;
+  /** 캐릭터 초상 (정비소·대기실 카드): 같은 캐릭터 GLB 캐시로 한 번 그림 */
+  private characterArt!: CharacterArt;
   /** 로드아웃: 주무기는 게임 시작 전에만 고를 수 있고, 시작(startMatch) 후에는 고정 (리스폰해도 유지) */
   private primary: WeaponDef = RIFLE;
   /** 현재 슬롯 (0 = 1번 주무기, 1 = 2번 권총, 2 = 3번 근접) */
@@ -390,6 +393,7 @@ export class Game {
     this.weaponModels = new WeaponModelLibrary(new Map([[RIFLE.id, assets.rifle.scene], ...assets.weapons]));
     // 무기 그림 (킬로그 실루엣·정비소·상점): 같은 모델을 게임 렌더러로 한 번 그려 이미지로
     this.weaponArt = new WeaponArt(this.renderer, this.weaponModels, WEAPONS);
+    this.characterArt = new CharacterArt(this.renderer, (id) => this.loadCharacter(id as CharacterId));
     // 킬로그 무기 아이콘 = 실제 모델 실루엣 (처음 처치 때 멈칫하지 않게 미리 그림)
     for (const id of Object.keys(WEAPONS)) this.weaponArt.silhouette(id);
     setKillFeedWeaponIcons((id) => this.weaponArt.silhouette(id));
@@ -659,8 +663,6 @@ export class Game {
     // 로비 자유 이동: 이동·달리기·점프·슬라이딩만 (TAB 메뉴가 열리면 멈춤). 사격·ADS·무기 교체·피해 없음
     // 로비 자유 이동: 커서가 보이는 채로 이동 키·조이스틱만 (포인터 잠금 없음). 메뉴 창이 열리면 멈춤
     const roaming = this.lobbyShown && !this.lobbyMenuOpen && !this.dead;
-    // R = 시작 지점으로 복귀 (로비에는 재장전이 없음)
-    if (roaming && input.reloadPressed && this.lobbySpace) this.placeAtSpawn(this.lobbySpace.spawn);
     const canMove = canAct || roaming;
     // --- 무기 교체: 숫자키 1·2·3, 휠은 세 슬롯 순환 ---
     if (canAct && input.slotPressed > 0) this.switchSlot(input.slotPressed - 1);
@@ -1584,6 +1586,7 @@ export class Game {
       resetPreviewRotation: () => this.resetPreviewSpin(),
       primaryWeapons: () => PRIMARY_WEAPONS.map((w) => ({ id: w.id, name: w.name })),
       weaponImage: (id) => this.weaponArt.image(id),
+      characterPortrait: (id) => (id in CHARACTERS ? this.characterArt.portrait(id) : Promise.reject(new Error('unknown character'))),
       weaponTurntable: (id) => this.weaponArt.turntable(id),
       fixedWeapons: () => ({ secondary: { id: SECONDARY_WEAPON.id, name: SECONDARY_WEAPON.name }, melee: { id: MELEE_WEAPON.id, name: MELEE_WEAPON.name } }),
       currentPrimary: () => this.primary.id,
@@ -1612,9 +1615,6 @@ export class Game {
       nickname: () => this.nick,
       nicknameReady: () => this.nickReady,
       setNickname: (raw) => this.setNickname(raw),
-      returnToStart: () => {
-        if (this.lobbyShown && !this.lobbyMenuOpen && this.lobbySpace) this.placeAtSpawn(this.lobbySpace.spawn);
-      },
       presence: () => this.lobbyPresence(),
       retryLobby: () => this.hub?.retryNow(),
       listRooms: () => this.listRooms(),
@@ -2238,6 +2238,7 @@ export class Game {
       session: () => this.net?.session ?? null,
       characterName: () => this.avatar.character.name,
       characterLabel: (id) => (id in CHARACTERS ? CHARACTERS[id as CharacterId].name : id),
+      characterPortrait: (id) => (id in CHARACTERS ? this.characterArt.portrait(id) : Promise.reject(new Error('unknown character'))),
       characterColor: (id) => (id in CHARACTER_SELECT ? CHARACTER_SELECT[id as CharacterId].color : '#8a94b8'),
       netGame: () => this.netGame,
       leftUnexpectedly: () => this.netGame && !this.netLeftByUser && !this.net?.session.inRoom && !!this.net?.session.lastError,

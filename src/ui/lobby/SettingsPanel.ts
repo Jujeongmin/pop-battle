@@ -4,7 +4,7 @@ import { nicknameEditor } from './nicknameUi';
 
 export class SettingsPanel implements LobbyPanel {
   readonly id = 'settings';
-  readonly title = 'SETTINGS';
+  readonly title = '설정';
 
   constructor(private readonly host: LobbyHost) {}
 
@@ -60,7 +60,7 @@ export class SettingsPanel implements LobbyPanel {
       ['SPACE', '점프'],
       ['LMB', '사격'],
       ['RMB', '조준'],
-      ['R', '처음 위치로 (로비) · 재장전 (매치)'],
+      ['R', '재장전 (매치)'],
       ['1·2·3 / 휠', '무기 교체'],
       ['ESC', '일시정지'],
     ] as const) {

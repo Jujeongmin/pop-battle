@@ -4,7 +4,7 @@ import { button, el, ICON, type LobbyHost, type LobbyPanel, type LobbyRoomInfo }
 
 export class RoomListPanel implements LobbyPanel {
   readonly id = 'rooms';
-  readonly title = 'ROOM LIST';
+  readonly title = '방 목록';
   private body: HTMLElement | null = null;
   private timer: number | null = null;
   private request = 0;
@@ -66,8 +66,9 @@ export class RoomListPanel implements LobbyPanel {
     this.body.textContent = '';
     const tools = el('div', 'lb-room-tools');
     const copy = el('div', 'lb-room-tools-copy');
-    copy.append(el('b', '', '열려 있는 방'), el('span', '', '5초마다 자동 새로고침'));
+    copy.append(el('b', '', '열려 있는 방'), el('span', '', '5초마다 자동 갱신'));
     const refresh = button('', 'lb-room-refresh', () => void this.load(), `${ICON.refresh}<span>새로고침</span>`);
+    refresh.setAttribute('aria-label', '방 목록 새로고침');
     refresh.disabled = this.loading;
     tools.append(copy, refresh);
     const list = el('div', 'lb-room-list');
@@ -88,7 +89,7 @@ export class RoomListPanel implements LobbyPanel {
     const shell = this.shell();
     if (!shell) return;
     const state = el('div', 'lb-room-state');
-    state.append(el('b', '', '열려 있는 방이 없어요'), el('p', '', '· 방을 만들어 보세요'), button('방 만들기', 'lb-room-create', this.openCreate));
+    state.append(el('b', '', '지금은 열린 방이 없어요'), el('p', '', '첫 방을 만들고 친구를 초대해 보세요!'), button('방 만들기', 'lb-room-create', this.openCreate));
     shell.list.append(state);
   }
 
@@ -138,7 +139,7 @@ export class RoomListPanel implements LobbyPanel {
   private codeJoin(): HTMLElement {
     const wrap = el('form', 'lb-code-join');
     const label = el('label');
-    label.append(el('span', '', '코드로 참가'));
+    label.append(el('span', '', '방 코드로 참가'));
     const input = el('input');
     input.placeholder = '방 코드 입력';
     input.maxLength = 15;

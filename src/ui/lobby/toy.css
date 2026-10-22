@@ -1,0 +1,783 @@
+/* POP! BATTLE 로비 UI — 굵은 외곽선과 단색 플라스틱 면을 공통 언어로 사용한다. */
+.lb-lobby {
+  --lu: 1;
+  --lb-ink: #27325c;
+  --lb-blue: #5b8cff;
+  --lb-yellow: #ffd45e;
+  --lb-orange: #ff9850;
+  --lb-pink: #f177a4;
+  --lb-mint: #65d2b6;
+  --lb-lavender: #9a8bea;
+  --lb-paper: #fff9df;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  color: var(--lb-ink);
+  font-family: var(--font);
+  pointer-events: none;
+  user-select: none;
+}
+.lb-lobby.lb-hidden { display: none; }
+.lb-lobby,
+.lb-lobby *,
+.lb-lobby *::before,
+.lb-lobby *::after { box-sizing: border-box; }
+.lb-lobby .lb-btn {
+  min-height: 44px;
+  border: 2px solid var(--lb-ink);
+  border-radius: 13px;
+  outline: 0;
+  background: #fff;
+  box-shadow: 0 4px 0 var(--lb-ink);
+  color: var(--lb-ink);
+  font: 900 12px var(--font);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform .08s ease, box-shadow .08s ease, filter .1s ease;
+}
+.lb-lobby .lb-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 0 0 var(--lb-ink); }
+.lb-lobby .lb-btn:focus-visible { outline: 3px solid #fff; outline-offset: 2px; box-shadow: 0 4px 0 var(--lb-ink), 0 0 0 6px var(--lb-blue); }
+.lb-lobby .lb-btn:disabled,
+.lb-lobby [aria-disabled='true'] { cursor: default; }
+
+/* 상단: 상태 묶음 + 큰 PLAY + 목적지 묶음 + MENU */
+.lb-lobby .lb-nav {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  left: 10px;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: auto;
+  height: 68px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.lb-lobby .lb-nav-status { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.lb-lobby .lb-nav-brand {
+  display: grid;
+  min-width: 106px;
+  height: 58px;
+  place-content: center;
+  padding: 4px 13px;
+  border: 3px solid var(--lb-ink);
+  border-radius: 15px;
+  background: var(--lb-yellow);
+  box-shadow: 0 5px 0 var(--lb-ink);
+  line-height: .8;
+  text-align: center;
+  transform: rotate(-2deg);
+}
+.lb-lobby .lb-nav-brand b { color: #fff; font-size: 25px; font-weight: 900; letter-spacing: -1px; -webkit-text-stroke: 2px var(--lb-ink); paint-order: stroke fill; }
+.lb-lobby .lb-nav-brand span { color: var(--lb-ink); font-size: 11px; font-weight: 900; letter-spacing: 2px; }
+.lb-lobby .lb-identity { display: flex; min-width: 0; align-items: stretch; gap: 6px; }
+.lb-lobby .lb-player-chip,
+.lb-lobby .lb-character-chip,
+.lb-lobby .lb-presence {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 2px solid var(--lb-ink);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 0 var(--lb-ink);
+  white-space: nowrap;
+}
+.lb-lobby .lb-player-chip { display: grid; min-width: 105px; gap: 0; }
+.lb-lobby .lb-player-chip small { color: #6a7390; font-size: 7px; font-weight: 900; letter-spacing: 1.2px; }
+.lb-lobby .lb-player-name { max-width: 112px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; }
+.lb-lobby .lb-character-chip { background: #dff9f0; }
+.lb-lobby .lb-character-dot {
+  --c: var(--lb-blue);
+  position: relative;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid var(--lb-ink);
+  border-radius: 9px;
+  background: var(--c);
+  box-shadow: none;
+}
+.lb-lobby .lb-character-dot::before { width: 15px; height: 21px; border-radius: 50% 50% 40% 40%; background: rgba(255,255,255,.8); content: ''; }
+.lb-lobby .lb-character-dot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.lb-lobby .lb-character-name { max-width: 90px; overflow: hidden; font-size: 11px; text-overflow: ellipsis; }
+.lb-lobby .lb-presence { min-width: 74px; justify-content: center; background: #e5edff; color: #395ca8; font-size: 8px; font-weight: 900; letter-spacing: .4px; }
+.lb-lobby .lb-presence::before { width: 8px; height: 8px; flex: 0 0 auto; border: 2px solid var(--lb-ink); border-radius: 50%; background: #aab2c5; content: ''; }
+.lb-lobby .lb-presence-online::before { background: #48ca91; }
+.lb-lobby .lb-presence-connecting::before,
+.lb-lobby .lb-presence-reconnecting::before { background: var(--lb-yellow); animation: lb-toy-pulse .8s steps(2) infinite; }
+.lb-lobby .lb-presence-disconnected::before { background: #ef6c82; }
+.lb-lobby .lb-presence-retry { min-height: 28px; padding: 0 7px; border-radius: 8px; box-shadow: 0 2px 0 var(--lb-ink); font-size: 8px; }
+@keyframes lb-toy-pulse { 50% { opacity: .35; } }
+
+.lb-lobby .lb-nav-actions { display: none; min-width: 0; align-items: stretch; justify-content: flex-end; gap: 6px; }
+.lb-lobby.lb-menu-open .lb-nav-actions { display: flex; }
+.lb-lobby .lb-nav-btn {
+  display: grid;
+  width: 78px;
+  min-height: 56px;
+  grid-template-columns: 27px minmax(0,1fr);
+  align-items: center;
+  gap: 5px;
+  padding: 5px 6px;
+  border-radius: 13px;
+  background: #f1f3fa;
+  box-shadow: 0 4px 0 var(--lb-ink);
+  text-align: left;
+}
+.lb-lobby .lb-nav-icon { display: grid; width: 27px; height: 27px; place-items: center; border: 2px solid var(--lb-ink); border-radius: 8px; background: var(--lb-blue); color: #fff; }
+.lb-lobby .lb-nav-icon svg { width: 18px; height: 18px; }
+.lb-lobby .lb-nav-label { display: grid; min-width: 0; gap: 2px; line-height: 1; }
+.lb-lobby .lb-nav-label b { overflow: hidden; font-size: 9px; letter-spacing: .2px; text-overflow: ellipsis; }
+.lb-lobby .lb-nav-label small { font-size: 8px; font-weight: 900; opacity: .62; }
+.lb-lobby .lb-nav-btn > i { display: none; }
+.lb-lobby .lb-nav-play { width: 102px; grid-template-columns: 34px minmax(0,1fr); background: var(--lb-orange); color: #fff; }
+.lb-lobby .lb-nav-play .lb-nav-icon { width: 34px; height: 34px; background: var(--lb-yellow); color: var(--lb-ink); }
+.lb-lobby .lb-nav-play .lb-nav-label b { font-size: 15px; -webkit-text-stroke: 1px var(--lb-ink); paint-order: stroke fill; }
+.lb-lobby .lb-nav-character .lb-nav-icon { background: var(--lb-orange); }
+.lb-lobby .lb-nav-loadout .lb-nav-icon { background: var(--lb-mint); }
+.lb-lobby .lb-nav-shop .lb-nav-icon { background: var(--lb-pink); }
+.lb-lobby .lb-nav-settings .lb-nav-icon { background: var(--lb-lavender); }
+.lb-lobby .lb-nav-btn.lb-active { background: var(--lb-yellow); box-shadow: 0 6px 0 var(--lb-ink); transform: translateY(-2px); }
+.lb-lobby .lb-nav-btn.lb-active .lb-nav-icon { background: #fff; color: var(--lb-ink); }
+.lb-lobby .lb-menu-button {
+  display: flex;
+  min-width: 86px;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 9px;
+  background: var(--lb-blue);
+  color: #fff;
+}
+.lb-lobby .lb-menu-button span { display: grid; width: 21px; }
+.lb-lobby .lb-menu-button svg { width: 21px; height: 21px; }
+.lb-lobby .lb-menu-button kbd { padding: 2px 4px; border: 1px solid currentColor; border-radius: 5px; background: rgba(255,255,255,.18); font: 900 7px var(--font); }
+.lb-lobby .lb-menu-button.lb-active { background: var(--lb-pink); }
+
+/* 패널 레이어 */
+.lb-lobby .lb-menu-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: none;
+  padding: 0;
+  pointer-events: auto;
+  background: rgba(39,50,92,.38);
+  backdrop-filter: none;
+}
+.lb-lobby.lb-menu-open .lb-menu-layer { display: block; opacity: 1; }
+.lb-lobby .lb-panel {
+  position: absolute;
+  top: 90px;
+  right: 50%;
+  bottom: auto;
+  /* 예전 규칙(lobby.css)의 left: 50%가 남으면 right보다 우선해 패널이 화면 밖으로 밀림 */
+  left: auto;
+  display: flex;
+  width: min(760px, calc(100vw - 36px));
+  max-height: calc(100vh - 110px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 3px solid var(--lb-ink);
+  border-radius: 20px;
+  background: var(--lb-paper);
+  box-shadow: 0 8px 0 var(--lb-ink);
+  transform: translateX(50%);
+}
+.lb-lobby.lb-character-open .lb-panel { right: 18px; width: min(620px, 49vw); transform: none; }
+.lb-lobby .lb-panel-in { animation: lb-toy-panel-in .16s cubic-bezier(.2,1,.35,1); }
+@keyframes lb-toy-panel-in { from { opacity: 0; translate: 0 8px; scale: .98; } }
+.lb-lobby .lb-panel-head {
+  display: flex;
+  min-height: 58px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px 8px 18px;
+  border-bottom: 3px solid var(--lb-ink);
+  background: var(--lb-blue);
+  color: #fff;
+}
+.lb-lobby .lb-panel-title { margin: 0; font-size: 25px; font-weight: 900; letter-spacing: .6px; -webkit-text-stroke: 1.5px var(--lb-ink); paint-order: stroke fill; }
+.lb-lobby .lb-panel-close { display: flex; min-width: 76px; align-items: center; justify-content: center; gap: 4px; background: #fff; color: var(--lb-ink); }
+.lb-lobby .lb-panel-close svg { width: 18px; height: 18px; }
+.lb-lobby .lb-panel-body {
+  display: flex;
+  min-height: 0;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  scrollbar-color: var(--lb-blue) transparent;
+  scrollbar-width: thin;
+}
+.lb-lobby .lb-panel-lead { margin: 0; font-size: 12px; font-weight: 800; line-height: 1.45; }
+
+/* 캐릭터 정비소: 왼쪽은 기존 3D 무대, 오른쪽은 선택 카드 */
+.lb-lobby .lb-char-stage { position: absolute; display: none; pointer-events: auto; cursor: grab; }
+.lb-lobby.lb-character-open .lb-char-stage { display: block; }
+.lb-lobby .lb-char-stage.lb-dragging { cursor: grabbing; }
+.lb-lobby .lb-stage-tools { position: absolute; top: 0; right: 0; left: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.lb-lobby .lb-stage-tools { bottom: auto; transform: none; }
+.lb-lobby .lb-stage-hint,
+.lb-lobby .lb-stage-reset { border: 2px solid var(--lb-ink); border-radius: 10px; background: #fff; box-shadow: 0 3px 0 var(--lb-ink); }
+.lb-lobby .lb-stage-hint { padding: 8px 10px; font-size: 9px; font-weight: 900; }
+.lb-lobby .lb-stage-reset { min-height: 36px; padding: 0 10px; }
+.lb-lobby .lb-stage-plate {
+  position: absolute;
+  right: 8%;
+  bottom: 12px;
+  left: 8%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 3px solid var(--lb-ink);
+  border-radius: 15px;
+  background: var(--lb-yellow);
+  box-shadow: 0 5px 0 var(--lb-ink);
+  transform: none;
+}
+.lb-lobby .lb-stage-copy { display: grid; min-width: 0; }
+.lb-lobby .lb-stage-name::before,
+.lb-lobby .lb-char-name::before { display: none; }
+.lb-lobby .lb-stage-name { overflow: hidden; font-size: 20px; text-overflow: ellipsis; }
+.lb-lobby .lb-stage-role { font-size: 9px; font-weight: 900; opacity: .7; }
+.lb-lobby .lb-stage-badges { display: flex; gap: 5px; }
+.lb-lobby .lb-stage-badge { padding: 5px 7px; border: 2px solid var(--lb-ink); border-radius: 8px; background: #fff; font-size: 8px; font-weight: 900; white-space: nowrap; }
+.lb-lobby .lb-stage-badge svg { width: 11px; height: 11px; }
+.lb-lobby .lb-stage-locked { display: flex; align-items: center; gap: 3px; background: #c6cada; }
+.lb-lobby .lb-stage-equipped { background: var(--lb-mint); }
+
+.lb-lobby .lb-char-info { display: grid; grid-template-columns: minmax(0,1fr) minmax(230px,1fr); align-items: center; gap: 12px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.lb-lobby .lb-char-heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; }
+.lb-lobby .lb-char-copy { display: grid; min-width: 0; }
+.lb-lobby .lb-char-name { overflow: hidden; font-size: 23px; font-weight: 900; text-overflow: ellipsis; }
+.lb-lobby .lb-char-role { color: #626d8b; font-size: 10px; font-weight: 900; }
+.lb-lobby .lb-char-state { padding: 5px 7px; border: 2px solid var(--lb-ink); border-radius: 8px; background: #fff; font-size: 8px; font-weight: 900; white-space: nowrap; }
+.lb-lobby .lb-char-state.lb-equipped { background: var(--lb-mint); color: var(--lb-ink); }
+.lb-lobby .lb-char-state.lb-locked { background: #cbd0dc; color: var(--lb-ink); }
+.lb-lobby .lb-gauges { display: grid; gap: 7px; padding: 0; border: 0; background: transparent; }
+.lb-lobby .lb-gauge { display: grid; grid-template-columns: 45px minmax(0,1fr) 63px; align-items: center; gap: 6px; }
+.lb-lobby .lb-gauge-label { font-size: 9px; font-weight: 900; }
+.lb-lobby .lb-gauge-value { font-size: 8px; font-weight: 900; text-align: right; white-space: nowrap; }
+.lb-lobby .lb-gauge-track { height: 13px; overflow: hidden; border: 2px solid var(--lb-ink); border-radius: 7px; background: #fff; }
+.lb-lobby .lb-gauge-fill { width: 0; height: 100%; background: var(--lb-pink); transition: width .25s ease; }
+.lb-lobby .lb-g-speed .lb-gauge-fill { background: var(--lb-mint); }
+.lb-lobby .lb-char-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; }
+.lb-lobby .lb-char-card {
+  --c: var(--lb-blue);
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 148px;
+  grid-template-rows: minmax(0,1fr) auto;
+  gap: 3px;
+  overflow: hidden;
+  padding: 0 7px 8px;
+  border-width: 3px;
+  border-radius: 15px;
+  background: #edf1fa;
+  box-shadow: 0 5px 0 var(--lb-ink);
+  text-align: left;
+  align-content: stretch;
+  justify-items: stretch;
+}
+.lb-lobby .lb-char-card.lb-preview { background: var(--lb-yellow); box-shadow: 0 7px 0 var(--lb-ink); transform: translateY(-2px); }
+.lb-lobby .lb-char-card.lb-equipped::after { position: absolute; top: 7px; left: 7px; padding: 3px 5px; border: 2px solid var(--lb-ink); border-radius: 7px; background: var(--lb-mint); font-size: 7px; font-weight: 900; content: '장착 중'; }
+.lb-lobby .lb-char-portrait { position: relative; display: grid; min-height: 94px; place-items: center; overflow: hidden; }
+.lb-lobby .lb-char-portrait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
+.lb-lobby .lb-swatch { display: block; width: 58px; height: 68px; border: 3px solid var(--lb-ink); border-radius: 50% 50% 42% 42%; background: var(--c); }
+.lb-lobby .lb-swatch::before { display: block; width: 29px; height: 21px; margin: 18px auto 0; border-radius: 50%; background: rgba(255,255,255,.75); content: ''; }
+.lb-lobby .lb-has-portrait .lb-swatch { opacity: 0; }
+.lb-lobby .lb-portrait-loading .lb-char-portrait::after { position: absolute; width: 18px; height: 18px; border: 3px solid rgba(39,50,92,.18); border-top-color: var(--lb-ink); border-radius: 50%; content: ''; animation: lb-toy-spin .7s linear infinite; }
+@keyframes lb-toy-spin { to { transform: rotate(1turn); } }
+.lb-lobby .lb-char-card-copy { display: grid; min-width: 0; }
+.lb-lobby .lb-char-card-copy b { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lobby .lb-char-card-copy small { overflow: hidden; color: #68718b; font-size: 8px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lobby .lb-char-card .lb-card-equipped { display: none; }
+.lb-lobby .lb-lock { position: absolute; top: 7px; right: 7px; display: flex; width: auto; height: auto; align-items: center; gap: 3px; padding: 3px 5px; border: 2px solid var(--lb-ink); border-radius: 7px; background: #b9becb; color: var(--lb-ink); }
+.lb-lobby .lb-lock svg { width: 13px; height: 13px; }
+.lb-lobby .lb-lock i { font-size: 7px; font-style: normal; font-weight: 900; }
+.lb-lobby .lb-char-card.lb-locked img { filter: grayscale(1); opacity: .58; }
+.lb-lobby .lb-char-card.lb-locked:not(.lb-preview) { background: #d9dce5; }
+.lb-lobby .lb-char-equip { min-height: 52px; background: var(--lb-blue); box-shadow: 0 5px 0 var(--lb-ink); color: #fff; font-size: 17px; letter-spacing: .3px; }
+.lb-lobby .lb-char-equip:disabled { background: #c5c9d4; color: #667087; filter: none; opacity: 1; transform: none; box-shadow: 0 4px 0 var(--lb-ink); }
+.lb-lobby .lb-char-equip.lb-loading { background: var(--lb-orange); color: var(--lb-ink); }
+.lb-lobby .lb-char-equip.lb-success { background: var(--lb-mint); color: var(--lb-ink); }
+.lb-lobby .lb-char-equip.lb-equip-locked { background: #9ea5b7; color: #fff; }
+.lb-lobby .lb-equip-lock svg { width: 16px; height: 16px; vertical-align: middle; }
+.lb-lobby .lb-char-note { min-height: 14px; margin: -5px 0 0; color: #667087; font-size: 9px; font-weight: 800; text-align: center; }
+
+/* PLAY */
+.lb-lobby .lb-play-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.lb-lobby .lb-mode {
+  position: relative;
+  display: grid;
+  min-height: 112px;
+  grid-template-columns: 60px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-width: 3px;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 5px 0 var(--lb-ink);
+  text-align: left;
+}
+.lb-lobby .lb-mode::after { display: none; }
+.lb-lobby .lb-play-hero { grid-column: 1 / -1; min-height: 132px; background: linear-gradient(180deg, #ffe67e, var(--lb-yellow)); }
+.lb-lobby .lb-mode-icon { display: grid; width: 58px; height: 58px; place-items: center; border: 3px solid var(--lb-ink); border-radius: 16px; background: var(--lb-orange); box-shadow: none; color: #fff; }
+.lb-lobby .lb-mode-icon svg { width: 34px; height: 34px; }
+.lb-lobby .lb-mode-join .lb-mode-icon { background: var(--lb-blue); }
+.lb-lobby .lb-mode-tdm .lb-mode-icon { background: var(--lb-mint); }
+.lb-lobby .lb-rejoin .lb-mode-icon { background: var(--lb-lavender); }
+.lb-lobby .lb-mode-copy { display: grid; min-width: 0; gap: 3px; }
+.lb-lobby .lb-mode-copy small { color: #62708f; font-size: 8px; font-weight: 900; letter-spacing: 1px; }
+.lb-lobby .lb-mode-copy b { font-size: 18px; }
+.lb-lobby .lb-mode-copy span { font-size: 9px; font-weight: 800; line-height: 1.35; opacity: .7; }
+.lb-lobby .lb-mode > i { padding: 6px 8px; border: 2px solid var(--lb-ink); border-radius: 8px; background: #fff; font-size: 8px; font-style: normal; font-weight: 900; }
+
+/* 방 목록 */
+.lb-lobby .lb-room-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.lb-lobby .lb-room-tools-copy { display: grid; }
+.lb-lobby .lb-room-tools-copy b { font-size: 14px; }
+.lb-lobby .lb-room-tools-copy span { color: #69738f; font-size: 8px; font-weight: 800; }
+.lb-lobby .lb-room-refresh { display: flex; min-width: 44px; padding: 0 9px; align-items: center; justify-content: center; gap: 5px; background: #e7edff; font-size: 9px; }
+.lb-lobby .lb-room-refresh svg { width: 17px; height: 17px; }
+.lb-lobby .lb-room-refresh:disabled svg { animation: lb-toy-spin .7s linear infinite; }
+.lb-lobby .lb-room-list { display: grid; min-height: 0; max-height: min(42vh, 360px); gap: 8px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 4px 6px 0; }
+.lb-lobby .lb-room-state { display: grid; min-height: 0; justify-items: center; gap: 7px; padding: 22px 14px; border: 3px solid var(--lb-ink); border-radius: 15px; background: #e8efff; text-align: center; }
+.lb-lobby .lb-room-state b { font-size: 16px; }
+.lb-lobby .lb-room-state p { margin: 0; font-size: 10px; font-weight: 800; line-height: 1.4; }
+.lb-lobby .lb-room-error { background: #ffe0e7; }
+.lb-lobby .lb-room-loading { grid-template-columns: auto auto; justify-content: center; align-items: center; background: #fff; }
+.lb-lobby .lb-room-spinner { width: 23px; height: 23px; border: 4px solid #d9ddea; border-top-color: var(--lb-blue); border-radius: 50%; animation: lb-toy-spin .7s linear infinite; }
+.lb-lobby .lb-room-create,
+.lb-lobby .lb-room-retry { min-width: 150px; padding: 0 18px; background: var(--lb-yellow); font-size: 13px; }
+.lb-lobby .lb-room-card { display: grid; grid-template-columns: 62px minmax(125px,1fr) auto auto auto; align-items: center; gap: 9px; min-height: 66px; padding: 8px; border: 2px solid var(--lb-ink); border-radius: 14px; background: #fff; box-shadow: 0 3px 0 var(--lb-ink); }
+.lb-lobby .lb-room-mode { display: grid; min-height: 36px; place-items: center; border: 2px solid var(--lb-ink); border-radius: 9px; background: var(--lb-blue); color: #fff; font-size: 9px; font-weight: 900; }
+.lb-lobby .lb-room-mode-ffa { background: var(--lb-pink); }
+.lb-lobby .lb-room-mode-test { background: var(--lb-lavender); }
+.lb-lobby .lb-room-name { display: grid; min-width: 0; }
+.lb-lobby .lb-room-name b { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lobby .lb-room-name small { color: #747c92; font-size: 8px; font-weight: 800; }
+.lb-lobby .lb-room-slots { display: flex; align-items: center; gap: 6px; }
+.lb-lobby .lb-room-dots { display: flex; gap: 2px; }
+.lb-lobby .lb-room-dots i { width: 8px; height: 12px; border: 1px solid var(--lb-ink); border-radius: 4px; background: #d7dbe5; }
+.lb-lobby .lb-room-dots i.lb-filled { background: var(--lb-mint); }
+.lb-lobby .lb-room-slots b { font-size: 10px; }
+.lb-lobby .lb-room-status { padding: 5px 7px; border: 2px solid var(--lb-ink); border-radius: 8px; background: #dcf5eb; font-size: 8px; font-weight: 900; white-space: nowrap; }
+.lb-lobby .lb-room-phase-countdown,
+.lb-lobby .lb-room-phase-playing { background: #ffe5a3; }
+.lb-lobby .lb-room-phase-result { background: #d9dce5; }
+.lb-lobby .lb-room-join { min-width: 74px; padding: 0 10px; background: var(--lb-blue); color: #fff; }
+.lb-lobby .lb-room-join:disabled { max-width: 120px; background: #c5c9d4; color: #5f687e; font-size: 8px; opacity: 1; box-shadow: 0 3px 0 var(--lb-ink); }
+.lb-lobby .lb-code-join { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; padding: 9px; border: 2px solid var(--lb-ink); border-radius: 13px; background: #e5faef; }
+.lb-lobby .lb-code-join label { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 8px; }
+.lb-lobby .lb-code-join label > span { font-size: 10px; font-weight: 900; white-space: nowrap; }
+.lb-lobby .lb-code-join input,
+.lb-lobby .lb-nickname-input { min-width: 0; height: 44px; padding: 0 11px; border: 2px solid var(--lb-ink); border-radius: 10px; outline: 0; background: #fff; color: var(--lb-ink); font: 900 12px var(--font); }
+.lb-lobby .lb-code-join input:focus,
+.lb-lobby .lb-nickname-input:focus { box-shadow: 0 0 0 3px var(--lb-yellow); }
+.lb-lobby .lb-code-submit { min-width: 86px; background: var(--lb-mint); }
+
+/* 방 만들기 */
+.lb-lobby .lb-create-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; }
+.lb-lobby .lb-create-card { display: grid; min-height: 118px; grid-template-columns: 48px 1fr; align-items: center; gap: 9px; padding: 10px; border-width: 3px; background: #fff; text-align: left; }
+.lb-lobby .lb-create-card.lb-selected { background: var(--lb-yellow); box-shadow: 0 7px 0 var(--lb-ink); transform: translateY(-2px); }
+.lb-lobby .lb-create-icon { display: grid; width: 47px; height: 47px; place-items: center; border: 2px solid var(--lb-ink); border-radius: 13px; background: var(--lb-blue); color: #fff; }
+.lb-lobby .lb-create-ffa .lb-create-icon { background: var(--lb-pink); }
+.lb-lobby .lb-create-test .lb-create-icon { background: var(--lb-lavender); }
+.lb-lobby .lb-create-icon svg { width: 28px; height: 28px; }
+.lb-lobby .lb-create-card > span:last-child { display: grid; gap: 3px; }
+.lb-lobby .lb-create-card small { font-size: 8px; font-weight: 900; opacity: .65; }
+.lb-lobby .lb-create-card b { font-size: 14px; }
+.lb-lobby .lb-create-card em { font-size: 8px; font-style: normal; font-weight: 800; line-height: 1.3; opacity: .7; }
+.lb-lobby .lb-create-rule { min-height: 34px; margin: 0; padding: 9px; border: 2px solid var(--lb-ink); border-radius: 10px; background: #fff; font-size: 9px; font-weight: 800; text-align: center; }
+.lb-lobby .lb-create-submit { min-height: 52px; background: var(--lb-blue); color: #fff; font-size: 16px; }
+
+/* 장비 및 상점 */
+.lb-lobby .lb-section { margin-top: 2px; padding: 6px 9px; border: 0; border-left: 8px solid var(--lb-blue); border-radius: 0; background: #e5ebfb; font-size: 10px; font-weight: 900; letter-spacing: .4px; }
+.lb-lobby .lb-section::after { display: none; }
+.lb-lobby .lb-weapon-preview { display: grid; grid-template-columns: minmax(0,1fr) 150px; align-items: center; gap: 10px; padding: 8px; border: 3px solid var(--lb-ink); border-radius: 16px; background: #dfeaff; box-shadow: none; }
+.lb-lobby .lb-weapon-preview-stage { position: relative; height: 138px; overflow: hidden; border: 2px solid var(--lb-ink); border-radius: 12px; background: #fff; }
+.lb-lobby .lb-weapon-preview-stage::after { display: none; }
+.lb-lobby .lb-weapon-preview-canvas { width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.lb-lobby .lb-weapon-preview-canvas.lb-dragging { cursor: grabbing; }
+.lb-lobby .lb-weapon-preview-hint { position: absolute; right: 7px; bottom: 6px; padding: 4px 6px; border: 1px solid var(--lb-ink); border-radius: 6px; background: var(--lb-yellow); font-size: 7px; font-weight: 900; pointer-events: none; }
+.lb-lobby .lb-weapon-preview-name { font-size: 18px; text-align: center; }
+.lb-lobby .lb-weapon-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.lb-lobby .lb-weapon-grid.lb-two { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.lb-lobby .lb-weapon { display: grid; min-width: 0; min-height: 106px; grid-template-rows: auto 1fr auto; gap: 3px; padding: 8px; border: 2px solid var(--lb-ink); border-radius: 13px; background: #fff; box-shadow: 0 4px 0 var(--lb-ink); text-align: left; }
+.lb-lobby .lb-weapon.lb-selected { background: var(--lb-yellow); box-shadow: 0 6px 0 var(--lb-ink); transform: translateY(-2px); }
+.lb-lobby .lb-weapon.lb-fixed { background: #e9edf5; }
+.lb-lobby .lb-weapon-slot { color: #6b7490; font-size: 8px; font-weight: 900; }
+.lb-lobby .lb-weapon-icon { display: grid; height: 55px; place-items: center; }
+.lb-lobby .lb-weapon-icon img { max-width: 100%; max-height: 52px; object-fit: contain; }
+.lb-lobby .lb-weapon b { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lobby .lb-soon { display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 9px; border: 2px solid var(--lb-ink); border-radius: 12px; background: #dadde6; color: #687087; box-shadow: none; opacity: 1; }
+.lb-lobby .lb-soon-mark { display: grid; width: 35px; height: 35px; place-items: center; border: 2px solid var(--lb-ink); border-radius: 10px; background: #aeb4c4; color: #fff; font-size: 20px; font-weight: 900; }
+.lb-lobby .lb-soon-copy { display: grid; gap: 2px; }
+.lb-lobby .lb-soon-copy b { font-size: 11px; }
+.lb-lobby .lb-soon-copy p { margin: 0; font-size: 8px; font-weight: 800; }
+.lb-lobby .lb-soon-badge,
+.lb-lobby .lb-shop-weapon-badge { position: static; padding: 4px 6px; border: 2px solid var(--lb-ink); border-radius: 7px; background: #fff; color: #27325c; font-size: 7px; font-weight: 900; transform: none; }
+.lb-lobby .lb-shop-weapon-preview { display: grid; gap: 8px; }
+.lb-lobby .lb-shop-weapon-title { padding: 6px 9px; border-left: 8px solid var(--lb-pink); background: #f8dfeb; font-size: 10px; font-weight: 900; }
+.lb-lobby .lb-shop-weapon-row { display: grid; grid-template-columns: repeat(5,minmax(105px,1fr)); gap: 7px; overflow-x: auto; padding-bottom: 5px; }
+.lb-lobby .lb-shop-weapon-card { display: grid; min-width: 0; gap: 4px; padding: 7px; border: 2px solid var(--lb-ink); border-radius: 11px; background: #e1e3ea; filter: grayscale(.35); opacity: 1; }
+.lb-lobby .lb-shop-weapon-image { display: grid; height: 46px; place-items: center; }
+.lb-lobby .lb-shop-weapon-image img { max-width: 100%; max-height: 43px; object-fit: contain; }
+.lb-lobby .lb-shop-weapon-card b { overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 설정, 닉네임, 슬라이더 */
+.lb-lobby .lb-slider { display: grid; grid-template-columns: 140px minmax(0,1fr) 58px; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px; border: 2px solid var(--lb-ink); border-radius: 11px; background: #fff; }
+.lb-lobby .lb-slider-label { font-size: 10px; font-weight: 900; }
+.lb-lobby .lb-slider input { width: 100%; accent-color: var(--lb-blue); }
+.lb-lobby .lb-slider input::-webkit-slider-runnable-track { height: 9px; border: 1px solid var(--lb-ink); border-radius: 5px; background: #cbd8ff; box-shadow: none; }
+.lb-lobby .lb-slider input::-webkit-slider-thumb { border-color: var(--lb-ink); background: var(--lb-blue); box-shadow: none; }
+.lb-lobby .lb-slider input::-moz-range-track { height: 9px; border: 1px solid var(--lb-ink); border-radius: 5px; background: #cbd8ff; }
+.lb-lobby .lb-slider input::-moz-range-thumb { border-color: var(--lb-ink); background: var(--lb-blue); box-shadow: none; }
+.lb-lobby .lb-slider-val { padding: 4px 6px; border: 2px solid var(--lb-ink); border-radius: 7px; background: var(--lb-yellow); font-size: 9px; font-weight: 900; text-align: center; }
+.lb-lobby .lb-key-guide { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+.lb-lobby .lb-key-item { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 6px; border: 2px solid var(--lb-ink); border-radius: 9px; background: #fff; }
+.lb-lobby .lb-key-item kbd { flex: 0 0 auto; padding: 4px 6px; border: 2px solid var(--lb-ink); border-radius: 6px; background: #e6ecff; font: 900 8px var(--font); }
+.lb-lobby .lb-key-item small { font-size: 8px; font-weight: 800; }
+.lb-lobby .lb-settings-nickname { padding: 9px; border: 2px solid var(--lb-ink); border-radius: 12px; background: #e5faef; box-shadow: none; }
+.lb-lobby .lb-settings-nickname-current { display: flex; align-items: center; gap: 9px; margin: 0; }
+.lb-lobby .lb-settings-nickname-current span { font-size: 9px; font-weight: 800; opacity: .65; }
+.lb-lobby .lb-settings-nickname-current b { flex: 1 1 auto; min-width: 0; overflow: hidden; font-size: 14px; text-overflow: ellipsis; }
+.lb-lobby .lb-nick-change { min-width: 72px; background: var(--lb-yellow); }
+.lb-lobby .lb-nick-popup { display: grid; gap: 7px; margin-top: 9px; padding: 9px 0 0; border: 0; border-top: 2px solid var(--lb-ink); border-radius: 0; background: transparent; box-shadow: none; }
+.lb-lobby .lb-nick-popup[hidden] { display: none; }
+.lb-lobby .lb-nick-popup-title { font-size: 11px; }
+.lb-lobby .lb-nickname-editor { display: grid; min-width: 0; gap: 6px; }
+.lb-lobby .lb-nickname-row { display: flex; min-width: 0; gap: 7px; }
+.lb-lobby .lb-nickname-field { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
+.lb-lobby .lb-nickname-field .lb-nickname-input { width: 100%; padding-right: 48px; }
+.lb-lobby .lb-nickname-counter { position: absolute; top: 50%; right: 8px; color: #7b8296; font-size: 8px; font-weight: 900; transform: translateY(-50%); }
+.lb-lobby .lb-nickname-counter-over { color: #c84e65; }
+.lb-lobby .lb-nickname-submit { min-width: 90px; padding: 0 12px; background: var(--lb-mint); }
+.lb-lobby .lb-nickname-submit:disabled { background: #c3c7d1; opacity: 1; transform: none; }
+.lb-lobby .lb-nick-cancel { min-width: 72px; background: #e2e5ed; }
+.lb-lobby .lb-nickname-rule,
+.lb-lobby .lb-nickname-feedback { min-height: 12px; margin: 0; font-size: 8px; font-weight: 800; line-height: 1.4; }
+.lb-lobby .lb-nickname-rule,
+.lb-lobby .lb-nickname-feedback { color: #687087; }
+.lb-lobby .lb-nickname-valid { color: #258766; }
+.lb-lobby .lb-nickname-invalid { color: #b84259; }
+
+/* 첫 접속 닉네임 */
+.lb-lobby .lb-nickname-modal { position: absolute; inset: 0; z-index: 40; display: none; place-items: center; padding: 12px; pointer-events: auto; background: rgba(39,50,92,.62); opacity: 1; }
+.lb-lobby.lb-nickname-open .lb-nickname-modal { display: grid; }
+.lb-lobby .lb-nickname-card { display: grid; width: min(460px,100%); gap: 9px; padding: 20px; border: 3px solid var(--lb-ink); border-radius: 20px; background: var(--lb-paper); box-shadow: 0 8px 0 var(--lb-ink); }
+.lb-lobby .lb-logo { display: grid; justify-self: center; padding: 5px 14px; border: 3px solid var(--lb-ink); border-radius: 12px; background: var(--lb-yellow); box-shadow: 0 4px 0 var(--lb-ink); line-height: .8; text-align: center; transform: rotate(-2deg); }
+.lb-lobby .lb-logo b { color: #fff; font-size: 25px; -webkit-text-stroke: 2px var(--lb-ink); paint-order: stroke fill; }
+.lb-lobby .lb-logo span { font-size: 10px; font-weight: 900; letter-spacing: 2px; }
+.lb-lobby .lb-nickname-eyebrow { color: #5679c9; font-size: 8px; font-weight: 900; letter-spacing: 1.8px; text-align: center; }
+.lb-lobby .lb-nickname-title { margin: 0; color: var(--lb-ink); font-size: 25px; font-weight: 900; text-align: center; text-shadow: none; }
+.lb-lobby .lb-nickname-copy { margin: 0; color: var(--lb-ink); font-size: 10px; font-weight: 800; line-height: 1.4; text-align: center; }
+
+/* 로비 이동용 작은 HUD */
+.lb-lobby .lb-control-hint { position: absolute; bottom: 15px; left: 50%; z-index: 8; display: none; max-width: calc(100vw - 240px); padding: 7px 11px; border: 2px solid var(--lb-ink); border-radius: 9px; background: #fff; box-shadow: 0 3px 0 var(--lb-ink); font-size: 8px; font-weight: 900; pointer-events: auto; transform: translateX(-50%); }
+.lb-lobby:not(.lb-menu-open):not(.lb-touch) .lb-control-hint { display: block; }
+.lb-lobby .lb-control-hint-fade { animation: lb-toy-hint-fade 5s 1s forwards; }
+@keyframes lb-toy-hint-fade { to { opacity: .68; } }
+
+@media (hover: hover) {
+  .lb-lobby .lb-btn:hover:not(:disabled) { filter: brightness(1.04); }
+  .lb-lobby .lb-nav-btn:hover:not(:disabled) { transform: translateY(-2px); }
+}
+
+/* 가로형 휴대폰과 낮은 창: 44px 터치 크기는 유지하고 세로 공간만 줄인다. */
+@media (max-width: 1050px), (max-height: 600px) {
+  .lb-lobby .lb-nav { top: 5px; right: 5px; left: 5px; gap: 5px; height: 55px; }
+  .lb-lobby .lb-nav-brand { min-width: 82px; height: 49px; padding: 3px 8px; border-width: 2px; border-radius: 12px; box-shadow: 0 3px 0 var(--lb-ink); }
+  .lb-lobby .lb-nav-brand b { font-size: 20px; -webkit-text-stroke-width: 1.5px; }
+  .lb-lobby .lb-nav-brand span { font-size: 8px; }
+  .lb-lobby .lb-identity { display: none; }
+  .lb-lobby .lb-nav-actions { gap: 4px; justify-content: center; }
+  .lb-lobby .lb-nav-btn { width: 57px; min-height: 48px; grid-template-columns: 1fr; place-items: center; gap: 1px; padding: 2px; border-width: 2px; border-radius: 10px; box-shadow: 0 3px 0 var(--lb-ink); text-align: center; }
+  .lb-lobby .lb-nav-icon { width: 22px; height: 22px; border-width: 1.5px; border-radius: 6px; }
+  .lb-lobby .lb-nav-icon svg { width: 15px; height: 15px; }
+  .lb-lobby .lb-nav-label b { display: block; font-size: 7px; white-space: nowrap; }
+  .lb-lobby .lb-nav-label small { display: none; }
+  .lb-lobby .lb-nav-play { width: 66px; grid-template-columns: 27px auto; gap: 2px; }
+  .lb-lobby .lb-nav-play .lb-nav-icon { width: 26px; height: 26px; }
+  .lb-lobby .lb-nav-play .lb-nav-label b { display: block; font-size: 10px; }
+  .lb-lobby .lb-nav-play .lb-nav-label small { display: none; }
+  .lb-lobby .lb-menu-button { min-width: 48px; min-height: 48px; padding: 2px; }
+  .lb-lobby .lb-menu-button b,
+  .lb-lobby .lb-menu-button kbd { display: none; }
+  .lb-lobby .lb-panel { top: 65px; width: calc(100vw - 12px); max-height: calc(100vh - 73px); border-width: 2px; border-radius: 15px; box-shadow: 0 5px 0 var(--lb-ink); }
+  .lb-lobby.lb-character-open .lb-panel { right: 6px; width: 56vw; }
+  .lb-lobby .lb-panel-head { min-height: 45px; padding: 4px 6px 4px 12px; border-bottom-width: 2px; }
+  .lb-lobby .lb-panel-title { font-size: 18px; }
+  .lb-lobby .lb-panel-close { min-width: 55px; min-height: 36px; }
+  .lb-lobby .lb-panel-body { gap: 8px; padding: 8px; }
+  .lb-lobby .lb-panel-lead { display: none; }
+  .lb-lobby .lb-stage-hint { display: none; }
+  .lb-lobby .lb-stage-reset { min-height: 34px; }
+  .lb-lobby .lb-stage-plate { right: 3%; bottom: 4px; left: 3%; padding: 6px 8px; border-width: 2px; box-shadow: 0 3px 0 var(--lb-ink); }
+  .lb-lobby .lb-stage-name { font-size: 14px; }
+  .lb-lobby .lb-stage-role { font-size: 7px; }
+  .lb-lobby .lb-stage-badge { padding: 3px 4px; border-width: 1.5px; font-size: 6px; }
+  .lb-lobby .lb-char-info { grid-template-columns: 1fr 1.1fr; gap: 7px; }
+  .lb-lobby .lb-char-name { font-size: 15px; }
+  .lb-lobby .lb-char-role { font-size: 7px; }
+  .lb-lobby .lb-char-state { padding: 3px 4px; font-size: 6px; }
+  .lb-lobby .lb-gauges { gap: 4px; }
+  .lb-lobby .lb-gauge { grid-template-columns: 34px minmax(0,1fr) 47px; gap: 3px; }
+  .lb-lobby .lb-gauge-label { font-size: 7px; }
+  .lb-lobby .lb-gauge-value { font-size: 6px; }
+  .lb-lobby .lb-gauge-track { height: 9px; border-width: 1.5px; }
+  .lb-lobby .lb-char-grid { grid-template-columns: repeat(6,minmax(0,1fr)); gap: 4px; }
+  .lb-lobby .lb-char-card { min-height: 89px; padding: 0 3px 4px; border-width: 2px; border-radius: 9px; box-shadow: 0 3px 0 var(--lb-ink); }
+  .lb-lobby .lb-char-portrait { min-height: 59px; }
+  .lb-lobby .lb-swatch { width: 35px; height: 43px; border-width: 2px; }
+  .lb-lobby .lb-swatch::before { width: 18px; height: 13px; margin-top: 11px; }
+  .lb-lobby .lb-char-card-copy b { font-size: 8px; }
+  .lb-lobby .lb-char-card-copy small { display: none; }
+  .lb-lobby .lb-lock { top: 3px; right: 3px; padding: 2px; border-width: 1.5px; }
+  .lb-lobby .lb-lock svg { width: 9px; height: 9px; }
+  .lb-lobby .lb-lock i { display: none; }
+  .lb-lobby .lb-char-card.lb-equipped::after { top: 3px; left: 3px; padding: 2px; border-width: 1.5px; font-size: 5px; }
+  .lb-lobby .lb-char-equip { min-height: 44px; font-size: 13px; }
+  .lb-lobby .lb-char-note { display: none; }
+  .lb-lobby .lb-play-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+  .lb-lobby .lb-play-hero { grid-column: auto; min-height: 92px; }
+  .lb-lobby .lb-mode { min-height: 92px; grid-template-columns: 42px minmax(0,1fr); padding: 7px; border-width: 2px; border-radius: 12px; box-shadow: 0 3px 0 var(--lb-ink); }
+  .lb-lobby .lb-mode-icon { width: 40px; height: 40px; border-width: 2px; border-radius: 10px; }
+  .lb-lobby .lb-mode-icon svg { width: 24px; height: 24px; }
+  .lb-lobby .lb-mode-copy small,
+  .lb-lobby .lb-mode-copy span,
+  .lb-lobby .lb-mode > i { display: none; }
+  .lb-lobby .lb-mode-copy b { font-size: 12px; }
+  .lb-lobby .lb-room-list { max-height: calc(100vh - 205px); }
+  .lb-lobby .lb-room-state { padding: 12px; border-width: 2px; }
+  .lb-lobby .lb-room-card { grid-template-columns: 52px minmax(92px,1fr) auto auto; min-height: 55px; gap: 5px; padding: 5px; }
+  .lb-lobby .lb-room-status { display: none; }
+  .lb-lobby .lb-room-mode { min-height: 32px; }
+  .lb-lobby .lb-code-join { padding: 5px; }
+  .lb-lobby .lb-create-grid { gap: 6px; }
+  .lb-lobby .lb-create-card { min-height: 78px; grid-template-columns: 35px 1fr; padding: 6px; border-width: 2px; }
+  .lb-lobby .lb-create-icon { width: 34px; height: 34px; }
+  .lb-lobby .lb-create-card em { display: none; }
+  .lb-lobby .lb-create-rule { padding: 5px; }
+  .lb-lobby .lb-create-submit { min-height: 44px; }
+  .lb-lobby .lb-weapon-preview { grid-template-columns: minmax(0,1fr) 120px; padding: 5px; border-width: 2px; }
+  .lb-lobby .lb-weapon-preview-stage { height: 85px; }
+  .lb-lobby .lb-weapon { min-height: 75px; }
+  .lb-lobby .lb-weapon-icon { height: 35px; }
+  .lb-lobby .lb-weapon-icon img { max-height: 34px; }
+  .lb-lobby .lb-shop-weapon-image { height: 34px; }
+  .lb-lobby .lb-slider { min-height: 44px; grid-template-columns: 105px minmax(0,1fr) 48px; padding: 5px 7px; }
+  .lb-lobby .lb-key-guide { grid-template-columns: repeat(5,minmax(0,1fr)); }
+  .lb-lobby .lb-key-item { display: grid; place-items: center; gap: 2px; text-align: center; }
+  .lb-lobby .lb-key-item small { font-size: 6px; }
+}
+
+@media (max-width: 720px) and (max-height: 520px) {
+  .lb-lobby .lb-nav-brand { min-width: 72px; }
+  .lb-lobby .lb-nav-brand span { display: none; }
+  .lb-lobby .lb-nav-btn { width: 49px; }
+  .lb-lobby .lb-nav-play { width: 57px; }
+  .lb-lobby .lb-nav-label b { font-size: 6px; }
+  .lb-lobby.lb-character-open .lb-panel { width: 58vw; }
+  .lb-lobby .lb-stage-badges { display: none; }
+  .lb-lobby .lb-code-join label > span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lb-lobby *,
+  .lb-lobby *::before,
+  .lb-lobby *::after { animation: none !important; transition-duration: .01ms !important; }
+}
+
+/*
+ * Legibility floor
+ * Desktop: body 12px, secondary labels/values 11px, badges/keys 10px.
+ * Small viewports: body/labels/values 10px, badges/keys 9px.
+ * Panels own their overflow, so copy remains readable instead of being scaled down.
+ */
+.lb-lobby .lb-player-chip small,
+.lb-lobby .lb-character-name,
+.lb-lobby .lb-presence,
+.lb-lobby .lb-logo span,
+.lb-lobby .lb-nav-label b,
+.lb-lobby .lb-nav-label small,
+.lb-lobby .lb-stage-hint,
+.lb-lobby .lb-gauge-label,
+.lb-lobby .lb-gauge-value,
+.lb-lobby .lb-room-tools-copy span,
+.lb-lobby .lb-room-slots b,
+.lb-lobby .lb-code-join label > span,
+.lb-lobby .lb-weapon-slot,
+.lb-lobby .lb-slider-label,
+.lb-lobby .lb-slider-val,
+.lb-lobby .lb-settings-nickname-current span,
+.lb-lobby .lb-nick-popup-title,
+.lb-lobby .lb-weapon-preview-hint { font-size: 11px; }
+
+.lb-lobby .lb-panel-lead,
+.lb-lobby .lb-stage-role,
+.lb-lobby .lb-char-role,
+.lb-lobby .lb-char-card-copy small,
+.lb-lobby .lb-char-note,
+.lb-lobby .lb-mode-copy span,
+.lb-lobby .lb-room-state p,
+.lb-lobby .lb-room-name small,
+.lb-lobby .lb-create-card em,
+.lb-lobby .lb-create-rule,
+.lb-lobby .lb-section,
+.lb-lobby .lb-weapon b,
+.lb-lobby .lb-soon-copy b,
+.lb-lobby .lb-soon-copy p,
+.lb-lobby .lb-shop-weapon-title,
+.lb-lobby .lb-shop-weapon-card b,
+.lb-lobby .lb-key-item small,
+.lb-lobby .lb-presence-retry,
+.lb-lobby .lb-nickname-rule,
+.lb-lobby .lb-nickname-feedback,
+.lb-lobby .lb-nickname-copy { font-size: 12px; }
+
+.lb-lobby .lb-menu-button kbd,
+.lb-lobby .lb-stage-badge,
+.lb-lobby .lb-char-state,
+.lb-lobby .lb-char-card.lb-equipped::after,
+.lb-lobby .lb-lock i,
+.lb-lobby .lb-mode > i,
+.lb-lobby .lb-room-mode,
+.lb-lobby .lb-room-status,
+.lb-lobby .lb-room-join:disabled,
+.lb-lobby .lb-soon-badge,
+.lb-lobby .lb-shop-weapon-badge,
+.lb-lobby .lb-key-item kbd,
+.lb-lobby .lb-nickname-counter,
+.lb-lobby .lb-nickname-eyebrow { font-size: 10px; }
+
+.lb-lobby .lb-mode-copy small,
+.lb-lobby .lb-create-card small { font-size: 11px; }
+.lb-lobby .lb-char-card-copy b,
+.lb-lobby .lb-room-name b,
+.lb-lobby .lb-weapon b,
+.lb-lobby .lb-soon-copy b,
+.lb-lobby .lb-shop-weapon-card b { font-size: 12px; }
+.lb-lobby .lb-room-refresh { font-size: 11px; }
+.lb-lobby .lb-control-hint {
+  background: var(--lb-ink);
+  color: #fff;
+  font-size: 11px;
+}
+
+/* A tall, narrow editor preview gets a real compact nav: PLAY plus a fixed-size MENU. */
+@media (max-width: 720px) and (min-height: 601px) {
+  .lb-lobby .lb-nav { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .lb-lobby:not(.lb-menu-open) .lb-nav-actions { display: flex; justify-content: flex-end; }
+  .lb-lobby:not(.lb-menu-open) .lb-nav-actions .lb-nav-btn { display: none; }
+  .lb-lobby:not(.lb-menu-open) .lb-nav-actions .lb-nav-play {
+    display: grid;
+    width: 96px;
+    min-width: 96px;
+  }
+  .lb-lobby .lb-menu-button,
+  .lb-lobby.lb-menu-open .lb-menu-button,
+  .lb-lobby.lb-menu-open .lb-menu-button.lb-active {
+    width: 48px;
+    min-width: 48px;
+    max-width: 48px;
+    flex: 0 0 48px;
+    justify-self: end;
+  }
+}
+
+@media (max-width: 1000px), (max-height: 520px) {
+  .lb-lobby .lb-nav-label b { font-size: 9px; }
+  .lb-lobby .lb-nav-play .lb-nav-label b { font-size: 11px; }
+  .lb-lobby .lb-nav-brand span,
+  .lb-lobby .lb-player-chip small,
+  .lb-lobby .lb-player-name,
+  .lb-lobby .lb-character-name,
+  .lb-lobby .lb-presence,
+  .lb-lobby .lb-logo span,
+  .lb-lobby .lb-stage-role,
+  .lb-lobby .lb-char-role,
+  .lb-lobby .lb-gauge-label,
+  .lb-lobby .lb-gauge-value,
+  .lb-lobby .lb-char-card-copy b,
+  .lb-lobby .lb-char-card-copy small,
+  .lb-lobby .lb-mode-copy small,
+  .lb-lobby .lb-mode-copy span,
+  .lb-lobby .lb-room-tools-copy span,
+  .lb-lobby .lb-room-state p,
+  .lb-lobby .lb-room-name small,
+  .lb-lobby .lb-room-slots b,
+  .lb-lobby .lb-code-join label > span,
+  .lb-lobby .lb-create-card small,
+  .lb-lobby .lb-create-card em,
+  .lb-lobby .lb-create-rule,
+  .lb-lobby .lb-section,
+  .lb-lobby .lb-weapon-slot,
+  .lb-lobby .lb-weapon b,
+  .lb-lobby .lb-soon-copy b,
+  .lb-lobby .lb-soon-copy p,
+  .lb-lobby .lb-shop-weapon-title,
+  .lb-lobby .lb-shop-weapon-card b,
+  .lb-lobby .lb-weapon-preview-hint,
+  .lb-lobby .lb-slider-label,
+  .lb-lobby .lb-slider-val,
+  .lb-lobby .lb-key-item small,
+  .lb-lobby .lb-presence-retry,
+  .lb-lobby .lb-settings-nickname-current span,
+  .lb-lobby .lb-nick-popup-title,
+  .lb-lobby .lb-nickname-rule,
+  .lb-lobby .lb-nickname-feedback,
+  .lb-lobby .lb-nickname-copy,
+  .lb-lobby .lb-nickname-eyebrow,
+  .lb-lobby .lb-control-hint { font-size: 10px; }
+
+  .lb-lobby .lb-menu-button kbd,
+  .lb-lobby .lb-stage-badge,
+  .lb-lobby .lb-char-state,
+  .lb-lobby .lb-char-card.lb-equipped::after,
+  .lb-lobby .lb-lock i,
+  .lb-lobby .lb-mode > i,
+  .lb-lobby .lb-room-mode,
+  .lb-lobby .lb-room-status,
+  .lb-lobby .lb-room-join:disabled,
+  .lb-lobby .lb-soon-badge,
+  .lb-lobby .lb-shop-weapon-badge,
+  .lb-lobby .lb-key-item kbd,
+  .lb-lobby .lb-nickname-counter { font-size: 9px; }
+
+  .lb-lobby .lb-mode-copy b { font-size: 13px; }
+  .lb-lobby .lb-room-refresh { font-size: 10px; }
+  .lb-lobby .lb-gauge { grid-template-columns: 42px minmax(0,1fr) 70px; gap: 4px; }
+}
+
+/* 좁은 화면 PLAY: 아이콘을 빼고 글자만 (아이콘이 자리를 차지해 '게임 시작'이 잘림) */
+@media (max-width: 1000px), (max-height: 520px) {
+  .lb-lobby .lb-nav .lb-nav-play .lb-nav-icon { display: none; }
+  .lb-lobby .lb-nav .lb-nav-play { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .lb-lobby .lb-nav .lb-nav-play .lb-nav-label { min-width: 0; max-width: 100%; }
+}

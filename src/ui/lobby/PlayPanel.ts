@@ -4,7 +4,7 @@ import { button, comingSoon, el, ICON, type LobbyHost, type LobbyPanel } from '.
 
 export class PlayPanel implements LobbyPanel {
   readonly id = 'play';
-  readonly title = 'PLAY';
+  readonly title = '게임 시작';
 
   constructor(
     private readonly host: LobbyHost,

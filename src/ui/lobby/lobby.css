@@ -1387,38 +1387,6 @@
 }
 
 /* 로밍 중에만 보인다. 휴대폰에서도 상단 바 아래라 조이스틱·점프/슬라이드 영역과 겹치지 않는다. */
-.lb-return-button {
-  position: absolute;
-  top: calc(var(--lb-v3-bar) + 23px);
-  left: 14px;
-  z-index: 24;
-  display: flex;
-  min-width: 0;
-  min-height: 44px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  pointer-events: auto;
-  border: 2px solid #fff;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(230,238,255,.96));
-  box-shadow: 0 4px 0 rgba(48,69,119,.28), 0 9px 20px rgba(24,38,78,.14);
-  color: #4d68a8;
-  font-size: 9px;
-  font-weight: 900;
-}
-.lb-return-button svg { width: 18px; height: 18px; }
-.lb-return-button kbd {
-  padding: 2px 5px;
-  border: 1px solid rgba(39,50,92,.16);
-  border-bottom-width: 3px;
-  border-radius: 6px;
-  background: #fff;
-  color: var(--lb-ink);
-  font: 900 8px var(--font);
-}
-.lb-menu-open .lb-return-button,
-.lb-nickname-open .lb-return-button { display: none; }
 
 /* 닉네임 공용 입력기 */
 .lb-nickname-editor { display: grid; min-width: 0; gap: 7px; }
@@ -1563,19 +1531,6 @@
 }
 .lb-nick-cancel:disabled { opacity: .5; }
 
-.lb-touch .lb-return-button {
-  top: calc(var(--lb-v3-bar) + 17px);
-  left: 10px;
-  width: 58px;
-  height: 58px;
-  min-height: 58px;
-  justify-content: center;
-  padding: 0;
-  border-radius: 50%;
-}
-.lb-touch .lb-return-button svg { width: 24px; height: 24px; }
-.lb-touch .lb-return-button span,
-.lb-touch .lb-return-button kbd { display: none; }
 
 /* 가로형 휴대폰에서는 카드를 위쪽에 붙여 가상 키보드가 올라와도 입력칸을 최대한 남긴다. */
 @media (max-width: 1000px), (max-height: 520px) {

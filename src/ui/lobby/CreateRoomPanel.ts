@@ -4,7 +4,7 @@ import { button, el, ICON, type LobbyHost, type LobbyPanel } from './lobbyDom';
 
 export class CreateRoomPanel implements LobbyPanel {
   readonly id = 'create';
-  readonly title = 'CREATE ROOM';
+  readonly title = '방 만들기';
   private selected: NetMode = 'tdm';
 
   constructor(private readonly host: LobbyHost) {}

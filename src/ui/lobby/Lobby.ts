@@ -1,5 +1,6 @@
 // 자유 이동 로비의 상단 메뉴 바와 창. 3D 월드와 캐릭터는 게임이 그리고, 여기서는 DOM UI만 맡는다.
 import './lobby.css';
+import './toy.css';
 import { CharacterPanel } from './CharacterPanel';
 import { CreateRoomPanel } from './CreateRoomPanel';
 import { LoadoutPanel } from './LoadoutPanel';
@@ -41,7 +42,7 @@ export class Lobby {
   private readonly stageName = el('b', 'lb-stage-name');
   private readonly stageRole = el('span', 'lb-stage-role');
   private readonly stageBadges = el('span', 'lb-stage-badges');
-  private readonly characterDot = el('i', 'lb-character-dot');
+  private readonly characterDot = el('span', 'lb-character-dot');
   private readonly characterName = el('b', 'lb-character-name');
   private readonly playerName = el('b', 'lb-player-name');
   private readonly presence = el('span', 'lb-presence');
@@ -50,7 +51,6 @@ export class Lobby {
   private readonly presenceRetry = button('다시 시도', 'lb-presence-retry', () => this.host.retryLobby());
   private readonly controlHint = el('div', 'lb-control-hint');
   private readonly menuButton: HTMLButtonElement;
-  private readonly returnButton: HTMLButtonElement;
   private readonly nicknameModal = el('div', 'lb-nickname-modal');
   private readonly nicknameEditor: NicknameEditor;
   private open: string | null = null;
@@ -60,6 +60,7 @@ export class Lobby {
   private lastChar = '';
   private lastPlayer = '';
   private lastPresence = '';
+  private portraitRequest = 0;
   private roamTouch = false;
   private characterSuspended = false;
   private dragPointer: number | null = null;
@@ -92,15 +93,13 @@ export class Lobby {
     this.menuButton = button('', 'lb-menu-button', () => this.toggleMenu(), `<span>${ICON.menu}</span><b>MENU</b><kbd>TAB</kbd>`);
     this.menuButton.setAttribute('aria-label', '메뉴 열기');
     this.menuButton.setAttribute('aria-expanded', 'false');
-    this.returnButton = button('', 'lb-return-button', () => this.host.returnToStart(), `${ICON.return}<span>처음 위치로</span><kbd>R</kbd>`);
-    this.returnButton.setAttribute('aria-label', '처음 위치로 돌아가기');
 
     this.nicknameEditor = this.buildNicknameModal();
 
     this.buildBar();
     this.buildWindow();
     this.buildHint();
-    this.root.append(this.nav, this.returnButton, this.controlHint, this.menuLayer, this.nicknameModal);
+    this.root.append(this.nav, this.controlHint, this.menuLayer, this.nicknameModal);
 
     window.addEventListener(
       'keydown',
@@ -253,6 +252,7 @@ export class Lobby {
       const character = this.host.characters().find((item) => item.id === current);
       this.characterName.textContent = character?.name ?? '캐릭터';
       this.characterDot.style.setProperty('--c', character?.color ?? '#5b8cff');
+      this.loadHudPortrait(current, character?.name ?? '캐릭터');
     }
     this.syncRequiredNickname();
   }
@@ -261,7 +261,26 @@ export class Lobby {
     this.openMenu(id);
   }
 
+  /** HUD 캐릭터 칩도 실제 모델 초상을 쓰고, 실패하면 색상 실루엣을 그대로 남긴다. */
+  private loadHudPortrait(id: string, name: string): void {
+    const request = ++this.portraitRequest;
+    this.characterDot.classList.remove('lb-has-portrait');
+    this.characterDot.textContent = '';
+    void this.host.characterPortrait(id).then((source) => {
+      if (request !== this.portraitRequest || id !== this.lastChar) return;
+      const image = el('img');
+      image.src = source;
+      image.alt = name;
+      image.draggable = false;
+      this.characterDot.appendChild(image);
+      this.characterDot.classList.add('lb-has-portrait');
+    }).catch(() => {
+      // 초상 렌더 실패 시 --c 색상으로 그린 기본 실루엣을 유지한다.
+    });
+  }
+
   private buildBar(): void {
+    const status = el('div', 'lb-nav-status');
     const brand = el('div', 'lb-nav-brand');
     brand.setAttribute('aria-label', 'POP! BATTLE');
     brand.innerHTML = '<b>POP!</b><span>BATTLE</span>';
@@ -273,20 +292,21 @@ export class Lobby {
     this.presence.append(this.presenceLabel, this.presenceRetry);
     this.presenceRetry.hidden = true;
     identity.append(player, character, this.presence);
-    this.nav.append(brand, identity);
+    status.append(brand, identity);
+    const actions = el('div', 'lb-nav-actions');
     for (const item of NAV) {
       const navButton = button(
         '',
         `lb-nav-btn lb-nav-${item.id}`,
         () => this.show(item.id),
-        `<span class="lb-nav-icon">${item.icon}</span><span class="lb-nav-label"><b>${item.label}</b><small>${item.korean}</small></span>${item.id === 'shop' ? '<i>SOON</i>' : ''}`,
+        `<span class="lb-nav-icon">${item.icon}</span><span class="lb-nav-label"><b>${item.korean}</b><small>${item.label}</small></span>${item.id === 'shop' ? '<i>SOON</i>' : ''}`,
       );
       navButton.setAttribute('aria-label', item.korean);
       navButton.setAttribute('aria-pressed', 'false');
       this.navButtons.set(item.id, navButton);
-      this.nav.append(navButton);
+      actions.append(navButton);
     }
-    this.nav.append(this.menuButton);
+    this.nav.append(status, actions, this.menuButton);
   }
 
   private buildWindow(): void {
@@ -325,7 +345,7 @@ export class Lobby {
   }
 
   private buildHint(): void {
-    this.controlHint.textContent = 'WASD 이동 · W 두 번 달리기 · Space 점프 · Shift 슬라이딩 · R 처음 위치로 · TAB 메뉴';
+    this.controlHint.textContent = 'WASD 이동 · W 두 번 달리기 · Space 점프 · Shift 슬라이딩 · TAB 메뉴';
     this.controlHint.addEventListener('mouseenter', () => this.replayHint(), { signal: this.abort.signal });
   }
 

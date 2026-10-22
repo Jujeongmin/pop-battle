@@ -3,7 +3,7 @@ import { button, comingSoon, el, type LobbyHost, type LobbyPanel, type LobbyWeap
 
 export class LoadoutPanel implements LobbyPanel {
   readonly id = 'loadout';
-  readonly title = 'LOADOUT';
+  readonly title = '장비';
   private stopPreview: (() => void) | null = null;
   private previewBody: HTMLElement | null = null;
   private inactive = false;

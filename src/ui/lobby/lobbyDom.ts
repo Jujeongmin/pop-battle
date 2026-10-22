@@ -43,6 +43,11 @@ export interface LobbyHost {
   /** 미리보기 회전 (드래그한 가로 px) / 정면으로 되돌리기 */
   rotatePreview(dxPx: number): void;
   resetPreviewRotation(): void;
+  /**
+   * 실제 캐릭터 모델의 얼굴·상반신 초상 (정사각 256px PNG data URL, 투명 배경, 대기 자세, 정면에서 살짝 비스듬히).
+   * 처음 부를 때 모델을 불러와(이미 불러온 캐릭터는 캐시) 한 번 그림. 잠긴 캐릭터도 가능. 실패하면 reject
+   */
+  characterPortrait(id: string): Promise<string>;
   primaryWeapons(): LobbyWeapon[];
   /**
    * 실제 무기 모델의 옆모습 컬러 이미지 (PNG data URL, 가로:세로 = 12:5, 투명 배경). 무기 id는 primaryWeapons·fixedWeapons의 id.
@@ -88,8 +93,6 @@ export interface LobbyHost {
    * 실패하면 기존 닉네임 유지. reason: NickFailReason(empty·length·chars·blocked) 또는 rate(너무 자주 바꿈)·server(서버 확인 실패)
    */
   setNickname(raw: string): Promise<NicknameResult>;
-  /** 로비 시작 지점으로 복귀 (PC R 키와 같은 동작, 메뉴 창이 열려 있으면 무시) */
-  returnToStart(): void;
   /** 같은 로비 인스턴스 인원 (매 프레임 읽어도 됨) */
   presence(): LobbyPresence;
   /** 로비 연결 바로 다시 시도 (disconnected 상태의 다시 시도 버튼) */

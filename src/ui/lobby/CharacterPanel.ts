@@ -1,5 +1,5 @@
 // CHARACTER 정비소: 카드는 3D 미리보기만 바꾸고, 별도 결정 버튼으로 장착한다.
-// 체력·이동속도는 모든 캐릭터가 같은 최대 기준으로 비교하며 수치는 표시하지 않는다.
+// 체력·이동속도는 모든 캐릭터가 같은 최대 기준으로 비교한다.
 import { button, el, ICON, type LobbyCharacter, type LobbyHost, type LobbyPanel } from './lobbyDom';
 
 const HP_MAX = 130;
@@ -7,10 +7,12 @@ const SPEED_MAX = 1.15;
 
 export class CharacterPanel implements LobbyPanel {
   readonly id = 'character';
-  readonly title = 'CHARACTER';
+  readonly title = '캐릭터';
   private note: HTMLElement | null = null;
   private hpBar: HTMLElement | null = null;
   private speedBar: HTMLElement | null = null;
+  private hpValue: HTMLElement | null = null;
+  private speedValue: HTMLElement | null = null;
   private nameEl: HTMLElement | null = null;
   private roleEl: HTMLElement | null = null;
   private stateEl: HTMLElement | null = null;
@@ -46,13 +48,18 @@ export class CharacterPanel implements LobbyPanel {
       const row = el('div', `lb-gauge ${cls}`);
       const track = el('div', 'lb-gauge-track');
       const fill = el('div', 'lb-gauge-fill');
+      const value = el('b', 'lb-gauge-value');
       track.appendChild(fill);
-      row.append(el('span', 'lb-gauge-label', label), track);
+      row.append(el('span', 'lb-gauge-label', label), track, value);
       gauges.appendChild(row);
-      return fill;
+      return { fill, value };
     };
-    this.hpBar = gauge('HP', 'lb-g-hp');
-    this.speedBar = gauge('SPEED', 'lb-g-speed');
+    const hp = gauge('HP', 'lb-g-hp');
+    const speed = gauge('SPEED', 'lb-g-speed');
+    this.hpBar = hp.fill;
+    this.hpValue = hp.value;
+    this.speedBar = speed.fill;
+    this.speedValue = speed.value;
     info.append(heading, gauges);
     body.appendChild(info);
 
@@ -60,17 +67,19 @@ export class CharacterPanel implements LobbyPanel {
     this.cards = this.characters.map((character) => {
       const card = button(
         '',
-        'lb-char-card',
+        'lb-char-card lb-portrait-loading',
         () => this.show(character, false, true),
-        `<i class="lb-swatch"></i><b></b><span class="lb-card-equipped">장착 중</span>${character.locked ? `<span class="lb-lock">${ICON.lock}</span>` : ''}`,
+        `<span class="lb-char-portrait"><i class="lb-swatch"></i></span><span class="lb-char-card-copy"><b></b><small></small></span><span class="lb-card-equipped">장착 중</span>${character.locked ? `<span class="lb-lock">${ICON.lock}<i>잠김</i></span>` : ''}`,
       );
       card.dataset.id = character.id;
       card.style.setProperty('--c', character.color);
       card.querySelector('b')!.textContent = character.name;
+      card.querySelector('small')!.textContent = character.role;
       card.classList.toggle('lb-locked', character.locked);
       card.setAttribute('aria-pressed', 'false');
       card.title = character.locked ? `${character.name} · 잠김 · 미리보기` : `${character.name} 미리보기`;
       grid.appendChild(card);
+      void this.loadPortrait(card, character, version);
       return card;
     });
     body.appendChild(grid);
@@ -140,6 +149,24 @@ export class CharacterPanel implements LobbyPanel {
     }
   }
 
+  /** 실제 모델 초상을 채운다. 실패하면 카드의 색상 실루엣이 그대로 대체 이미지가 된다. */
+  private async loadPortrait(card: HTMLButtonElement, character: LobbyCharacter, version: number): Promise<void> {
+    try {
+      const source = await this.host.characterPortrait(character.id);
+      if (version !== this.renderVersion || !card.isConnected) return;
+      const image = el('img');
+      image.src = source;
+      image.alt = character.name;
+      image.draggable = false;
+      card.querySelector('.lb-char-portrait')?.appendChild(image);
+      card.classList.add('lb-has-portrait');
+    } catch {
+      // 모델 렌더 실패 시 기존 색상 실루엣을 사용한다.
+    } finally {
+      if (version === this.renderVersion) card.classList.remove('lb-portrait-loading');
+    }
+  }
+
   /** 이름·게이지·3D 미리보기를 함께 바꾼다. 장착 상태는 건드리지 않는다. */
   private show(character: LobbyCharacter, first: boolean, changeModel: boolean): void {
     this.preview = character.id;
@@ -150,6 +177,8 @@ export class CharacterPanel implements LobbyPanel {
 
     const hp = `${Math.min(100, (character.maxHp / HP_MAX) * 100).toFixed(1)}%`;
     const speed = `${Math.min(100, (character.speed / SPEED_MAX) * 100).toFixed(1)}%`;
+    this.hpValue!.textContent = `${character.maxHp}/${HP_MAX}`;
+    this.speedValue!.textContent = `${Math.round(character.speed * 100)}%/${Math.round(SPEED_MAX * 100)}%`;
     const apply = () => {
       this.hpBar!.style.width = hp;
       this.speedBar!.style.width = speed;
@@ -175,19 +204,19 @@ export class CharacterPanel implements LobbyPanel {
     equip.disabled = this.loading || equipped || !character.selectable;
 
     if (result === 'loading') {
-      equip.textContent = '장착하는 중…';
+      equip.textContent = '불러오는 중';
       this.note!.textContent = '';
     } else if (result === 'success') {
-      equip.textContent = '장착 완료';
+      equip.textContent = '장착 중';
       this.note!.textContent = '이 캐릭터로 장착했어요.';
     } else if (equipped) {
       equip.textContent = '장착 중';
       this.note!.textContent = result === 'failure' ? '지금은 캐릭터를 바꿀 수 없어요.' : '';
     } else if (!character.selectable) {
-      equip.innerHTML = `<span class="lb-equip-lock">${ICON.lock}</span><span>잠긴 캐릭터</span>`;
+      equip.innerHTML = `<span class="lb-equip-lock">${ICON.lock}</span><span>잠김</span>`;
       this.note!.textContent = '잠긴 캐릭터 · 미리보기만 가능해요 (해금 준비 중)';
     } else {
-      equip.textContent = '이 캐릭터로 결정';
+      equip.textContent = '장착하기';
       this.note!.textContent = result === 'failure' ? '지금은 캐릭터를 바꿀 수 없어요.' : '카드를 눌러 모습과 능력을 미리 볼 수 있어요.';
     }
   }
