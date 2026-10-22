@@ -85,6 +85,8 @@ const HEADSHOT_ICON =
   '<svg class="kf-head" viewBox="0 0 20 20" width="13" height="13" role="img" aria-label="헤드샷"><circle cx="10" cy="10" r="8.2" fill="none" stroke="currentColor" stroke-width="2"/>' +
   '<circle cx="10" cy="10" r="3.6" fill="currentColor"/><path d="M10 0 v4 M10 16 v4 M0 10 h4 M16 10 h4" stroke="currentColor" stroke-width="2"/></svg>';
 
+const ICON_LABEL: Record<string, string> = { rifle: '라이플', shotgun: '샷건', sniper: '스나이퍼', pistol: '권총', melee: '뿅망치' };
+
 const WEAPON_ICON: Record<string, string> = {
   rifle: 'rifle',
   shotgun: 'shotgun',
@@ -96,6 +98,26 @@ const WEAPON_ICON: Record<string, string> = {
 /** HUD 무기 카드·슬롯용 무기 아이콘 SVG (킬로그와 같은 그림, 크기는 CSS) */
 export function weaponIconSvg(weaponId: string): string {
   return ICONS[WEAPON_ICON[weaponId] ?? 'unknown']!;
+}
+
+/** 무기 아이콘 원본: 실제 무기 모델 실루엣 (흰색 알파 이미지, assets/weaponArt). 없으면 위의 SVG 그림 */
+let modelIcon: ((weaponId: string) => string | null) | null = null;
+
+/** 게임이 무기 모델을 불러온 뒤 한 번 (킬로그 무기 아이콘을 실제 모델 실루엣으로) */
+export function setKillFeedWeaponIcons(source: (weaponId: string) => string | null): void {
+  modelIcon = source;
+}
+
+/** 킬로그 무기 아이콘 (모델 실루엣을 currentColor로 칠함 → 기존 색 규칙 그대로) */
+function modelIconEl(weaponId: string, label: string): HTMLSpanElement | null {
+  const url = modelIcon?.(weaponId);
+  if (!url) return null;
+  const s = document.createElement('span');
+  s.className = 'kf-icon kf-icon-model';
+  s.setAttribute('role', 'img');
+  s.setAttribute('aria-label', label);
+  s.style.setProperty('--kf-icon', `url("${url}")`);
+  return s;
 }
 
 /** 무기 id → 아이콘 키 (모르는 무기는 기본 처치 아이콘) */
@@ -140,7 +162,10 @@ export class KillFeed {
     if (e.killerName && e.cause === 'weapon') el.appendChild(name('kf-killer', e.killerName, e.killerColor));
     const icons = document.createElement('span');
     icons.className = 'kf-icons';
-    icons.innerHTML = ICONS[killIconKey(e)]! + (e.headshot && e.cause === 'weapon' ? HEADSHOT_ICON : '');
+    const key = killIconKey(e);
+    const model = e.cause === 'weapon' && e.weaponId && key !== 'unknown' ? modelIconEl(e.weaponId, ICON_LABEL[key] ?? '처치') : null;
+    if (model) icons.append(model);
+    icons.insertAdjacentHTML('beforeend', (model ? '' : ICONS[key]!) + (e.headshot && e.cause === 'weapon' ? HEADSHOT_ICON : ''));
     el.appendChild(icons);
     el.appendChild(name('kf-victim', e.victimName, e.victimColor));
     this.root.prepend(el);

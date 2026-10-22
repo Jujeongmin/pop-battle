@@ -44,6 +44,16 @@ export interface LobbyHost {
   rotatePreview(dxPx: number): void;
   resetPreviewRotation(): void;
   primaryWeapons(): LobbyWeapon[];
+  /**
+   * 실제 무기 모델의 옆모습 컬러 이미지 (PNG data URL, 가로:세로 = 12:5, 투명 배경). 무기 id는 primaryWeapons·fixedWeapons의 id.
+   * 처음 부를 때 게임 렌더러로 그림 (무기당 수 ms), 이후 캐시. 모르는 id면 null
+   */
+  weaponImage(id: string): string | null;
+  /**
+   * 실제 무기 모델을 한 바퀴 돌린 프레임 (캔버스 36장, 400×220, 투명 배경, 첫 장 = 옆모습 → 장마다 10°씩 회전).
+   * 정비소 3D 미리보기용: 캔버스를 그대로 붙이지 말고 표시용 캔버스에 drawImage로 그림 (같은 캔버스를 여러 곳에서 씀). 처음 부를 때 무기당 약 50ms
+   */
+  weaponTurntable(id: string): HTMLCanvasElement[];
   fixedWeapons(): { secondary: LobbyWeapon; melee: LobbyWeapon };
   currentPrimary(): string;
   selectPrimary(id: string): void;

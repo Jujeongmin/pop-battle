@@ -1613,3 +1613,148 @@
   .lb-nav-label b { font-size: 9.5px; white-space: nowrap; }
   .lb-nav-play .lb-nav-label b { font-size: 12px; }
 }
+
+/* ================= 실제 무기 이미지 · LOADOUT 3D 미리보기 · SHOP 스킨 예고 ================= */
+.lb-weapon-icon img {
+  display: block;
+  width: min(94%, 132px);
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.lb-weapon-preview {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 7px 9px 8px;
+  border: 3px solid #fff;
+  border-radius: calc(20px * var(--lu));
+  background: linear-gradient(145deg, #dfeaff, #fff8dc 72%, #ffe9aa);
+  box-shadow: 0 5px 0 rgba(39,50,92,.17);
+}
+.lb-weapon-preview-stage {
+  position: relative;
+  min-width: 0;
+  height: clamp(145px, 21vh, 195px);
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,.82);
+  border-radius: calc(15px * var(--lu));
+  background:
+    radial-gradient(circle at 50% 64%, rgba(255,255,255,.94) 0 18%, rgba(255,255,255,0) 54%),
+    linear-gradient(180deg, rgba(124,165,255,.13), rgba(255,222,111,.12));
+}
+.lb-weapon-preview-stage::after {
+  position: absolute;
+  right: 12%;
+  bottom: 13%;
+  left: 12%;
+  height: 9%;
+  border-radius: 50%;
+  background: rgba(39,50,92,.1);
+  filter: blur(8px);
+  content: '';
+  pointer-events: none;
+}
+.lb-weapon-preview-canvas {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.lb-weapon-preview-canvas.lb-dragging { cursor: grabbing; }
+.lb-weapon-preview-hint {
+  position: absolute;
+  right: 8px;
+  bottom: 7px;
+  z-index: 2;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(39,50,92,.68);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 850;
+  pointer-events: none;
+}
+.lb-weapon-preview-name {
+  color: var(--lb-ink);
+  font-size: calc(15px * var(--lu));
+  font-weight: 900;
+  text-align: center;
+}
+
+.lb-shop-weapon-preview { display: grid; min-width: 0; gap: 7px; }
+.lb-shop-weapon-title {
+  color: rgba(39,50,92,.62);
+  font-size: calc(10px * var(--lu));
+  font-weight: 900;
+  letter-spacing: .3px;
+}
+.lb-shop-weapon-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(5, minmax(105px, 1fr));
+  gap: calc(7px * var(--lu));
+  overflow-x: auto;
+  padding: 0 0 5px;
+  scrollbar-color: rgba(91,140,255,.35) transparent;
+  scrollbar-width: thin;
+}
+.lb-shop-weapon-card {
+  position: relative;
+  display: grid;
+  min-height: 105px;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  padding: 9px 5px 8px;
+  border: 2px dashed rgba(39,50,92,.16);
+  border-radius: calc(15px * var(--lu));
+  background: rgba(255,255,255,.58);
+  color: rgba(39,50,92,.65);
+  opacity: .82;
+  cursor: default;
+}
+.lb-shop-weapon-image { display: grid; width: 100%; height: 46px; place-items: center; }
+.lb-shop-weapon-image img {
+  display: block;
+  width: 94%;
+  height: 100%;
+  object-fit: contain;
+  opacity: .76;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.lb-shop-weapon-card b { max-width: 100%; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.lb-shop-weapon-badge {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(117,104,170,.17);
+  color: #7166a0;
+  font-size: 7px;
+  font-weight: 900;
+}
+
+/* 가로형 휴대폰에서도 미리보기 높이와 카드 터치 면적을 유지한다. */
+@media (max-width: 1000px), (max-height: 520px) {
+  .lb-weapon-preview { gap: 3px; padding: 4px 6px 5px; border-width: 2px; border-radius: 14px; }
+  .lb-weapon-preview-stage { height: clamp(110px, 31vh, 124px); border-radius: 11px; }
+  .lb-weapon-preview-hint { right: 5px; bottom: 4px; padding: 3px 5px; font-size: 6px; }
+  .lb-weapon-preview-name { font-size: 10px; }
+  .lb-weapon { min-height: 68px; }
+  .lb-weapon-icon img { width: auto; max-width: 92%; height: 25px; object-fit: contain; }
+  .lb-shop-weapon-title { font-size: 8px; }
+  .lb-shop-weapon-row { grid-template-columns: repeat(5, minmax(96px, 1fr)); gap: 6px; }
+  .lb-shop-weapon-card { min-height: 78px; gap: 2px; padding: 5px 3px; border-radius: 11px; }
+  .lb-shop-weapon-image { height: 33px; }
+  .lb-shop-weapon-card b { font-size: 8px; }
+  .lb-shop-weapon-badge { padding: 2px 5px; font-size: 6px; }
+}

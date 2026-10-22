@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { loadCharacterModel, loadGameAssets, type LoadedModel } from '../assets/loadAssets';
 import { WeaponModelLibrary } from '../assets/weaponModels';
+import { WeaponArt } from '../assets/weaponArt';
 import type { Bot } from '../bots/Bot';
 import { BotManager } from '../bots/BotManager';
 import { BOT } from '../config/bots';
@@ -62,7 +63,7 @@ import { PlayerCombatant } from '../player/PlayerCombatant';
 import { PlayerController } from '../player/PlayerController';
 import { CharacterDebug, type DebugParticipant } from '../ui/CharacterDebug';
 import { DebugPanel } from '../ui/DebugPanel';
-import type { DeathCause, KillFeedEvent } from '../ui/KillFeed';
+import { setKillFeedWeaponIcons, type DeathCause, type KillFeedEvent } from '../ui/KillFeed';
 import { Hud, type MatchHudInfo } from '../ui/Hud';
 import { Lobby } from '../ui/lobby/Lobby';
 import { PauseMenu } from '../ui/lobby/PauseMenu';
@@ -197,6 +198,7 @@ export class Game {
   private readonly muzzle = new THREE.Vector3();
   private killedBy: string | null = null;
   private weaponModels!: WeaponModelLibrary;
+  private weaponArt!: WeaponArt;
   /** 로드아웃: 주무기는 게임 시작 전에만 고를 수 있고, 시작(startMatch) 후에는 고정 (리스폰해도 유지) */
   private primary: WeaponDef = RIFLE;
   /** 현재 슬롯 (0 = 1번 주무기, 1 = 2번 권총, 2 = 3번 근접) */
@@ -373,6 +375,11 @@ export class Game {
     };
     // 무기 모델: GLB가 있으면 GLB, 없으면 임시 도형 (무기당 1회 생성 후 재사용)
     this.weaponModels = new WeaponModelLibrary(new Map([[RIFLE.id, assets.rifle.scene], ...assets.weapons]));
+    // 무기 그림 (킬로그 실루엣·정비소·상점): 같은 모델을 게임 렌더러로 한 번 그려 이미지로
+    this.weaponArt = new WeaponArt(this.renderer, this.weaponModels, WEAPONS);
+    // 킬로그 무기 아이콘 = 실제 모델 실루엣 (처음 처치 때 멈칫하지 않게 미리 그림)
+    for (const id of Object.keys(WEAPONS)) this.weaponArt.silhouette(id);
+    setKillFeedWeaponIcons((id) => this.weaponArt.silhouette(id));
     // 원본 씬은 캐시에 남겨 두고 복제본 사용 (개발용 캐릭터 교체 때 다시 복제)
     this.avatar = new PlayerAvatar(SkeletonUtils.clone(assets.character.scene), assets.character.clips, assets.rifle.scene, RIFLE_MOUNT, PLAYER_CHARACTER);
     this.scene.add(this.avatar.root);
@@ -1550,6 +1557,8 @@ export class Game {
       rotatePreview: (dx) => this.rotatePreview(dx),
       resetPreviewRotation: () => this.resetPreviewSpin(),
       primaryWeapons: () => PRIMARY_WEAPONS.map((w) => ({ id: w.id, name: w.name })),
+      weaponImage: (id) => this.weaponArt.image(id),
+      weaponTurntable: (id) => this.weaponArt.turntable(id),
       fixedWeapons: () => ({ secondary: { id: SECONDARY_WEAPON.id, name: SECONDARY_WEAPON.name }, melee: { id: MELEE_WEAPON.id, name: MELEE_WEAPON.name } }),
       currentPrimary: () => this.primary.id,
       selectPrimary: (id) => void this.selectPrimary(id),
@@ -2798,6 +2807,7 @@ export class Game {
     this.targets.forEach((t) => t.dispose());
     this.bots?.dispose();
     this.occlusion?.dispose();
+    this.weaponArt?.dispose();
     this.weaponModels?.dispose();
     this.effects?.dispose();
     this.bullets?.dispose();

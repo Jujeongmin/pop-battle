@@ -83,7 +83,7 @@ export class Lobby {
       new CreateRoomPanel(host),
       this.characterPanel,
       new LoadoutPanel(host),
-      new ShopPanel(),
+      new ShopPanel(host),
       new SettingsPanel(host),
     ]) {
       this.panels.set(panel.id, panel);
