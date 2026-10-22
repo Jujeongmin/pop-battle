@@ -46,6 +46,8 @@ export class LobbySpace {
   private readonly unit = {
     box: new THREE.BoxGeometry(1, 1, 1),
     cylinder: new THREE.CylinderGeometry(1, 1, 1, 32),
+    /** 뚜껑 없는 원통 옆면 (탑 기둥 띠: 띠 사이 뚜껑이 같은 높이에 겹치면 반투명일 때 줄무늬로 일렁임) */
+    tube: new THREE.CylinderGeometry(1, 1, 1, 32, 1, true),
     post: new THREE.CylinderGeometry(1, 1, 1, 10),
     sphere: new THREE.SphereGeometry(1, 14, 10),
     cone: new THREE.ConeGeometry(1, 1, 32),
@@ -248,8 +250,8 @@ export class LobbySpace {
     // 가운데 기둥: 층마다 색이 바뀌는 원통 + 꼭대기 넓은 전망대
     const bands = [p.blue, p.yellow, p.pink, p.mint, p.lavender, p.orange];
     const bandH = TOWER.top / bands.length;
-    // 기둥 띠는 따로 합침 (카메라를 가리면 반투명)
-    bands.forEach((color, i) => this.pillarMerger.addBasic(this.unit.cylinder, trs(tx, y + bandH * (i + 0.5), tz, 0, [TOWER.r, bandH, TOWER.r]), lighten(color, 0.1)));
+    // 기둥 띠는 따로 합침 (카메라를 가리면 반투명). 옆면만: 아래는 섬 바닥, 위는 전망대가 덮음
+    bands.forEach((color, i) => this.pillarMerger.addBasic(this.unit.tube, trs(tx, y + bandH * (i + 0.5), tz, 0, [TOWER.r, bandH, TOWER.r]), lighten(color, 0.1)));
     this.prism(tx, tz, TOWER.r, y, y + TOWER.top, 20, '하늘 탑 기둥');
     this.pillarCollider = this.colliders[this.colliders.length - 1]!;
     this.cylinder(tx, y + TOWER.top - 0.175, tz, 3.2, 0.35, p.white);
