@@ -2358,6 +2358,8 @@ export class Game {
     // 캐릭터 쇼케이스(정비소 미리보기) 중에는 다른 사람 캐릭터를 숨김
     this.peers?.setHidden(this.showcaseBlend > 0);
     this.peers?.update(dt);
+    // 내 닉네임도 내 캐릭터 머리 위 (로비 화면에서만)
+    this.peers?.updateLocal(this.lobbyShown ? this.avatar : null, this.nick);
     // 개발 진단: 5초마다 로비 전송량·FPS (배포 빌드는 출력 없음)
     if (import.meta.env.DEV && hub.status === 'online') {
       this.hubLogTimer += dt;

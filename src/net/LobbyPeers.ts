@@ -99,6 +99,37 @@ export class LobbyPeers {
     for (const acc of [...this.items.keys()]) this.remove(acc);
   }
 
+  /** 내 닉네임표 (다른 사람과 같은 모양, 내 캐릭터 머리 위) */
+  private readonly mine = document.createElement('div');
+
+  /**
+   * 내 캐릭터 머리 위 닉네임 (매 프레임, 로비에서만). 화면 고정 크기 글자라 카메라 거리와 관계없이 같은 크기.
+   * nick = null이면 숨김
+   */
+  updateLocal(avatar: PlayerAvatar | null, nick: string | null): void {
+    const tag = this.mine;
+    if (!tag.isConnected) {
+      tag.className = 'lobby-nametag lobby-nametag-mine';
+      this.layer.appendChild(tag);
+    }
+    if (!avatar || !nick || this.hidden) {
+      tag.style.display = 'none';
+      return;
+    }
+    if (tag.textContent !== nick) tag.textContent = nick;
+    const cam = this.ctx.camera() as THREE.PerspectiveCamera;
+    _v.copy(avatar.headCenter);
+    _v.y += avatar.headRadius + 0.32;
+    _v.project(cam);
+    const show = _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1;
+    tag.style.display = show ? '' : 'none';
+    if (show) {
+      const w = this.ctx.container.clientWidth;
+      const h = this.ctx.container.clientHeight;
+      tag.style.transform = `translate(${((_v.x + 1) / 2) * w}px, ${((1 - _v.y) / 2) * h}px) translate(-50%, -100%)`;
+    }
+  }
+
   /** 다른 사람 캐릭터 잠시 숨기기 (보간·이동 데이터는 계속 받음) */
   setHidden(hidden: boolean): void {
     if (this.hidden === hidden) return;

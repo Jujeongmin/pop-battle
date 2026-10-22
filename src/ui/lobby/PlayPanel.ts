@@ -1,6 +1,6 @@
 // PLAY: 바로 시작할 수 있는 연습전과 멀티플레이 창 바로가기를 모은다.
 import { displayCode } from '../../net/NetSession';
-import { button, comingSoon, el, ICON, type LobbyHost, type LobbyPanel } from './lobbyDom';
+import { button, el, ICON, type LobbyHost, type LobbyPanel } from './lobbyDom';
 
 export class PlayPanel implements LobbyPanel {
   readonly id = 'play';
@@ -12,7 +12,6 @@ export class PlayPanel implements LobbyPanel {
   ) {}
 
   render(body: HTMLElement): void {
-    body.append(el('p', 'lb-panel-lead', '원하는 방식으로 바로 시작해 보세요.'));
     const grid = el('div', 'lb-play-grid');
     grid.append(
       button(
@@ -45,7 +44,6 @@ export class PlayPanel implements LobbyPanel {
         ),
       );
     }
-    grid.append(comingSoon('빠른 매칭', '자동으로 알맞은 방을 찾는 기능은 준비 중이에요.'));
     body.appendChild(grid);
   }
 }

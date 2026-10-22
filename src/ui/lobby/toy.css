@@ -882,3 +882,76 @@
 /* 멀티플레이 제목: 밝은 바탕 위 흰 글자는 안 보임 → 진한 글자 */
 .lb-mp-overlay .lb-mp-title { color: #27325c; text-shadow: none; }
 .lb-lobby.lb-touch .lb-char-grid { padding-top: 12px; }
+
+/* ================= 로비 구조 정리 (2026-10-22) ================= */
+/* 상단: 로고 · 게임 시작 · MENU만. 닉네임은 내 캐릭터 머리 위(닉네임표), 다른 목적지는 MENU 창 */
+.lb-lobby .lb-identity .lb-player-name { display: none; }
+.lb-lobby .lb-nav-actions .lb-nav-btn:not(.lb-nav-play) { display: none; }
+.lb-lobby .lb-nav .lb-nav-play { flex: 0 0 auto; width: clamp(132px, 16vw, 200px); }
+.lb-lobby .lb-nav-actions { flex: 0 0 auto; width: auto; margin-left: auto; }
+.lb-lobby .lb-nav { justify-content: space-between; }
+
+/* MENU 창: MENU 버튼 아래 작은 창 (게임 화면을 크게 가리지 않게), 큰 타일 6개 */
+.lb-lobby.lb-gamemenu-open .lb-panel {
+  top: 72px; right: 12px; left: auto; bottom: auto;
+  width: min(400px, calc(100vw - 24px)); max-height: calc(100vh - 84px);
+  transform: none;
+}
+.lb-lobby .lb-gamemenu-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.lb-lobby .lb-gamemenu-tile {
+  display: grid; justify-items: center; align-content: center; gap: 4px; min-height: 92px; padding: 10px 6px;
+  border: 3px solid var(--lb-ink); border-radius: 14px; background: #fff; box-shadow: 0 4px 0 var(--lb-ink); color: var(--lb-ink);
+}
+.lb-lobby .lb-gamemenu-tile .lb-nav-icon { width: 38px; height: 38px; border-radius: 11px; }
+.lb-lobby .lb-gamemenu-tile .lb-nav-icon svg { width: 24px; height: 24px; }
+.lb-lobby .lb-gamemenu-tile b { font-size: 16px; line-height: 1.1; }
+.lb-lobby .lb-gamemenu-tile small { color: rgba(39,50,92,.6); font-size: 10px; font-weight: 800; letter-spacing: .4px; }
+.lb-lobby .lb-gamemenu-tile:hover { background: #fff6d6; }
+.lb-lobby .lb-gamemenu-rooms .lb-nav-icon { background: #5d9de8; color: #fff; }
+.lb-lobby .lb-gamemenu-create .lb-nav-icon { background: #5dc5a4; color: #fff; }
+.lb-lobby .lb-gamemenu-character .lb-nav-icon { background: #f39a5c; color: #fff; }
+.lb-lobby .lb-gamemenu-loadout .lb-nav-icon { background: #5bc0b5; color: #fff; }
+.lb-lobby .lb-gamemenu-shop .lb-nav-icon { background: #ef7fa5; color: #fff; }
+.lb-lobby .lb-gamemenu-settings .lb-nav-icon { background: #8d7fe0; color: #fff; }
+.lb-lobby .lb-gamemenu-tile b,
+.lb-lobby .lb-gamemenu-tile small { font-family: var(--lb-display-font); font-weight: 400; }
+.lb-lobby .lb-gamemenu-tile small { font-family: var(--font, system-ui), sans-serif; font-weight: 800; }
+
+/* 게임 시작 창: 연습전을 가장 크게 (한 줄 전체), 글자·버튼 키우고 여백 줄임 */
+.lb-lobby .lb-play-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.lb-lobby .lb-play-grid .lb-play-hero { grid-column: 1 / -1; min-height: 104px; }
+.lb-lobby .lb-play-grid .lb-mode { padding: 12px 14px; }
+.lb-lobby .lb-play-grid .lb-mode-copy b { font-size: 20px; }
+.lb-lobby .lb-play-grid .lb-play-hero .lb-mode-copy b { font-size: 26px; }
+.lb-lobby .lb-play-grid .lb-mode-copy span { font-size: 12px; }
+.lb-lobby .lb-play-grid .lb-mode > i { font-size: 13px; padding: 7px 12px; }
+
+/* 방 목록: 빈 상태 안내·방 만들기 버튼 크게, 글자 키움 */
+.lb-lobby .lb-room-state b { font-size: 17px; }
+.lb-lobby .lb-room-state p { font-size: 12px; }
+.lb-lobby .lb-room-create { min-height: 48px; padding: 0 22px; font-size: 16px; }
+.lb-lobby .lb-room-tools-copy b { font-size: 15px; }
+.lb-lobby .lb-room-tools-copy span { font-size: 11px; }
+.lb-lobby .lb-room-name b { font-size: 15px; }
+.lb-lobby .lb-room-join { min-height: 42px; font-size: 14px; }
+
+@media (max-width: 1000px), (max-height: 520px) {
+  .lb-lobby.lb-gamemenu-open .lb-panel { top: 62px; width: min(380px, calc(100vw - 16px)); right: 8px; }
+  .lb-lobby .lb-gamemenu-tile { min-height: 74px; padding: 6px 4px; }
+  .lb-lobby .lb-gamemenu-tile .lb-nav-icon { width: 30px; height: 30px; }
+  .lb-lobby .lb-gamemenu-tile b { font-size: 14px; }
+  .lb-lobby .lb-play-grid .lb-play-hero { min-height: 100px; }
+  .lb-lobby .lb-play-grid .lb-mode-copy b { font-size: 15px; }
+  .lb-lobby .lb-play-grid .lb-play-hero .lb-mode-copy b { font-size: 19px; }
+  .lb-lobby .lb-play-grid .lb-mode-copy span { font-size: 10px; }
+  .lb-lobby .lb-play-grid .lb-mode > i { font-size: 11px; padding: 5px 9px; }
+  .lb-lobby .lb-room-state b { font-size: 14px; }
+  .lb-lobby .lb-room-state p { font-size: 10px; }
+  .lb-lobby .lb-room-create { min-height: 44px; font-size: 14px; }
+  .lb-lobby .lb-room-tools-copy b { font-size: 13px; }
+  .lb-lobby .lb-room-tools-copy span { font-size: 10px; }
+  .lb-lobby .lb-room-name b { font-size: 13px; }
+}
+/* 방 코드 참가: 입력칸이 줄 전체를 쓰게 */
+.lb-lobby .lb-code-join label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lb-lobby .lb-code-join input { flex: 1 1 auto; width: auto; min-width: 0; }

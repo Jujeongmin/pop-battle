@@ -5,6 +5,7 @@ import { toGame, viewH } from '../../core/screenRotation';
 import { CharacterPanel } from './CharacterPanel';
 import { CreateRoomPanel } from './CreateRoomPanel';
 import { LoadoutPanel } from './LoadoutPanel';
+import { MenuPanel } from './MenuPanel';
 import { button, el, ICON, type LobbyCharacter, type LobbyHost, type LobbyPanel, type LobbyRoamState } from './lobbyDom';
 import { PlayPanel } from './PlayPanel';
 import { RoomListPanel } from './RoomListPanel';
@@ -76,6 +77,8 @@ export class Lobby {
     this.roomListPanel = new RoomListPanel(host, () => this.show('create'));
     const openPanel = (id: string) => this.show(id);
     for (const panel of [
+      // MENU 창: 게임 시작 외의 목적지 (상단 바에는 로고·게임 시작·MENU만)
+      new MenuPanel(NAV.filter((item) => item.id !== 'play'), openPanel),
       new PlayPanel(host, openPanel),
       this.roomListPanel,
       new CreateRoomPanel(host),
@@ -161,7 +164,7 @@ export class Lobby {
     this.open = null;
     this.menu = false;
     this.characterSuspended = false;
-    this.root.classList.remove('lb-menu-open', 'lb-panel-open', 'lb-character-open');
+    this.root.classList.remove('lb-menu-open', 'lb-panel-open', 'lb-character-open', 'lb-gamemenu-open');
     this.panelBox.classList.remove('lb-panel-in');
     this.menuLayer.inert = true;
     this.menuLayer.setAttribute('aria-hidden', 'true');
@@ -172,9 +175,10 @@ export class Lobby {
     this.host.menuChanged(false, null);
   }
 
+  /** MENU·TAB: 닫혀 있으면 게임 메뉴 창, 열려 있으면(어느 창이든) 닫기 */
   toggleMenu(): void {
     if (this.menu) this.closeMenu();
-    else this.openMenu('play');
+    else this.openMenu('menu');
   }
 
   /** 터치 여부만 UI에 반영한다. 로비에는 이동 시작 안내나 포인터 잠금 안내가 없다. */
@@ -399,6 +403,7 @@ export class Lobby {
     this.open = next;
     this.characterSuspended = false;
     this.root.classList.toggle('lb-character-open', next === 'character');
+    this.root.classList.toggle('lb-gamemenu-open', next === 'menu');
     this.markNavigation();
     const panel = this.panels.get(next)!;
     this.renderPanel(panel);
