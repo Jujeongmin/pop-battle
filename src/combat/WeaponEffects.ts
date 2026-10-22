@@ -265,6 +265,26 @@ export class WeaponEffects {
     }
   }
 
+  /**
+   * 리스폰 등장: 파스텔 링 두 개가 퍼지고 반짝이 별이 위로 톡톡 (화면 번쩍임 없음, 기존 풀 재사용).
+   * feet = 발 위치, height = 캐릭터 키 (m)
+   */
+  spawnSparkle(feet: THREE.Vector3, height: number): void {
+    const mid = _mid.copy(feet);
+    mid.y += height * 0.45;
+    // 링은 몸보다 크게 퍼져야 3인칭 뒤에서도 보임
+    this.rings.spawn(mid, 0x9fe6ff, 0.45, 0.3 * height, 1.7 * height).spin = 0;
+    this.rings.spawn(mid, 0xffb3d1, 0.55, 0.2 * height, 1.25 * height).spin = 0;
+    const colors = [0xffd45e, 0x9fe6ff, 0xffb3d1, 0xb6f0c8];
+    for (let i = 0; i < 8; i++) {
+      const s = this.stars.spawn(mid, colors[i % colors.length]!, 0.5 + Math.random() * 0.2, 0.12, 0.04);
+      const a = (i / 8) * Math.PI * 2;
+      s.vel.set(Math.cos(a) * 1.4, 1.6 + Math.random() * 0.8, Math.sin(a) * 1.4);
+      s.gravity = 3;
+      s.spin = (Math.random() - 0.5) * 10;
+    }
+  }
+
   update(dt: number): void {
     for (const f of this.flashes) {
       if (f.life <= 0) continue;

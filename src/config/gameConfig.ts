@@ -82,6 +82,15 @@ export const CHARACTER = {
     jumpStartOffset: 0.35,
     jumpStartHold: 0.28,
     landTimeScale: 1.5,
+    /**
+     * 사망 클립(Death01) 재생 속도: 원본 2.38초 중 0~0.6초 휘청·주저앉음 → 0.6~0.96초 뒤로 넘어져 바닥, 이후 누운 자세 유지.
+     * 1.37배 = 약 0.7초에 바닥 (짧고 경쾌하게). 판정·리스폰 시간과 무관한 연출 값
+     */
+    deathTimeScale: 1.37,
+    /** 리스폰 등장: 쏙 튀어나오는 길이(s)·처음 크기·넘침 크기·튀어 오르는 높이(키 대비) */
+    spawnPop: { time: 0.38, startScale: 0.55, overshoot: 1.1, hop: 0.22 },
+    /** 스폰 보호 방울: 파스텔 색·나타남/사라짐 속도·은은한 맥동 */
+    shield: { color: 0x9fe6ff, fade: 7, pulseHz: 1.6, alpha: 0.42 },
     landHold: 0.3,
     /** 낙하 시간이 이보다 길 때만 착지 클립 재생 */
     landMinAirTime: 0.28,

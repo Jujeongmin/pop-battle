@@ -123,6 +123,8 @@ export class NetGameMode {
       // 리스폰 보호 (서버 기록 기준) → 이름표 보호 표시
       const rec = this.session.players[acc];
       r.label.protected = !!rec && !rec.dead && rec.prot > this.session.serverNow();
+      // 보호 방울도 같은 서버 기록으로 (보이기만)
+      r.avatar.setProtected(r.label.protected);
       const buf = this.session.remotes.get(acc);
       r.update(dt, buf ? buf.sample(renderTime) : null, cam);
     }

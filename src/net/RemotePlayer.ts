@@ -115,6 +115,7 @@ export class RemotePlayer implements Damageable {
   /** 보간된 상태로 아바타·강체·판정 갱신 (물리 스텝 전에 호출 → 이번 프레임 히트스캔에 반영) */
   update(dt: number, s: Sampled | null, camera: THREE.Camera): void {
     if (!s) return;
+    const first = !this.hasState;
     if (!this.hasState) {
       this.hasState = true;
       this.applyActive();
@@ -128,6 +129,8 @@ export class RemotePlayer implements Damageable {
     const fresh = n.q !== this.lastFlagsSeq;
     this.lastFlagsSeq = n.q;
     poseRemoteAvatar(this.avatar, s, dt, fresh, { feet: this.renderFeet, velocity: this.velocity, aimDir: this.aimDir }, this.dead);
+    // 중간 입장·재접속으로 처음 본 사람이 이미 쓰러져 있으면 넘어지는 장면 없이 누운 자세로
+    if (first && this.dead) this.avatar.skipDeathAnimation();
     this.avatar.getMuzzle(this.muzzle, this.muzzleDir);
     if (!this.dead) this.hitboxes.update(this.avatar, this.renderFeet, this.centerAboveFeet);
     this.updateLabel(dt, camera);

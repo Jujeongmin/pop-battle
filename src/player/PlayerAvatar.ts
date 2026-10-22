@@ -11,6 +11,9 @@ type AnimState = ClipKey;
 type BoneKey = keyof typeof CHARACTER.bones;
 type MarkerKey = 'rightGrip' | 'supportGrip' | 'muzzle';
 
+/** 스폰 보호 방울 공용 구 (모든 캐릭터가 같이 씀) */
+const SHIELD_GEOMETRY = new THREE.SphereGeometry(1, 28, 18);
+
 export interface AvatarFrame {
   dt: number;
   /** 발 위치 (월드) */
@@ -653,6 +656,84 @@ export class PlayerAvatar {
       if (this.mount.ikEnabled) this.applyWeaponPose(f);
     }
     this.applyGrounding(f);
+    this.applySpawnFx(f.dt);
+  }
+
+  // ---------------- 리스폰 등장·스폰 보호 연출 (보이기만, 판정·위치와 무관) ----------------
+
+  private spawnPopT = -1;
+  private shield: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial> | null = null;
+  private shieldOn = false;
+  private shieldAlpha = 0;
+  private shieldTime = 0;
+
+  /** 리스폰 등장: 작게 → 살짝 크게 → 원래 크기로 쏙, 짧게 튀어 오름 */
+  playSpawnPop(): void {
+    this.spawnPopT = 0;
+  }
+
+  /** 사망 클립 끝 자세로 바로 (중간 입장·재접속으로 이미 쓰러진 사람을 처음 볼 때 넘어지는 장면을 다시 보이지 않게) */
+  skipDeathAnimation(): void {
+    const a = this.actions.get('death');
+    if (!a || this.state !== 'death') return;
+    a.time = a.getClip().duration;
+  }
+
+  /** 스폰 보호 표시 (매 프레임, 실제 보호 판정은 각자 체력·서버 기록이 결정) */
+  setProtected(on: boolean): void {
+    this.shieldOn = on;
+  }
+
+  private applySpawnFx(dt: number): void {
+    const sp = CHARACTER.anim.spawnPop;
+    const height = Math.max(0.6, this.headCenter.y + this.headRadius - this.root.position.y);
+    if (this.spawnPopT >= 0) {
+      this.spawnPopT += dt;
+      const k = Math.min(1, this.spawnPopT / sp.time);
+      // 0~45%: 작게 → 넘침, 45~100%: 넘침 → 1 (쏙 튀어나오는 느낌)
+      const s =
+        k < 0.45
+          ? THREE.MathUtils.lerp(sp.startScale, sp.overshoot, 1 - (1 - k / 0.45) ** 2)
+          : THREE.MathUtils.lerp(sp.overshoot, 1, (k - 0.45) / 0.55);
+      this.pivot.scale.setScalar(s);
+      this.pivot.position.y += Math.sin(Math.PI * k) * sp.hop * height;
+      if (k >= 1) {
+        this.spawnPopT = -1;
+        this.pivot.scale.setScalar(1);
+      }
+    }
+    const sh = CHARACTER.anim.shield;
+    const target = this.shieldOn ? 1 : 0;
+    if (target === 0 && this.shieldAlpha < 0.005 && !this.shield?.visible) return;
+    this.shieldAlpha += (target - this.shieldAlpha) * (1 - Math.exp(-sh.fade * dt));
+    if (target === 0 && this.shieldAlpha < 0.005) this.shieldAlpha = 0;
+    const mesh = this.shield ?? (this.shield = this.makeShield());
+    this.shieldTime += dt;
+    mesh.visible = this.shieldAlpha > 0;
+    mesh.material.uniforms.uAlpha!.value = this.shieldAlpha * sh.alpha * (0.85 + 0.15 * Math.sin(this.shieldTime * Math.PI * 2 * sh.pulseHz));
+    // 캐릭터 키에 맞춘 동그란 방울 (6종 크기 차이 공통 처리)
+    mesh.position.set(0, height * 0.5, 0);
+    mesh.scale.set(height * 0.6, height * 0.62, height * 0.6);
+  }
+
+  /** 보호 방울: 가장자리만 밝은 반투명 구 (한 번만 만듦) */
+  private makeShield(): THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial> {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uColor: { value: new THREE.Color(CHARACTER.anim.shield.color) }, uAlpha: { value: 0 } },
+      vertexShader: `varying vec3 vN; varying vec3 vV;
+        void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `uniform vec3 uColor; uniform float uAlpha; varying vec3 vN; varying vec3 vV;
+        void main() { float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0); gl_FragColor = vec4(uColor, uAlpha * (0.12 + 0.88 * f)); }`,
+      transparent: true,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(SHIELD_GEOMETRY, mat);
+    mesh.name = 'spawn-shield';
+    mesh.renderOrder = 5;
+    mesh.castShadow = false;
+    mesh.frustumCulled = false;
+    this.root.add(mesh);
+    return mesh;
   }
 
   /** 스킨 최저점이 지면(발 위치)에 닿도록 수직 보정. 공중에서는 0으로 복귀. */
@@ -735,6 +816,8 @@ export class PlayerAvatar {
       action.timeScale = CHARACTER.anim.jumpStartTimeScale;
     } else if (next === 'land') {
       action.timeScale = CHARACTER.anim.landTimeScale;
+    } else if (next === 'death') {
+      action.timeScale = CHARACTER.anim.deathTimeScale;
     } else if (next !== 'walk' && next !== 'run') {
       action.timeScale = 1;
     }
@@ -1237,6 +1320,8 @@ export class PlayerAvatar {
   }
 
   dispose(): void {
+    this.shield?.material.dispose();
+    this.shield?.removeFromParent();
     this.mixer.stopAllAction();
     this.mixer.uncacheRoot(this.model);
     // 무기 모델(플레이어는 공용 무기 라이브러리)은 다음 아바타가 다시 잡음 → 손에서 떼고 디버그 마커만 정리

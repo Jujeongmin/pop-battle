@@ -211,6 +211,8 @@ export class Game {
   private killedBy: string | null = null;
   private weaponModels!: WeaponModelLibrary;
   private weaponArt!: WeaponArt;
+  /** 이번 프레임에 리스폰 반짝이를 띄울 아바타 */
+  private readonly spawnFxQueue: PlayerAvatar[] = [];
   /** 정비소 실시간 무기 미리보기 (캔버스·무기·각도, 바뀌었을 때만 그림) */
   private readonly weaponPreviews = new Set<{ canvas: HTMLCanvasElement; id: string; yaw: number; dirty: boolean }>();
   /** 캐릭터 초상 (정비소·대기실 카드): 같은 캐릭터 GLB 캐시로 한 번 그림 */
@@ -480,6 +482,7 @@ export class Game {
         this.appearances.get(bot.id)?.setDead(true);
       },
       onRespawn: (bot) => {
+        this.queueSpawnFx(bot.avatar);
         this.feedDead.delete(bot.id);
         this.appearances.get(bot.id)?.setDead(false);
         this.match.respawned(bot.id);
@@ -876,6 +879,7 @@ export class Game {
     for (const t of this.targets) t.update(dt);
     // --- 봇 (감지·결정은 간격, 애니메이션·조준은 매 프레임) ---
     this.bots.update(dt, alpha, cam);
+    this.updateSpawnFx();
     this.characterDebug?.update(dt, this.debugPanel.visible);
     this.bullets.update(dt);
     this.effects.update(dt);
@@ -2247,8 +2251,30 @@ export class Game {
     this.tpsCamera.snapBehind(this.bodyYaw, center);
   }
 
+  /**
+   * 리스폰 등장 연출 예약 (쏙 튀어나옴 + 파스텔 링·반짝이). 반짝이는 아바타가 새 자리로 옮겨진 다음 프레임 위치에서
+   * (예약 목록에 한 번만 → 같은 리스폰이 두 번 와도 한 번)
+   */
+  private queueSpawnFx(avatar: PlayerAvatar | null | undefined): void {
+    if (!avatar || this.spawnFxQueue.includes(avatar)) return;
+    avatar.playSpawnPop();
+    this.spawnFxQueue.push(avatar);
+  }
+
+  /** 매 프레임: 예약된 반짝이 + 스폰 보호 방울 (나·봇은 각자 보호 시간, 원격은 NetGameMode가 서버 기록으로) */
+  private updateSpawnFx(): void {
+    for (const a of this.spawnFxQueue) {
+      const height = Math.max(0.6, a.headCenter.y + a.headRadius - a.root.position.y);
+      this.effects.spawnSparkle(a.root.position, height);
+    }
+    this.spawnFxQueue.length = 0;
+    this.avatar.setProtected(!this.dead && !this.lobbyShown && this.combatant.active && this.combatant.health.protection > 0);
+    for (const b of this.bots.bots) b.avatar.setProtected(b.alive && b.isProtected);
+  }
+
   private respawn(): void {
     this.dead = false;
+    this.queueSpawnFx(this.avatar);
     // 멀티 테스트 시작 때만 자리별 고정 스폰 (P1 / P2 서로 다른 곳), 이후 리스폰은 기존 규칙
     this.placeAtSpawn(this.netSpawn ?? this.pickPlayerSpawn());
     this.netSpawn = null;
@@ -2747,6 +2773,7 @@ export class Game {
         this.reportDeath(id, killer, hit, cause);
       },
       remoteRespawned: (id) => {
+        this.queueSpawnFx(this.net?.avatarOf(id));
         this.feedDead.delete(id);
         this.match.respawned(id);
         this.applyAppearance(id);
