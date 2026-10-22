@@ -399,6 +399,8 @@ export class Game {
     // 킬로그 무기 아이콘 = 실제 모델 실루엣 (처음 처치 때 멈칫하지 않게 미리 그림)
     for (const id of Object.keys(WEAPONS)) this.weaponArt.silhouette(id);
     setKillFeedWeaponIcons((id) => this.weaponArt.silhouette(id));
+    // 우측 하단 무기 카드도 실제 무기 그림
+    this.hud.weaponImage = (id) => this.weaponArt.image(id);
     // 원본 씬은 캐시에 남겨 두고 복제본 사용 (개발용 캐릭터 교체 때 다시 복제)
     this.avatar = new PlayerAvatar(SkeletonUtils.clone(assets.character.scene), assets.character.clips, assets.rifle.scene, RIFLE_MOUNT, PLAYER_CHARACTER);
     this.scene.add(this.avatar.root);

@@ -173,6 +173,8 @@ export class Hud {
   private readonly popupPool: HTMLDivElement[] = [];
   private popupSeq = 0;
   private killRingAnim: Animation | null = null;
+  /** 무기 카드 그림 원본 (실제 무기 모델 옆모습, assets/weaponArt). 게임이 무기 모델을 불러온 뒤 설정 */
+  weaponImage: ((weaponId: string) => string | null) | null = null;
   private hitAnim: Animation | null = null;
   private crosshairWeapon = '';
   private crosshairKey = '';
@@ -812,7 +814,18 @@ export class Hud {
   private updateWeapon(f: HudFrame): void {
     if (f.weaponId !== this.lastWeaponId) {
       this.lastWeaponId = f.weaponId;
-      this.weaponIcon.innerHTML = weaponIconSvg(f.weaponId);
+      // 실제 무기 모델 그림 (없으면 기존 SVG)
+      const src = f.weaponId ? this.weaponImage?.(f.weaponId) : null;
+      this.weaponIcon.classList.toggle('has-img', !!src);
+      if (src) {
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = f.weaponName;
+        img.draggable = false;
+        this.weaponIcon.replaceChildren(img);
+      } else {
+        this.weaponIcon.innerHTML = weaponIconSvg(f.weaponId);
+      }
       this.weaponName.textContent = f.weaponName;
       this.weaponCard.animate([{ transform: 'translateY(6px) scale(.96)', opacity: 0.6 }, { transform: 'none', opacity: 1 }], { duration: 180, easing: 'ease-out' });
     }

@@ -1,6 +1,7 @@
 // 자유 이동 로비의 상단 메뉴 바와 창. 3D 월드와 캐릭터는 게임이 그리고, 여기서는 DOM UI만 맡는다.
 import './lobby.css';
 import './toy.css';
+import { toGame, viewH } from '../../core/screenRotation';
 import { CharacterPanel } from './CharacterPanel';
 import { CreateRoomPanel } from './CreateRoomPanel';
 import { LoadoutPanel } from './LoadoutPanel';
@@ -427,7 +428,7 @@ export class Lobby {
   }
 
   private layout(): void {
-    const scale = Math.min(1.08, Math.max(0.72, innerHeight / 720));
+    const scale = Math.min(1.08, Math.max(0.72, viewH() / 720));
     this.root.style.setProperty('--lu', scale.toFixed(3));
     this.reportPanel();
   }
@@ -476,7 +477,8 @@ export class Lobby {
     this.charStage.addEventListener('pointerdown', (event) => {
       if (this.open !== 'character' || (event.pointerType === 'mouse' && event.button !== 0)) return;
       this.dragPointer = event.pointerId;
-      this.dragX = event.clientX;
+      // 게임 화면 기준 가로 위치 (세로로 든 기기에서 돌려 그릴 때도 손가락 방향 그대로)
+      this.dragX = toGame(event.clientX, event.clientY).x;
       this.charStage.classList.add('lb-dragging');
       try { this.charStage.setPointerCapture(event.pointerId); } catch { /* 포인터 캡처 미지원 */ }
       event.preventDefault();
@@ -484,8 +486,9 @@ export class Lobby {
     }, { signal: this.abort.signal });
     this.charStage.addEventListener('pointermove', (event) => {
       if (event.pointerId !== this.dragPointer) return;
-      const dx = event.clientX - this.dragX;
-      this.dragX = event.clientX;
+      const x = toGame(event.clientX, event.clientY).x;
+      const dx = x - this.dragX;
+      this.dragX = x;
       if (dx) this.host.rotatePreview(dx);
       event.preventDefault();
     }, { signal: this.abort.signal });

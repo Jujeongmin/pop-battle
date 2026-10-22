@@ -872,3 +872,13 @@
 }
 /* 대기실 제목도 패널 제목처럼 꽉 찬 글자 */
 .lb-mp-overlay .lb-mp-title { -webkit-text-stroke: 0; text-shadow: 0 2px 0 #27325c; }
+
+/* 캐릭터 카드 "장착 중": 초상 머리를 가리지 않게 카드 위 테두리에 걸침 (가로 스크롤 목록도 위쪽 여유) */
+.lb-lobby .lb-char-card { overflow: visible; }
+.lb-lobby .lb-char-card.lb-equipped::after { top: -9px; left: 50%; right: auto; transform: translateX(-50%); z-index: 2; white-space: nowrap; }
+.lb-lobby .lb-char-grid { padding-top: 10px; }
+/* 무기 카드 선택 표시 ✓ : 원 안 가운데 */
+.lb-lobby .lb-weapon.lb-selected::after { display: grid; place-items: center; line-height: 1; padding: 0; text-align: center; font-family: var(--font, system-ui), sans-serif; }
+/* 멀티플레이 제목: 밝은 바탕 위 흰 글자는 안 보임 → 진한 글자 */
+.lb-mp-overlay .lb-mp-title { color: #27325c; text-shadow: none; }
+.lb-lobby.lb-touch .lb-char-grid { padding-top: 12px; }

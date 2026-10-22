@@ -4,6 +4,7 @@
 // - 오른쪽 아래 버튼: 사격(누르는 동안) · ADS 토글 · 점프 · 슬라이딩 · 재장전 / 왼쪽 위: 일시정지
 // 손가락마다 pointerId로 역할을 나눠 서로 취소하지 않음 (이동하며 회전·사격·점프 동시에).
 import { createInputState } from './Input';
+import { toGame, viewH, viewW } from './screenRotation';
 
 export interface TouchSettings {
   /** 시점 회전 감도 배율 (PC 마우스 감도 기준) */
@@ -270,7 +271,7 @@ export class TouchInput {
 
   /** 화면 크기 배율 (CSS --tu와 같은 식): 높이 400px 기준, 0.75~1.3 */
   private get unit(): number {
-    return Math.min(1.3, Math.max(0.75, innerHeight / 400));
+    return Math.min(1.3, Math.max(0.75, viewH() / 400));
   }
 
   private get radius(): number {
@@ -296,23 +297,25 @@ export class TouchInput {
   private readonly onAreaDown = (e: PointerEvent): void => {
     if (e.pointerType === 'mouse' || !this.active) return;
     e.preventDefault();
-    const leftZone = e.clientX < innerWidth * MOVE_ZONE;
+    // 게임 화면 좌표 (세로로 든 기기에서 돌려 그릴 때도 같은 기준)
+    const p = toGame(e.clientX, e.clientY);
+    const leftZone = p.x < viewW() * MOVE_ZONE;
     if (leftZone && this.movePointer < 0) {
       this.movePointer = e.pointerId;
       // 떠다니는 조이스틱: 엄지를 댄 곳이 중심 (화면 밖으로 나가지 않게)
       const r = this.radius;
-      const x = Math.max(r + 8, Math.min(innerWidth * MOVE_ZONE - r, e.clientX));
-      const y = Math.max(r + 8, Math.min(innerHeight - r - 8, e.clientY));
+      const x = Math.max(r + 8, Math.min(viewW() * MOVE_ZONE - r, p.x));
+      const y = Math.max(r + 8, Math.min(viewH() - r - 8, p.y));
       this.moveOrigin.x = x;
       this.moveOrigin.y = y;
       this.stick.classList.add('live');
       this.stick.style.left = `${x}px`;
       this.stick.style.top = `${y}px`;
-      this.updateStick(e.clientX, e.clientY);
+      this.updateStick(p.x, p.y);
     } else if (!leftZone && this.lookPointer < 0 && !this.lobby) {
       this.lookPointer = e.pointerId;
-      this.lastLook.x = e.clientX;
-      this.lastLook.y = e.clientY;
+      this.lastLook.x = p.x;
+      this.lastLook.y = p.y;
     } else {
       return;
     }
@@ -320,12 +323,13 @@ export class TouchInput {
   };
 
   private readonly onAreaMove = (e: PointerEvent): void => {
+    const p = toGame(e.clientX, e.clientY);
     if (e.pointerId === this.movePointer) {
-      this.updateStick(e.clientX, e.clientY);
+      this.updateStick(p.x, p.y);
     } else if (e.pointerId === this.lookPointer) {
-      this.addLook(e.clientX - this.lastLook.x, e.clientY - this.lastLook.y);
-      this.lastLook.x = e.clientX;
-      this.lastLook.y = e.clientY;
+      this.addLook(p.x - this.lastLook.x, p.y - this.lastLook.y);
+      this.lastLook.x = p.x;
+      this.lastLook.y = p.y;
     }
   };
 
@@ -370,8 +374,11 @@ export class TouchInput {
     switch (kind) {
       case 'fire':
         this.firePointer = e.pointerId;
-        this.lastFire.x = e.clientX;
-        this.lastFire.y = e.clientY;
+        {
+          const p = toGame(e.clientX, e.clientY);
+          this.lastFire.x = p.x;
+          this.lastFire.y = p.y;
+        }
         this.state.fireHeld = true;
         break;
       case 'ads': this.state.aimTogglePressed = true; break;
@@ -385,9 +392,10 @@ export class TouchInput {
   private onButtonMove(kind: ButtonKind, e: PointerEvent): void {
     if (kind !== 'fire' || e.pointerId !== this.firePointer) return;
     e.stopPropagation();
-    this.addLook(e.clientX - this.lastFire.x, e.clientY - this.lastFire.y);
-    this.lastFire.x = e.clientX;
-    this.lastFire.y = e.clientY;
+    const p = toGame(e.clientX, e.clientY);
+    this.addLook(p.x - this.lastFire.x, p.y - this.lastFire.y);
+    this.lastFire.x = p.x;
+    this.lastFire.y = p.y;
   }
 
   private onButtonUp(kind: ButtonKind, b: HTMLButtonElement, e: PointerEvent): void {

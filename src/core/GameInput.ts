@@ -28,11 +28,6 @@ export class GameInput {
     this.kbm = new KeyboardMouseInput(canvas);
     this.touch = new TouchInput(container);
     this.touchMode = matchMedia('(hover: none) and (pointer: coarse)').matches;
-    // 세로 화면 회전 안내 (터치 모드 + 세로일 때 CSS로 표시, 게임은 계속 동작)
-    const hint = document.createElement('div');
-    hint.className = 'rotate-hint';
-    hint.innerHTML = '<div><b>↻</b><p>가로로 돌려 주세요</p><span>POP! BATTLE은 가로 화면에서 플레이해요</span></div>';
-    container.appendChild(hint);
     container.classList.toggle('touch-mode', this.touchMode);
     this.kbm.onLockChange = (locked) => this.onLockChange?.(locked);
     this.touch.onPause = () => this.releaseLock();
@@ -123,7 +118,7 @@ export class GameInput {
 
   /**
    * 가로 고정: 브라우저가 전체 화면 + 화면 방향 잠금을 허용할 때만 (안드로이드 크롬 등). iOS·iframe에서 막히면 그냥 진행
-   * (세로면 회전 안내만 표시). 세션당 한 번만 시도
+   * (세로로 들고 있으면 화면을 90° 돌려 가로형으로 그림 — core/screenRotation.ts). 세션당 한 번만 시도
    */
   private tryLandscape(): void {
     if (this.landscapeTried) return;

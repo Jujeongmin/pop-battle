@@ -1,4 +1,5 @@
 // LOADOUT: 주무기 선택 (라이플·샷건·스나이퍼, 고르면 가운데 캐릭터가 바로 들고 있음) + 고정 보조·근접무기. 스킨은 준비 중
+import { toGame } from '../../core/screenRotation';
 import { button, comingSoon, el, type LobbyHost, type LobbyPanel, type LobbyWeapon } from './lobbyDom';
 
 export class LoadoutPanel implements LobbyPanel {
@@ -123,7 +124,8 @@ export class LoadoutPanel implements LobbyPanel {
     let stopped = false;
 
     const resizeBackingStore = () => {
-      const rect = canvas.getBoundingClientRect();
+      // 레이아웃 크기 (화면을 돌려 그릴 때 getBoundingClientRect는 가로·세로가 바뀜)
+      const rect = { width: canvas.clientWidth, height: canvas.clientHeight };
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const width = Math.max(1, Math.round(rect.width * ratio));
       const height = Math.max(1, Math.round(rect.height * ratio));
@@ -180,15 +182,16 @@ export class LoadoutPanel implements LobbyPanel {
       event.stopPropagation();
       if (pointerId !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
       pointerId = event.pointerId;
-      pointerX = event.clientX;
+      pointerX = toGame(event.clientX, event.clientY).x;
       canvas.classList.add('lb-dragging');
       canvas.setPointerCapture(event.pointerId);
     };
     const onPointerMove = (event: PointerEvent) => {
       event.stopPropagation();
       if (event.pointerId !== pointerId || !weaponId) return;
-      const distance = event.clientX - pointerX;
-      pointerX = event.clientX;
+      const x = toGame(event.clientX, event.clientY).x;
+      const distance = x - pointerX;
+      pointerX = x;
       angle += (distance / Math.max(canvas.clientWidth, 280)) * Math.PI * 2;
       draw();
     };

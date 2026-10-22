@@ -3,8 +3,11 @@ import { CAMERA, CHARACTER, MOVEMENT } from './config/gameConfig';
 import { RIFLE, RIFLE_MOUNT } from './config/weapons';
 import { Game } from './core/Game';
 import { installUiDebug } from './ui/UiDebug';
+import { installScreenRotation } from './core/screenRotation';
 
 const app = document.getElementById('app')!;
+// 세로로 든 터치 기기에서도 가로형으로 (게임을 만들기 전에 #app 크기를 정해 둠)
+installScreenRotation(app);
 const loading = document.getElementById('loading');
 
 const game = new Game(app);
