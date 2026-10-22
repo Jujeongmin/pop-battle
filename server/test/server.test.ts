@@ -215,6 +215,34 @@ describe('server-authoritative damage', () => {
     expect((await players(server)).bob.hp).toBe(100);
   });
 
+  test('respawn response carries the authoritative protection end; damage blocked until it, applied right after', async (server) => {
+    await setupPair(server);
+    await server.st(state([0, 0, 0], { w: 'sniper', s: [{ w: 'sniper', f: [0, 1, 0], e: [0, 1, 10], h: 1 }], h: [{ v: 'bob', w: 'sniper', hd: 1, d: 10 }] }));
+    expect((await players(server)).bob.dead).toBe(true);
+    spin(2600);
+    server.connect({ account: 'bob', roomId: ROOM });
+    const before = Date.now();
+    const res = await server.respawn();
+    const after = Date.now();
+    expect(res.ok).toBe(true);
+    // 응답의 prot = 룸 기록 prot = 승인 시각 + 2000ms (클라이언트 보호 방울이 이 시각에 끝남)
+    expect(typeof res.prot).toBe('number');
+    expect(res.prot).toBe((await players(server)).bob.prot);
+    expect(res.prot).toBeGreaterThanOrEqual(before + 2000);
+    expect(res.prot).toBeLessThanOrEqual(after + 2000);
+    // 이미 살아 있으면 지금 기록 그대로 (players()가 alice로 바꿔 접속하므로 다시 bob)
+    server.connect({ account: 'bob', roomId: ROOM });
+    expect((await server.respawn()).prot).toBe(res.prot);
+    // 보호 중: 피해 없음
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.st(state([0, 0, 0], { s: [{ w: 'rifle', f: [0, 1, 0], e: [0, 1, 10], h: 1 }], h: [{ v: 'bob', w: 'rifle', hd: 0, d: 10 }] }));
+    expect((await players(server)).bob.hp).toBe(100);
+    // 보호 끝 직후: 바로 피해
+    while (Date.now() <= res.prot) spin(5);
+    await server.st(state([0, 0, 0], { s: [{ w: 'rifle', f: [0, 1, 0], e: [0, 1, 10], h: 1 }], h: [{ v: 'bob', w: 'rifle', hd: 0, d: 10 }] }));
+    expect((await players(server)).bob.hp).toBe(88);
+  });
+
   test('dead attacker cannot damage; self fall death respawns at once', async (server) => {
     await setupPair(server);
     expect((await server.selfDeath('fall')).ok).toBe(true);

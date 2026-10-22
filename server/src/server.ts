@@ -947,15 +947,15 @@ export class Server {
     return { ok: !!result };
   }
 
-  /** 리스폰 요청: 서버 시각으로 대기 시간이 지났을 때만. 보호 2초 */
-  async respawn(): Promise<{ ok: boolean; hp?: number; wait?: number }> {
+  /** 리스폰 요청: 서버 시각으로 대기 시간이 지났을 때만. 보호 2초 (prot = 보호 끝 서버 시각 → 클라이언트 보호 표시를 서버에 맞춤) */
+  async respawn(): Promise<{ ok: boolean; hp?: number; wait?: number; prot?: number }> {
     if (!roomOf()) return { ok: false };
     const me = $sender.account;
     const res = await $lock(`room:${roomOf()!}`, async () => {
       const r = await readRoom();
       const p = r.players[me];
       if (!p) return { ok: false };
-      if (!p.dead) return { ok: true, hp: p.hp };
+      if (!p.dead) return { ok: true, hp: p.hp, prot: p.prot };
       const now = Date.now();
       // 클라이언트 타이머와 서버 시각 차이 150ms까지 허용
       if (now < p.respawnAt - 150) return { ok: false, wait: p.respawnAt - now };
@@ -963,7 +963,7 @@ export class Server {
       p.hp = p.max;
       p.prot = now + NET_TIMING.spawnProtectionMs;
       await $room.updateRoomState({ players: r.players }, { returnState: false });
-      return { ok: true, hp: p.hp };
+      return { ok: true, hp: p.hp, prot: p.prot };
     });
     if (res.ok) $room.broadcastToRoom('spawn', { a: me, hp: res.hp });
     return res;

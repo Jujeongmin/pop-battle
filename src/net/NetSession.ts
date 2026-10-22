@@ -565,16 +565,19 @@ export class NetSession {
   }
 
   /** 리스폰 요청. 서버가 승인하면 true, 아직이면 false (중복 요청은 false) */
-  async requestRespawn(): Promise<boolean> {
-    if (!this.inRoom || this.respawnPending) return false;
+  /**
+   * 리스폰 요청. prot = 서버가 정한 보호 끝 시각 (서버 ms). 예전 서버는 안 보냄 → undefined
+   */
+  async requestRespawn(): Promise<{ ok: boolean; prot?: number }> {
+    if (!this.inRoom || this.respawnPending) return { ok: false };
     this.respawnPending = true;
     try {
-      const r = await this.client.call<{ ok: boolean; wait?: number }>('respawn');
+      const r = await this.client.call<{ ok: boolean; wait?: number; prot?: number }>('respawn');
       if (!r.ok) this.client.addLog('info', `리스폰 대기 ${Math.round(r.wait ?? 0)}ms (서버 시각)`);
-      return r.ok;
+      return { ok: r.ok, prot: r.ok && typeof r.prot === 'number' ? r.prot : undefined };
     } catch (e) {
       this.client.addLog('error', `respawn: ${errText(e)}`);
-      return false;
+      return { ok: false };
     } finally {
       this.respawnPending = false;
     }

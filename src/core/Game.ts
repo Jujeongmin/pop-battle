@@ -33,6 +33,7 @@ import {
   type GameModeId,
   type TeamId,
 } from '../config/characters';
+import { syncedProtection } from '../net/spawnProtection';
 import { CharacterAppearance, loadDeadEyes, loadTeamMask, type DeadEyes, type Expression } from '../player/CharacterAppearance';
 import { Match, type MatchResult, type MatchState } from '../match/Match';
 import { LocalPlayerOcclusion } from '../camera/LocalPlayerOcclusion';
@@ -213,6 +214,9 @@ export class Game {
   private weaponArt!: WeaponArt;
   /** 이번 프레임에 리스폰 반짝이를 띄울 아바타 */
   private readonly spawnFxQueue: PlayerAvatar[] = [];
+  /** 멀티: 마지막 리스폰 응답의 보호 끝 시각 (서버 ms) / 낙사 부활 뒤 서버 응답 기다리는 중 */
+  private netProtEnd = 0;
+  private netProtAwait = false;
   /** 정비소 실시간 무기 미리보기 (캔버스·무기·각도, 바뀌었을 때만 그림) */
   private readonly weaponPreviews = new Set<{ canvas: HTMLCanvasElement; id: string; yaw: number; dirty: boolean }>();
   /** 캐릭터 초상 (정비소·대기실 카드): 같은 캐릭터 GLB 캐시로 한 번 그림 */
@@ -675,7 +679,15 @@ export class Game {
         this.reportDeath(this.combatant.id, null, null, 'fall');
         // 네트워크: 서버에 낙사(바로 부활 가능) → 리스폰 승인 (일반 호출은 보낸 순서대로 실행)
         this.net?.selfDeath('fall');
-        if (this.net?.session.inRoom) void this.net.requestRespawn();
+        if (this.net?.session.inRoom) {
+          // 서버 승인 전에 로컬로 먼저 부활 → 응답이 올 때까지는 로컬 보호(2초)를 그대로 두고, 응답의 보호 끝 시각으로 맞춤
+          this.netProtAwait = true;
+          void this.net.requestRespawn().then((r) => {
+            this.netProtAwait = false;
+            if (r.prot !== undefined) this.netProtEnd = r.prot;
+            this.syncNetProtection(true);
+          });
+        }
       }
       this.respawn();
     }
@@ -2280,6 +2292,7 @@ export class Game {
 
   /** 매 프레임: 예약된 반짝이 + 스폰 보호 방울 (나·봇은 각자 보호 시간, 원격은 NetGameMode가 서버 기록으로) */
   private updateSpawnFx(): void {
+    this.syncNetProtection();
     for (const a of this.spawnFxQueue) {
       const height = Math.max(0.6, a.headCenter.y + a.headRadius - a.root.position.y);
       this.effects.spawnSparkle(a.root.position, height);
@@ -2862,11 +2875,22 @@ export class Game {
   private requestNetRespawn(): void {
     if (this.netRespawnPending || !this.net) return;
     this.netRespawnPending = true;
-    void this.net.requestRespawn().then((ok) => {
+    void this.net.requestRespawn().then(({ ok, prot }) => {
       this.netRespawnPending = false;
-      if (ok && this.dead) this.respawn();
-      else if (!ok) this.deathTimer = 0.25;
+      if (ok && this.dead) {
+        if (prot !== undefined) this.netProtEnd = prot;
+        this.respawn();
+        this.syncNetProtection(true);
+      } else if (!ok) this.deathTimer = 0.25;
     });
+  }
+
+  /** 멀티: 로컬 리스폰 보호를 서버 보호 끝 시각에 맞춤 (net/spawnProtection.ts). 낙사 부활 뒤 응답 전에는 로컬 보호 그대로 */
+  private syncNetProtection(atRespawn = false): void {
+    const s = this.net?.session;
+    if (!s?.inRoom || this.dead || this.netProtAwait) return;
+    const h = this.combatant.health;
+    h.protection = syncedProtection(h.protection, s.players[s.me]?.prot ?? 0, this.netProtEnd, s.serverNow(), COMBAT.player.spawnProtection, atRespawn);
   }
 
   /** 상태 패킷용 로컬 값 (이번 프레임 최종 자세) */

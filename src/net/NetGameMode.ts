@@ -175,7 +175,7 @@ export class NetGameMode {
     if (cause === 'suicide' || cause === 'fall') this.session.selfDeath(cause);
   }
 
-  requestRespawn(): Promise<boolean> {
+  requestRespawn(): Promise<{ ok: boolean; prot?: number }> {
     return this.session.requestRespawn();
   }
 
