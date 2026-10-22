@@ -2,6 +2,9 @@
 // 서버는 isolated-vm에서 돌기 때문에 이 파일은 three.js·DOM·다른 게임 모듈을 import 하지 않는다 (순수 데이터·함수만).
 // 무기·캐릭터 수치는 config/weapons.ts·config/characters.ts의 복사본 → 클라이언트가 시작할 때 checkNetRules로 어긋남을 검사.
 
+import { checkNickname, NICK_RULE } from './nickFilter';
+export { checkNickname, type NickFailReason } from './nickFilter';
+
 /** 룸 정원 (멀티플레이 테스트: 최대 4명) */
 export const NET_MAX_PLAYERS = 4;
 /** 자유 테스트 모드 시작에 필요한 최소 인원 */
@@ -91,6 +94,8 @@ export interface NetHubUserState {
   n?: string;
   /** 캐릭터 id (내부 식별, 화면에는 표시 이름으로) */
   c?: string;
+  /** 들고 있는 주무기 id (NET_WEAPONS 키, 로비에서는 보이기만 함) */
+  w?: string;
   /** 마지막으로 받아들인 위치 패킷 */
   p?: NetHubPacket;
   /** 서버가 패킷을 받은 시각 (ms) */
@@ -113,19 +118,15 @@ export interface NetRoomSummary {
 }
 
 /** 표시 닉네임 규칙: 글자 수(문자 단위) */
-export const NICK_LIMITS = { min: 2, max: 12 } as const;
+export const NICK_LIMITS = NICK_RULE;
 
 /**
- * 닉네임 정리·검사 (클라이언트 입력·서버 저장 공용). 앞뒤 공백 제거, 연속 공백 하나로,
- * 글자(모든 언어)·숫자·공백·_ - . 만 허용, 제어 문자·HTML 특수 문자·이모지 불가. 통과 못 하면 null
+ * 닉네임 정리·검사 (클라이언트 입력·서버 저장 공용): nickFilter.checkNickname — 형식(2~12자, 한글·영문·숫자·공백)과 금칙어.
+ * 통과하면 정리된 값, 아니면 null
  */
 export function sanitizeNick(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const s = raw.normalize('NFC').replace(/\s+/g, ' ').trim();
-  const len = [...s].length;
-  if (len < NICK_LIMITS.min || len > NICK_LIMITS.max) return null;
-  if (!/^[\p{L}\p{N} _.\-]+$/u.test(s)) return null;
-  return s;
+  const r = checkNickname(raw);
+  return r.ok ? r.value : null;
 }
 
 export const NET_TIMING = {

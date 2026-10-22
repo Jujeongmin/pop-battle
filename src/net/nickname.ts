@@ -1,5 +1,6 @@
-// 표시용 닉네임 (이 기기 저장). Verse8 SDK에 닉네임 API가 없어 직접 둠 — 화면 표시에만 쓰고, 서버 식별은 계정(account).
-// 규칙(길이·허용 문자)은 서버와 같은 sanitizeNick (protocol.ts). 서버도 받을 때 다시 검사한다.
+// 표시용 닉네임의 이 기기 사본 (localStorage). 원본은 서버의 계정별 글로벌 사용자 상태(nickGet·nickSet) —
+// 서버 없는 빌드·서버 연결 전에는 이 값을 씀. 화면 표시에만 쓰고, 서버 식별은 계정(account).
+// 규칙(길이·허용 문자·금칙어)은 서버와 같은 checkNickname (nickFilter.ts).
 import { sanitizeNick } from './shared/protocol';
 
 const KEY = 'popbattle.nick';
@@ -10,6 +11,14 @@ export function loadNickname(): string | null {
     return sanitizeNick(localStorage.getItem(KEY));
   } catch {
     return null;
+  }
+}
+
+export function clearNickname(): void {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // 무시
   }
 }
 

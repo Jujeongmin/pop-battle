@@ -65,6 +65,8 @@ export class BotManager {
   lastUpdateMs = 0;
   /** 전투 정지 (매치 대기·카운트다운·종료): 봇은 제자리 대기, 감지·사격 없음 */
   hold = false;
+  private readonly weapon: WeaponDef;
+  private readonly cb: BotCallbacks;
   /** 쓰러진 봇 자동 부활 (매치 종료 후에는 끔) */
   respawnEnabled = true;
   /** 봇이 쓰는 스폰 지점 (기본: 맵의 teamB, 개인전은 모든 스폰 공용) */
@@ -115,9 +117,24 @@ export class BotManager {
       findById: (id) => this.combatants.find((c) => c.id === id),
     };
 
+    this.weapon = weapon;
+    this.cb = cb;
+    this.spawnBots(count);
+  }
+
+  /** 매치 끝난 뒤 새로 만들기 (멀티 입장 때 removeAll로 지운 봇을 연습전에서 다시): 이동 격자·스폰 규칙은 그대로 */
+  recreate(count = 3): void {
+    this.removeAll();
+    this.spawnBots(count);
+  }
+
+  /** 봇 count명 생성 (아바타·이름표·경로 표시선 포함) */
+  private spawnBots(count: number): void {
+    const weapon = this.weapon;
+    const cb = this.cb;
     const used = new Set<number>();
     for (let i = 0; i < count; i++) {
-      const avatar = this.createAvatar(sources.characters[i] ?? sources.characters[0]!);
+      const avatar = this.createAvatar(this.sources.characters[i] ?? this.sources.characters[0]!);
       const spawnIdx = this.pickSpawn(null, used);
       used.add(spawnIdx);
       const spawn = this.spawnPoint(spawnIdx, new THREE.Vector3());
@@ -127,7 +144,7 @@ export class BotManager {
         console.warn(`[bots] ${def.id}는 아직 봇 무기로 지원하지 않아 ${weapon.id} 사용`);
         def = weapon;
       }
-      const bot = new Bot(`bot${i + 1}`, `BOT ${i + 1}`, physics, avatar, def, this.world, this.difficulty, spawn, {
+      const bot = new Bot(`bot${i + 1}`, `BOT ${i + 1}`, this.physics, avatar, def, this.world, this.difficulty, spawn, {
         ...cb,
         onDamaged: (b, hit, applied) => {
           if (hit.attacker) b.noticeAttacker(this.ctx.findById(hit.attacker.id), hit.attacker.position);
@@ -143,7 +160,7 @@ export class BotManager {
       line.frustumCulled = false;
       line.renderOrder = 30;
       line.visible = false;
-      scene.add(line);
+      this.scene.add(line);
       this.pathLines.push(line);
     }
   }

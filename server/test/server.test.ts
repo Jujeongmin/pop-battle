@@ -4,6 +4,8 @@
  * 하네스는 실제 네트워크 없이 같은 isolated-vm 런타임에서 훅·함수를 호출한다 → 지연·패킷·푸시 동작은 여기서 검증되지 않음.
  */
 
+import { checkNickname } from '../../src/net/shared/nickFilter';
+
 const ROOM = 'pb-test01';
 
 /** 하네스 안에는 타이머가 없어 시간 경과는 바쁜 대기로 */
@@ -637,6 +639,15 @@ function hubPkt(q: number, x: number, y: number, z: number): number[] {
   return [q, q * 125, x, y, z, 0, 0, 0, 0, 0, 1];
 }
 
+/** 로비에 들어와 hubHello까지 한 계정들 */
+async function fillHub(server: any, roomId: string, accounts: string[]): Promise<void> {
+  for (const a of accounts) {
+    await server.simulateJoin(roomId, a);
+    server.connect({ account: a, roomId });
+    expect((await server.hubHello({ c: 'blue', n: 'P' + a })).ok).toBe(true);
+  }
+}
+
 async function hubUser(server: any, account: string): Promise<any> {
   server.connect({ account, roomId: HUB });
   const st = await server.hubState();
@@ -657,13 +668,102 @@ describe('online lobby (hub)', () => {
     expect((await server.hubFind()).roomId).toBe('lb-2');
   });
 
-  test('hubFind counts real users already in the lobby', async (server) => {
-    for (const a of ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8']) await server.simulateJoin(HUB, a);
+  test('hubFind counts users who said hubHello; same account stays in its lobby', async (server) => {
+    await fillHub(server, HUB, ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8']);
     server.connect({ account: 'r9', roomId: '__no_room__' });
     expect((await server.hubFind()).roomId).toBe('lb-2');
     // 이미 lb-1에 있는 계정은 그대로 lb-1
     server.connect({ account: 'r2', roomId: '__no_room__' });
     expect((await server.hubFind()).roomId).toBe('lb-1');
+  });
+
+  test('normal leave (hubBye) frees the seat at once even while the SDK still lists the user', async (server) => {
+    await fillHub(server, HUB, ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8']);
+    server.connect({ account: 'q3', roomId: HUB });
+    expect((await server.hubBye()).ok).toBe(true);
+    // q3는 하네스 룸 사용자 목록에 그대로 (실서버의 30초 유예와 같은 상황)
+    server.connect({ account: 'new1', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-1');
+    await server.simulateJoin(HUB, 'new1');
+    server.connect({ account: 'new1', roomId: HUB });
+    const h = await server.hubHello({ c: 'blue', n: 'New' });
+    expect(h.ok).toBe(true);
+    expect(h.count).toBe(8);
+  });
+
+  test('leave through onRoomLeave also frees the seat; a 9th reservation is not counted as a member', async (server) => {
+    await fillHub(server, HUB, ['l1', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'l8']);
+    await server.simulateLeave(HUB, 'l5');
+    server.connect({ account: 'l9', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-1');
+    // 예약만 한 사람은 실제 접속 인원(count)에 들어가지 않음
+    server.connect({ account: 'l1', roomId: HUB });
+    expect((await server.hubHello({ c: 'blue', n: 'One' })).count).toBe(7);
+  });
+
+  test('disconnect keeps the seat for reconnect (grace), the same account gets the same lobby; leave after grace frees it', async (server) => {
+    await fillHub(server, HUB, ['g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8']);
+    await server.simulateDisconnect(HUB, 'g4');
+    // 재접속 대기 자리는 정원에 들어감 → 다른 사람은 lb-2
+    server.connect({ account: 'other', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-2');
+    // 같은 계정은 같은 로비로 돌아옴, 다시 hubHello 하면 실제 접속으로
+    server.connect({ account: 'g4', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-1');
+    server.connect({ account: 'g4', roomId: HUB });
+    const back = await server.hubHello({ c: 'red', n: 'Back' });
+    expect(back.ok).toBe(true);
+    expect(back.count).toBe(8);
+    // 다시 끊겼다가 유예가 끝나면(onRoomLeave) 자리 반환
+    await server.simulateDisconnect(HUB, 'g4');
+    await server.simulateLeave(HUB, 'g4');
+    server.connect({ account: 'later', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-1');
+  });
+
+  test('20 reservations in a row (as $lock serializes concurrent calls) never put more than 8 seats in one lobby', async (server) => {
+    // 하네스의 $lock은 동시 호출 대기를 지원하지 않아(대기 중 멈춤) 실서버의 직렬화 결과와 같은 순차 호출로 검사
+    const count: Record<string, number> = {};
+    for (let i = 0; i < 20; i++) {
+      server.connect({ account: `c${i}`, roomId: '__no_room__' });
+      const id = (await server.hubFind()).roomId as string;
+      count[id] = (count[id] ?? 0) + 1;
+    }
+    expect(count['lb-1']).toBe(8);
+    expect(count['lb-2']).toBe(8);
+    expect(count['lb-3']).toBe(4);
+  });
+
+  test('one account in two lobbies (duplicate session) keeps only the newest seat', async (server) => {
+    await fillHub(server, HUB, ['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'dup']);
+    await server.simulateJoin('lb-2', 'dup');
+    server.connect({ account: 'dup', roomId: 'lb-2' });
+    expect((await server.hubHello({ c: 'blue', n: 'Dup' })).ok).toBe(true);
+    server.connect({ account: 'fresh', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-1');
+  });
+
+  test('empty lobby destroy clears its seats', async (server) => {
+    await fillHub(server, 'lb-3', ['e1']);
+    await server.simulateLeave('lb-3', 'e1');
+    server.connect({ account: 'e2', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-1');
+  });
+
+  test('lobby weapon: primary id stored and synced, invalid or side weapons fall back to rifle', async (server) => {
+    await server.simulateJoin(HUB, 'w1');
+    server.connect({ account: 'w1', roomId: HUB });
+    await server.hubHello({ c: 'blue', n: 'Gun', w: 'shotgun' });
+    expect((await hubUser(server, 'w1')).w).toBe('shotgun');
+    server.connect({ account: 'w1', roomId: HUB });
+    expect((await server.hubInfo({ w: 'sniper' })).ok).toBe(true);
+    expect((await hubUser(server, 'w1')).w).toBe('sniper');
+    server.connect({ account: 'w1', roomId: HUB });
+    await server.hubInfo({ w: 'pistol' });
+    expect((await hubUser(server, 'w1')).w).toBe('rifle');
+    server.connect({ account: 'w1', roomId: HUB });
+    await server.hubInfo({ w: '<img>' });
+    expect((await hubUser(server, 'w1')).w).toBe('rifle');
   });
 
   test('hubHello: character id checked, nickname sanitized, spawn state stored', async (server) => {
@@ -686,10 +786,13 @@ describe('online lobby (hub)', () => {
     expect((await hubUser(server, 'alice')).c).toBe('black');
   });
 
-  test('hubHello rejects the 9th user in one lobby', async (server) => {
-    for (const a of ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9']) await server.simulateJoin(HUB, a);
+  test('hubHello rejects the 9th user in one lobby; a member saying hello again is not rejected', async (server) => {
+    await fillHub(server, HUB, ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8']);
+    await server.simulateJoin(HUB, 'a9');
     server.connect({ account: 'a9', roomId: HUB });
     expect((await server.hubHello({ c: 'blue', n: 'nine' })).reason).toBe('full');
+    server.connect({ account: 'a2', roomId: HUB });
+    expect((await server.hubHello({ c: 'blue', n: 'two' })).ok).toBe(true);
   });
 
   test('hubMove: normal moves accepted; too fast, too frequent, out of bounds rejected; return to spawn allowed', async (server) => {
@@ -824,5 +927,102 @@ describe('room list and nicknames', () => {
     const h = await server.hello('pink', '<script>');
     expect(h.players.alice.nick).toBe('뽀삐');
     expect(h.players.bob.nick).toBe(undefined);
+  });
+});
+
+describe('nickname storage (server final check)', () => {
+  test('nickGet empty at first; nickSet validates format and profanity, keeps the old nickname on failure', async (server) => {
+    server.connect({ account: 'nk', roomId: '__no_room__' });
+    expect((await server.nickGet()).nick).toBe(null);
+    expect((await server.nickSet('뽀야')).ok).toBe(true);
+    expect((await server.nickGet()).nick).toBe('뽀야');
+    expect((await server.nickSet('a')).reason).toBe('length');
+    expect((await server.nickSet('   ')).reason).toBe('empty');
+    expect((await server.nickSet('a<b>c')).reason).toBe('chars');
+    expect((await server.nickSet('씨1발')).reason).toBe('blocked');
+    expect((await server.nickSet('F u c k')).reason).toBe('blocked');
+    expect((await server.nickGet()).nick).toBe('뽀야');
+  });
+
+  test('nickSet rate limit (first set free, change again within 10 s refused, same name fine)', async (server) => {
+    server.connect({ account: 'nr', roomId: '__no_room__' });
+    expect((await server.nickSet('First')).ok).toBe(true);
+    const rate = await server.nickSet('Second');
+    expect(rate.reason).toBe('rate');
+    // 남은 시간 (서버 시각 기준, 0 < 남은 시간 <= 10초)
+    expect(rate.retryMs > 0 && rate.retryMs <= 10_000).toBe(true);
+    expect((await server.nickSet('First')).ok).toBe(true);
+    expect((await server.nickGet()).nick).toBe('First');
+  });
+
+  test('nickSet inside a lobby updates the name others see; hubHello and hello prefer the stored nickname', async (server) => {
+    server.connect({ account: 'ns', roomId: '__no_room__' });
+    await server.nickSet('저장된이름');
+    await server.simulateJoin(HUB, 'ns');
+    server.connect({ account: 'ns', roomId: HUB });
+    await server.hubHello({ c: 'blue', n: 'ClientName' });
+    expect((await hubUser(server, 'ns')).n).toBe('저장된이름');
+    await server.simulateJoin(ROOM, 'ns');
+    server.connect({ account: 'ns', roomId: ROOM });
+    expect((await server.hello('blue', 'ClientName')).players.ns.nick).toBe('저장된이름');
+    // 로비 안에서 바꾸면 로비 사용자 상태도 바뀜 (간격 제한 지난 뒤)
+    await server.simulateJoin(HUB, 'nt');
+    server.connect({ account: 'nt', roomId: HUB });
+    await server.hubHello({ c: 'blue', n: 'Before' });
+    expect((await server.nickSet('After')).ok).toBe(true);
+    expect((await hubUser(server, 'nt')).n).toBe('After');
+  });
+});
+
+describe('nickname filter (shared client/server check)', () => {
+  const ok = (raw: string, value = raw) => {
+    const r = checkNickname(raw);
+    if (!r.ok) throw new Error(`expected ok: ${JSON.stringify(raw)} → ${r.reason}`);
+    expect(r.value).toBe(value);
+  };
+  const bad = (raw: unknown, reason: string) => {
+    const r = checkNickname(raw);
+    if (r.ok) throw new Error(`expected ${reason}: ${JSON.stringify(raw)} passed as ${JSON.stringify(r.value)}`);
+    expect(r.reason).toBe(reason);
+  };
+
+  test('normal names: Korean, English, digits, mixed, inner space, trimmed', async () => {
+    for (const n of ['뽀삐', '버블파이터', 'Popi', 'player1', '뽀삐123', 'Mochi 짱', 'ab', '가나다라마바사아자차카타', 'A1B2C3D4E5F6']) ok(n);
+    ok('  앨리스  짱 ', '앨리스 짱');
+    ok('뽀\t삐', '뽀 삐');
+  });
+
+  test('length (2..12, counted after trim) and empty', async () => {
+    bad('', 'empty');
+    bad('     ', 'empty');
+    bad(undefined, 'empty');
+    bad(42, 'empty');
+    bad('a', 'length');
+    bad('가', 'length');
+    bad('a'.repeat(13), 'length');
+    bad('가나다라마바사아자차카타파', 'length');
+    ok(' a b ', 'a b');
+  });
+
+  test('characters: no symbols, emoji, control characters or HTML', async () => {
+    for (const n of ['a<b>c', '<script>', 'na_me', 'name!', 'hi@there', 'abc' + String.fromCharCode(7) + 'd', '뽀삐😀', 'ｆｕｌｌ', 'a.b', '이름#1']) bad(n, 'chars');
+  });
+
+  test('Korean profanity incl. evasion (spaces, digits, elongation, jamo split, initials)', async () => {
+    for (const n of ['씨발', '시발놈', '씨 발', '씨1발', '씨이발', '시ㅂ알', 'ㅅㅂ', 'ㅅ ㅂ', 'ㅂㅅ아', '병신', '병 신 아', '븅신', '개새끼', '개 새 끼', '존나', '지랄', '좆밥', '니애미', '느금마', '섹스', '한남충', '김치녀', '틀딱'])
+      bad(n, 'blocked');
+  });
+
+  test('English profanity incl. case, spaces, repeats, leetspeak', async () => {
+    for (const n of ['fuck', 'FUCK', 'Fuck You', 'f u c k', 'fuuuuck', 'fvck', 'sh1t', 'B1TCH', 'b i t c h', 'a55hole', 'n1gger', 'p0rn', 'ass', 'ASS', 'dick', 'Big Dick', 'sexy', 'wtf', 'nazi', 'h1tler'])
+      bad(n, 'blocked');
+  });
+
+  test('false positives: normal words that contain a blocked piece stay allowed', async () => {
+    for (const n of ['class', 'Classic', 'bass', 'assassin', 'passion', 'grass', 'Dickens', 'cocktail', 'peacock', 'cockpit', 'Essex', 'sussex', 'Scunthorpe', 'shitake', 'therapist', 'Hancock', 'title', 'analyst'])
+      ok(n);
+    for (const n of ['시발점', '시바견', '새끼손가락', '자지러지다', '보지마', '조지', '곳바', '시바이누', '지하철'])
+      ok(n);
+    for (const n of ['스시바', '미친듯이', '병아리', '신발', '시계', '새우깡', '개구리', '닥터', '꺼벙이', '조심해']) ok(n);
   });
 });

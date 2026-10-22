@@ -349,7 +349,10 @@ export class Lobby {
     }
 
     const card = el('section', 'lb-nickname-card');
-    const eyebrow = el('span', 'lb-nickname-eyebrow', 'WELCOME TO POP! BATTLE');
+    const logo = el('div', 'lb-logo lb-nickname-logo');
+    logo.setAttribute('aria-label', 'POP! BATTLE');
+    logo.innerHTML = '<b>POP!</b><span>BATTLE</span>';
+    const eyebrow = el('span', 'lb-nickname-eyebrow', 'WELCOME');
     const title = el('h2', 'lb-nickname-title', '닉네임을 정해 주세요');
     title.id = titleId;
     const copy = el('p', 'lb-nickname-copy', '다른 플레이어에게 보일 이름이에요. 나중에 SETTINGS에서 바꿀 수 있어요.');
@@ -360,15 +363,15 @@ export class Lobby {
         this.refresh();
       },
     });
-    card.append(eyebrow, title, copy, editor.root);
+    card.append(logo, eyebrow, title, copy, editor.root);
     this.nicknameModal.appendChild(card);
     return editor;
   }
 
-  /** 저장된 이름이 없으면 필수 입력 창을 열고 게임 이동을 멈춘다. */
+  /** 저장된 이름이 없으면 필수 입력 창을 열고 게임 이동을 멈춘다. 서버 확인이 끝나기 전에는 열지 않음 (저장된 이름이 있으면 건너뜀) */
   private syncRequiredNickname(): void {
     if (!this.visible) return;
-    if (this.host.nickname() !== null) {
+    if (this.host.nickname() !== null || !this.host.nicknameReady()) {
       if (this.nicknameOpen) this.closeRequiredNickname();
       return;
     }

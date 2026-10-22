@@ -16,13 +16,15 @@ export interface HubPeer {
   readonly account: string;
   nick: string;
   char: string;
+  /** 손에 든 주무기 id (보이기만, 로비에서는 쏘지 않음) */
+  weapon: string;
   readonly buffer: SnapshotBuffer;
 }
 
 export interface HubEvents {
   onPeerJoin(peer: HubPeer): void;
   onPeerLeave(account: string): void;
-  /** 닉네임·캐릭터가 바뀜 */
+  /** 닉네임·캐릭터·무기가 바뀜 */
   onPeerChange(peer: HubPeer): void;
 }
 
@@ -42,8 +44,8 @@ export interface HubLocal {
 /** 다시 연결 간격 (ms) */
 const RETRY_MS = [2000, 4000, 8000, 15000];
 
-/** 로비 위치 패킷 → 보간 버퍼용 상태 (무기·조준은 로비에서 쓰지 않는 기본값) */
-function toState(p: NetHubPacket, c: string): NetStatePacket {
+/** 로비 위치 패킷 → 보간 버퍼용 상태 (조준·전투 값은 로비에서 쓰지 않는 기본값) */
+function toState(p: NetHubPacket, c: string, w: string): NetStatePacket {
   return {
     q: p[0],
     t: p[1],
@@ -54,7 +56,7 @@ function toState(p: NetHubPacket, c: string): NetStatePacket {
     pi: 0,
     m: p[9],
     f: p[10],
-    w: 'rifle',
+    w,
     c,
     rl: 0,
     ms: 0,
@@ -73,7 +75,7 @@ export class LobbyHub {
   readonly stats = { sent: 0, skipped: 0, recv: 0 };
   private wanted = false;
   private token = 0;
-  private info = { char: 'blue', nick: '' };
+  private info = { char: 'blue', nick: '', weapon: 'rifle' };
   /**
    * 순번: 작은 수로 압축 (1부터). 새로고침하면 pagehide의 hubBye로 상대가 나를 지웠다가 새 버퍼로 다시 받으므로
    * 순번이 처음부터 시작해도 버려지지 않음
@@ -115,8 +117,8 @@ export class LobbyHub {
   }
 
   /** 로비 접속 시작 (이미 시작했으면 정보만 갱신) */
-  start(char: string, nick: string): void {
-    this.info = { char, nick };
+  start(char: string, nick: string, weapon: string): void {
+    this.info = { char, nick, weapon };
     if (this.wanted) return;
     this.wanted = true;
     this.retry = 0;
@@ -136,12 +138,15 @@ export class LobbyHub {
     this.roomId = null;
   }
 
-  /** 캐릭터·닉네임 변경 (접속 중이면 서버에 알림) */
-  setInfo(info: { char?: string; nick?: string }): void {
+  /**
+   * 캐릭터·닉네임·무기 변경 (접속 중이면 서버에 알림). send = false: 이미 서버가 바꿈(nickSet) → 다음 입장용 값만 갱신
+   */
+  setInfo(info: { char?: string; nick?: string; weapon?: string }, send = true): void {
     if (info.char) this.info.char = info.char;
     if (info.nick) this.info.nick = info.nick;
-    if (this.inHubRoom) {
-      this.client.call('hubInfo', [{ c: info.char, n: info.nick }]).catch((e) => this.client.addLog('warn', `hubInfo: ${errText(e)}`));
+    if (info.weapon) this.info.weapon = info.weapon;
+    if (send && this.inHubRoom) {
+      this.client.call('hubInfo', [{ c: info.char, n: info.nick, w: info.weapon }]).catch((e) => this.client.addLog('warn', `hubInfo: ${errText(e)}`));
     }
   }
 
@@ -214,7 +219,7 @@ export class LobbyHub {
           return;
         }
         this.subscribe();
-        const hello = await this.client.call<{ ok: boolean; reason?: string; max: number; count: number }>('hubHello', [{ c: this.info.char, n: this.info.nick || undefined }]);
+        const hello = await this.client.call<{ ok: boolean; reason?: string; max: number; count: number }>('hubHello', [{ c: this.info.char, n: this.info.nick || undefined, w: this.info.weapon }]);
         if (token !== this.token) {
           this.leaveHubRoom();
           return;
@@ -267,20 +272,22 @@ export class LobbyHub {
         if (u.x === 1 || !Array.isArray(u.p) || typeof u.c !== 'string') continue;
         seen.add(u.account);
         let peer = this.peers.get(u.account);
+        const w = typeof u.w === 'string' ? u.w : 'rifle';
         if (!peer) {
-          peer = { account: u.account, nick: u.n ?? '', char: u.c, buffer: new SnapshotBuffer() };
+          peer = { account: u.account, nick: u.n ?? '', char: u.c, weapon: w, buffer: new SnapshotBuffer() };
           peer.buffer.maxExtrapolateMs = 150;
           this.peers.set(u.account, peer);
-          peer.buffer.push(toState(u.p, u.c), now);
+          peer.buffer.push(toState(u.p, u.c, w), now);
           this.events.onPeerJoin(peer);
           continue;
         }
-        if ((u.n ?? '') !== peer.nick || u.c !== peer.char) {
+        if ((u.n ?? '') !== peer.nick || u.c !== peer.char || w !== peer.weapon) {
           peer.nick = u.n ?? '';
           peer.char = u.c;
+          peer.weapon = w;
           this.events.onPeerChange(peer);
         }
-        if (u.p[0] !== peer.buffer.latest?.q) peer.buffer.push(toState(u.p, u.c), now);
+        if (u.p[0] !== peer.buffer.latest?.q) peer.buffer.push(toState(u.p, u.c, w), now);
       }
       for (const acc of [...this.peers.keys()]) if (!seen.has(acc)) this.removePeer(acc);
     }

@@ -13,7 +13,7 @@ import { NetDebugPanel } from '../net/NetDebugPanel';
 import { MultiplayerMenu } from '../net/MultiplayerMenu';
 import { NetTestHud } from '../net/NetTestHud';
 import type { LocalState } from '../net/NetSession';
-import { checkNetRules, NET_MODE_RULES, NET_MODES, NET_TIMING, sanitizeNick, type NetMode } from '../net/shared/protocol';
+import { checkNetRules, NET_MODE_RULES, NET_MODES, NET_TIMING, type NetMode } from '../net/shared/protocol';
 import type { MatchRules } from '../config/match';
 import {
   BOT_CHARACTERS,
@@ -65,7 +65,8 @@ import { DebugPanel } from '../ui/DebugPanel';
 import type { DeathCause, KillFeedEvent } from '../ui/KillFeed';
 import { Hud, type MatchHudInfo } from '../ui/Hud';
 import { Lobby } from '../ui/lobby/Lobby';
-import type { LobbyHost, LobbyPresence, LobbySlider } from '../ui/lobby/lobbyDom';
+import { PauseMenu } from '../ui/lobby/PauseMenu';
+import type { LobbyHost, LobbyPresence, LobbySlider, NicknameResult, PauseHost } from '../ui/lobby/lobbyDom';
 import { loadUserSettings, saveUserSettings, USER_LIMITS } from './UserSettings';
 import { TOUCH_LIMITS } from './TouchInput';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -75,8 +76,9 @@ import { ArenaMap } from '../world/maps/ArenaMap';
 import { TestMap } from '../world/TestMap';
 import { TestTarget } from '../world/TestTarget';
 import { LobbySpace } from '../world/LobbySpace';
-import { loadNickname, saveNickname } from '../net/nickname';
-import { NetClient } from '../net/NetClient';
+import { clearNickname, loadNickname, saveNickname } from '../net/nickname';
+import { checkNickname, type NickFailReason } from '../net/shared/nickFilter';
+import { errText, NetClient } from '../net/NetClient';
 import { LobbyHub, type HubStatus } from '../net/LobbyHub';
 import { LobbyPeers } from '../net/LobbyPeers';
 import { displayCode } from '../net/NetSession';
@@ -85,6 +87,30 @@ import { GameInput } from './GameInput';
 import { JoystickAutoSprint } from './JoystickAutoSprint';
 
 /** 새로고침 뒤 메뉴에 "이전 방 다시 입장"을 보이기 위한 마지막 룸 (NetSession과 같은 키, 탭 단위) */
+/** 닉네임 변경 간격 (서버 nickSet과 같은 10초, 서버 없는 빌드에서만 여기서 검사) */
+const NICK_CHANGE_MS = 10_000;
+
+function isNickReason(r: unknown): r is NickFailReason | 'rate' {
+  return r === 'empty' || r === 'length' || r === 'chars' || r === 'blocked' || r === 'rate';
+}
+
+/** ms 안에 끝나지 않으면 실패 (서버 응답이 없을 때 화면이 멈춰 있지 않게) */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
 function readLastRoomCode(): string | null {
   try {
     return sessionStorage.getItem('popbattle.lastRoom');
@@ -135,6 +161,10 @@ export class Game {
   /** 시각용 장난감 탄환 (판정과 무관) */
   private bullets!: ToyBullets;
   private debugPanel!: DebugPanel;
+  /** 매치 일시정지 메뉴 (조작을 놓쳤을 때: ESC·터치 ‖·포인터 잠금 해제) */
+  private pauseMenu: PauseMenu | null = null;
+  /** 일시정지 조건이 처음 맞은 시각 (ms, -1 = 아님) */
+  private pauseWantSince = -1;
   /** 개발용 총구 표시 (개발 서버에서만 생성, 기본 꺼짐) */
   private muzzleDebug: MuzzleDebug | null = null;
   private shotDebug: ShotPathDebug | null = null;
@@ -143,6 +173,8 @@ export class Game {
   private targets: TestTarget[] = [];
   private combatant!: PlayerCombatant;
   private bots!: BotManager;
+  /** 봇 캐릭터 (봇 순서대로, 다시 만들 때 외형용) */
+  private botCharacterIds: CharacterId[] = [];
   /** 매치 진행 (개인전): 상태·타이머·킬데스 집계 */
   private match!: Match;
   /** 플레이어가 쓰는 스폰 지점 (매치 규칙: 개인전은 맵의 모든 스폰 공용) */
@@ -247,6 +279,12 @@ export class Game {
   private lobbyCamYaw = LOBBY_CAM.yaw;
   /** 표시용 닉네임 (이 기기 저장, null = 아직 정하지 않음) */
   private nick: string | null = loadNickname();
+  /** 마지막 닉네임 변경 시각 (서버 없는 빌드의 변경 간격 제한) */
+  private nickChangedAt = -Infinity;
+  /** 서버 닉네임 확인 끝남 (그 전에는 첫 설정 창을 열지 않음) */
+  private nickReady = false;
+  /** 저장 중인 닉네임 요청 (중복 전송 방지) */
+  private nickSaving: Promise<NicknameResult> | null = null;
   /** 서버 연결 (온라인 로비·매치 공용: 같은 계정은 SDK 연결이 하나) */
   private readonly netClient = new NetClient();
   /** 온라인 로비 세션·다른 사람 캐릭터 (로비 단계에서만 접속) */
@@ -326,6 +364,7 @@ export class Game {
     // 봇은 같은 GLB를 복제해 쓴다: 플레이어 아바타가 원본을 바꾸기 전에 복제본 확보
     // 봇 캐릭터: ?botchars= 순서대로 (기본은 플레이어와 같은 캐릭터)
     const botCharacterIds: CharacterId[] = [0, 1, 2].map((i) => BOT_CHARACTERS[i] ?? PLAYER_CHARACTER);
+    this.botCharacterIds = botCharacterIds;
     this.characterModels.set(PLAYER_CHARACTER, Promise.resolve(assets.character));
     for (const [id, m] of assets.otherCharacters) this.characterModels.set(id, Promise.resolve(m));
     const botSources = {
@@ -433,13 +472,11 @@ export class Game {
 
     // 외형: 캐릭터별 팀 마스크(캐릭터당 1장) + 인스턴스별 머티리얼 패치. FFA는 원래 색
     onProgress('캐릭터 외형…');
-    const characterOf = new Map<string, CharacterId>([[this.combatant.id, PLAYER_CHARACTER]]);
-    this.bots.bots.forEach((b, i) => characterOf.set(b.id, botCharacterIds[i]!));
-    for (const [id, cid] of characterOf) {
-      const [mask, deadEyes] = await Promise.all([loadTeamMask(CHARACTERS[cid]), this.loadDeadEyesSafe(cid)]);
-      const avatar = id === this.combatant.id ? this.avatar : this.bots.bots.find((b) => b.id === id)!.avatar;
-      this.appearances.set(id, new CharacterAppearance(avatar.bodyMeshes, cid, mask, deadEyes));
+    {
+      const [mask, deadEyes] = await Promise.all([loadTeamMask(CHARACTERS[PLAYER_CHARACTER]), this.loadDeadEyesSafe(PLAYER_CHARACTER)]);
+      this.appearances.set(this.combatant.id, new CharacterAppearance(this.avatar.bodyMeshes, PLAYER_CHARACTER, mask, deadEyes));
     }
+    await this.setupBotAppearances();
     this.setTeamPreview(TEAM_PREVIEW);
     // 첫 스폰도 리스폰과 같은 규칙 (봇이 생긴 뒤 위치 확정)
     this.placeAtSpawn(this.pickPlayerSpawn());
@@ -508,6 +545,7 @@ export class Game {
     this.audio.setVolume(this.userSettings.volume);
     this.input.mouseSensitivity = this.userSettings.mouseSensitivity;
     this.lobby = new Lobby(this.container, this.lobbyHost());
+    this.pauseMenu = new PauseMenu(this.container, this.pauseHost());
     // 로비 전용 공간 (경기장 위 하늘 놀이섬, 맵 키트 재사용)에서 시작. 매치·멀티 입장 때 공간을 치우고 원래 스폰 규칙으로 배치
     this.lobbySpace = new LobbySpace(this.scene, this.physics, this.map.lobbyKit ?? null);
     this.placeAtSpawn(this.lobbySpace.spawn);
@@ -515,6 +553,7 @@ export class Game {
     this.peers = new LobbyPeers({
       createAvatar: (id) => this.createLobbyAvatar(id),
       releaseAvatar: (a) => a.dispose(),
+      weaponModel: (wid) => this.weaponModels.get(WEAPONS[wid] ?? RIFLE),
       camera: () => this.tpsCamera.camera,
       container: this.container,
       lowPower: () => this.input.touchMode,
@@ -524,6 +563,8 @@ export class Game {
       onPeerLeave: (acc) => this.peers?.remove(acc),
       onPeerChange: (p) => this.peers?.change(p),
     });
+    // 계정에 저장된 닉네임 불러오기 (다른 기기·지운 저장소에서도 같은 이름, 첫 설정 창은 저장된 이름이 없을 때만)
+    void this.syncServerNick();
 
     // 첫 프레임 이전에 물리 쿼리 구조를 만들어 둔다
     this.physics.step();
@@ -546,6 +587,7 @@ export class Game {
     const input = this.input.state;
     this.updateFps(dt);
     this.updateLobbyVisibility();
+    this.syncPauseMenu();
 
     // 무기 장착 디버그 패널은 개발 모드에서만
     if (input.debugTogglePressed && import.meta.env.DEV) {
@@ -556,17 +598,20 @@ export class Game {
     this.tpsCamera.applyLook(input.lookDX, input.lookDY, this.aim.lookSensitivityMultiplier);
 
     // --- 매치 진행 (카운트다운·타이머·시간 종료) ---
-    this.match.update(dt);
+    // 연습전 일시정지: 타이머·봇 정지 (멀티는 서버 시각으로 계속 진행 — 내 입력만 막힘, 무적 없음)
+    const practicePaused = !this.netGame && !!this.pauseMenu?.visible;
+    if (!practicePaused) this.match.update(dt);
     const combatActive = this.match.combatActive;
     // 대기·카운트다운·종료 중에는 봇도 제자리 (종료 후에는 쓰러진 봇도 부활하지 않음)
-    this.bots.hold = !combatActive;
+    this.bots.hold = !combatActive || practicePaused;
     this.bots.respawnEnabled = this.match.respawnAllowed;
     // 원격 플레이어: 보간 위치·자세·판정을 물리 스텝 전에 맞춤 (이번 프레임 사격 판정에 반영)
     this.net?.updateRemotes(dt);
 
     // --- 사망/리스폰 ---
     this.combatant.update(dt);
-    if (input.suicidePressed && !this.dead && combatActive) this.kill(null, null, 'suicide');
+    // K = 사망 테스트 (개발 키, 배포 빌드에서는 무시)
+    if (import.meta.env.DEV && input.suicidePressed && !this.dead && combatActive) this.kill(null, null, 'suicide');
     if (this.dead && this.match.respawnAllowed) {
       this.deathTimer -= dt;
       if (this.deathTimer <= 0) {
@@ -1416,8 +1461,8 @@ export class Game {
 
   // ---------------- 메인 로비 ----------------
 
-  /** 로비가 게임에 요청하는 동작 (실제로 있는 기능만 연결) */
-  private lobbyHost(): LobbyHost {
+  /** 설정 창 슬라이더 (로비 SETTINGS·매치 일시정지 메뉴 공용, 실제로 적용되는 값만) */
+  private settingSliders(): { sound: LobbySlider[]; controls: LobbySlider[]; touch: LobbySlider[] } {
     const pct = (v: number) => `${Math.round(v * 100)}%`;
     const x = (v: number) => `${v.toFixed(1)}×`;
     const user = (key: keyof typeof USER_LIMITS, label: string, format: (v: number) => string, apply: (v: number) => void): LobbySlider => ({
@@ -1443,6 +1488,54 @@ export class Game {
       format,
     });
     return {
+      sound: [user('volume', '전체 소리', pct, (v) => this.audio.setVolume(v))],
+      controls: [user('mouseSensitivity', '마우스 감도', x, (v) => (this.input.mouseSensitivity = v))],
+      touch: [touch('lookSensitivity', '시점 회전 감도', x), touch('joystickScale', '조이스틱 크기', pct), touch('buttonScale', '버튼 크기', pct)],
+    };
+  }
+
+  /**
+   * 매치 일시정지 메뉴 표시: 매치 진행 중(카운트다운·전투)인데 조작(포인터 잠금·터치 조작)이 꺼져 있을 때.
+   * 결과 화면·멀티 대기실·재접속 화면·디버그 패널이 떠 있을 때는 그쪽이 우선
+   */
+  private syncPauseMenu(): void {
+    const pm = this.pauseMenu;
+    if (!pm) return;
+    const s = this.net?.session;
+    const running = this.netGame ? !!s?.inRoom && s.inMatch && s.matchPhase !== 'result' : this.match.state === 'COUNTDOWN' || this.match.state === 'PLAYING';
+    const want = running && !this.inLobby && !this.input.isLocked && !this.debugPanel.visible;
+    // 매치 시작 직후 포인터 잠금이 잡히는 사이(몇 프레임)에는 열지 않음 → 0.15초 넘게 조작이 없을 때만
+    const now = performance.now();
+    if (!want) this.pauseWantSince = -1;
+    else if (this.pauseWantSince < 0) this.pauseWantSince = now;
+    const open = want && now - this.pauseWantSince >= 150;
+    if (open && !pm.visible) pm.show();
+    else if (!want && pm.visible) pm.hide();
+  }
+
+  /** 일시정지 메뉴가 게임에 요청하는 동작 */
+  private pauseHost(): PauseHost {
+    return {
+      // 계속하기: 버튼 클릭(사용자 동작) 안에서 포인터 잠금·터치 조작 요청 → 성공하면 다음 프레임에 메뉴가 닫힘
+      resume: () => this.input.requestLock(),
+      settings: () => this.settingSliders(),
+      touch: () => this.input.touchMode,
+      matchLabel: () => {
+        if (!this.netGame) return '연습전 · 개인전 4인';
+        const mode = this.net?.session.mode;
+        return mode === 'tdm' ? '멀티플레이 · 팀 데스매치 2:2' : mode === 'ffa' ? '멀티플레이 · 개인전 4인' : '멀티플레이 · 자유 테스트';
+      },
+      multiplayer: () => this.netGame,
+      leaveMatch: async () => {
+        await this.returnToLobby();
+        this.pauseMenu?.hide();
+      },
+    };
+  }
+
+  /** 로비가 게임에 요청하는 동작 (실제로 있는 기능만 연결) */
+  private lobbyHost(): LobbyHost {
+    return {
       // 카드 순서 = 표시 순서 (잠긴 LUMI·BAM 맨 뒤), 이름 = 표시 이름 (id는 그대로)
       characters: () =>
         CHARACTER_DISPLAY_ORDER.map((id) => {
@@ -1462,11 +1555,8 @@ export class Game {
       selectPrimary: (id) => void this.selectPrimary(id),
       // 연습전 시작 (로비 공간을 치우고 경기장 스폰으로) + 버튼 클릭(사용자 동작) 안에서 포인터 잠금/터치 시작 → 바로 조작
       playPractice: () => {
-        // 멀티 입장 때 봇을 지웠으면 연습전은 새로고침으로 (봇을 다시 만들지 않음)
-        if (this.botsRemoved) {
-          this.reloadPage(false);
-          return;
-        }
+        // 멀티 입장 때 지운 봇은 로비로 돌아올 때 다시 만듦 (혹시 남아 있으면 여기서)
+        if (this.botsRemoved) this.rebuildBots();
         this.startMatch();
         this.input.requestLock();
       },
@@ -1479,16 +1569,13 @@ export class Game {
         this.mpMenu?.openWith(null);
         this.mpMenu?.rejoinNow();
       },
-      settings: () => ({
-        sound: [user('volume', '전체 소리', pct, (v) => this.audio.setVolume(v))],
-        controls: [user('mouseSensitivity', '마우스 감도', x, (v) => (this.input.mouseSensitivity = v))],
-        touch: [touch('lookSensitivity', '시점 회전 감도', x), touch('joystickScale', '조이스틱 크기', pct), touch('buttonScale', '버튼 크기', pct)],
-      }),
+      settings: () => this.settingSliders(),
       panelChanged: (centerX) => (this.lobbyCenterX = centerX),
       menuChanged: (open, panel) => this.onLobbyMenu(open, panel),
-      // Verse8 SDK에 닉네임 API 없음 → 이 기기에 저장한 표시용 닉네임 (서버 식별은 계정)
+      // 표시용 닉네임: 서버(계정별 글로벌 사용자 상태)가 최종 검사·저장, 이 기기에도 사본 (서버 식별은 계정)
       playerName: () => this.nick ?? '플레이어',
       nickname: () => this.nick,
+      nicknameReady: () => this.nickReady,
       setNickname: (raw) => this.setNickname(raw),
       returnToStart: () => {
         if (this.lobbyShown && !this.lobbyMenuOpen && this.lobbySpace) this.placeAtSpawn(this.lobbySpace.spawn);
@@ -1511,20 +1598,80 @@ export class Game {
     this.lobbyPanel = open ? panel : null;
   }
 
-  /** 닉네임 정하기·바꾸기: 규칙 검사(서버와 같은 sanitizeNick) → 이 기기 저장 → 접속 중인 로비·다음 방 입장에 반영 */
-  private setNickname(raw: string): { ok: boolean; value?: string } {
-    const v = sanitizeNick(raw);
-    if (!v) return { ok: false };
-    this.nick = v;
-    saveNickname(v);
-    this.onNicknameChanged(v);
-    return { ok: true, value: v };
+  /**
+   * 닉네임 정하기·바꾸기: 1차 검사(서버와 같은 checkNickname) → 서버 최종 검사·저장(nickSet, 승인된 값만 퍼짐) →
+   * 이 기기 저장 → 로비·다음 방 입장에 반영. 실패하면 이전 닉네임 그대로. 저장 중 다시 부르면 같은 요청 결과 (중복 전송 없음).
+   * 서버 없는 빌드(verse 없음)는 이 기기에만 저장. 개발 서버에서 연결한 preview 서버에 아직 nickSet이 없으면(배포 전) 이 기기에만 저장
+   */
+  private setNickname(raw: string): Promise<NicknameResult> {
+    if (!this.nickSaving) this.nickSaving = this.saveNickname(raw).finally(() => (this.nickSaving = null));
+    return this.nickSaving;
   }
 
-  /** 닉네임이 바뀜 → 접속 중인 로비에 알림, 다음 방 입장(hello)에 사용 */
-  private onNicknameChanged(nick: string): void {
-    this.hub?.setInfo({ nick });
+  private async saveNickname(raw: string): Promise<NicknameResult> {
+    const r = checkNickname(raw);
+    if (!r.ok) return { ok: false, reason: r.reason };
+    if (r.value === this.nick) return { ok: true, value: r.value };
+    let sentToServer = false;
+    if (this.netClient.status !== 'no-verse') {
+      try {
+        if (!(await withTimeout(this.netClient.connect(), 8000))) return { ok: false, reason: 'server' };
+        const s = await withTimeout(this.netClient.call<{ ok: boolean; nick?: string; reason?: string; retryMs?: number }>('nickSet', [r.value]), 8000);
+        if (!s.ok) {
+          const reason = isNickReason(s.reason) ? s.reason : 'server';
+          return { ok: false, reason, ...(reason === 'rate' && typeof s.retryMs === 'number' ? { retryMs: s.retryMs } : {}) };
+        }
+        sentToServer = true;
+      } catch (e) {
+        if (!import.meta.env.DEV || !/function not found/i.test(errText(e))) return { ok: false, reason: 'server' };
+        this.netClient.addLog('warn', '서버에 nickSet 없음 (배포 전) → 개발 서버라 이 기기에만 저장');
+      }
+    }
+    if (!sentToServer) {
+      const left = NICK_CHANGE_MS - (performance.now() - this.nickChangedAt);
+      if (this.nick && left > 0) return { ok: false, reason: 'rate', retryMs: left };
+    }
+    this.nickChangedAt = performance.now();
+    this.applyNickname(r.value, !sentToServer);
+    return { ok: true, value: r.value };
+  }
+
+  /** 닉네임 적용: 이 기기 저장 → 로비(sendHub = 서버에 아직 안 알렸을 때만)·다음 방 입장(hello)·로비 화면 */
+  private applyNickname(nick: string, sendHub: boolean): void {
+    this.nick = nick;
+    saveNickname(nick);
+    this.hub?.setInfo({ nick }, sendHub);
     if (this.net) this.net.session.nick = nick;
+    this.lobby?.refresh();
+  }
+
+  /**
+   * 시작할 때 계정에 저장된 닉네임 확인: 서버 값이 있으면 그 값으로 (첫 설정 창 닫힘), 서버에 없고 이 기기에만 있으면
+   * 서버에 올림 (예전 빌드에서 정한 이름). 실패해도 조용히 넘어감 (이 기기 값으로 계속)
+   */
+  private async syncServerNick(): Promise<void> {
+    try {
+      if (this.netClient.status === 'no-verse') return;
+      if (!(await withTimeout(this.netClient.connect(), 10000))) return;
+      const g = await withTimeout(this.netClient.call<{ ok: boolean; nick: string | null }>('nickGet'), 8000);
+      if (g.nick) {
+        if (g.nick !== this.nick) this.applyNickname(g.nick, false);
+      } else if (this.nick) {
+        const s = await withTimeout(this.netClient.call<{ ok: boolean; reason?: string }>('nickSet', [this.nick]), 8000);
+        // 이 기기 이름이 지금 규칙(금칙어)에 걸리면 다시 정하게
+        if (!s.ok && (s.reason === 'blocked' || s.reason === 'chars' || s.reason === 'length' || s.reason === 'empty')) {
+          this.nick = null;
+          clearNickname();
+          this.lobby?.refresh();
+        }
+      }
+    } catch (e) {
+      this.netClient.addLog('warn', `닉네임 불러오기 실패: ${errText(e)}`);
+    } finally {
+      // 확인이 끝남 (실패해도): 저장된 이름이 없으면 이제 첫 설정 창
+      this.nickReady = true;
+      this.lobby?.refresh();
+    }
   }
 
   /** 정비소 미리보기 캐릭터 (잠긴 캐릭터 포함, 장착과 별개). 같은 캐릭터면 그대로 */
@@ -1778,6 +1925,8 @@ export class Game {
     if (!def) return false;
     this.primary = def;
     this.hud.setLoadout(def.id, false);
+    // 온라인 로비의 다른 사람 화면에도 새 주무기로
+    this.hub?.setInfo({ weapon: def.id });
     // 시작 전 미리 보기: 1번 슬롯으로 들고 있게
     this.switchSlot(0, true);
     return true;
@@ -2091,7 +2240,8 @@ export class Game {
     if (!hub) return;
     const matchRoom = !!this.net && this.net.session.phase !== 'lobby';
     const want = this.inLobby && !matchRoom && !this.hubHold;
-    if (want) hub.start(this.avatar.character.id, this.nick ?? '');
+    // 닉네임을 정하기 전에는 로비 서버에 들어가지 않음 (첫 설정 창)
+    if (want && this.nick) hub.start(this.avatar.character.id, this.nick, this.primary.id);
     else if (hub.active && !this.hubHold) void hub.stop();
     const p = this.player;
     const v = p.velocity;
@@ -2130,7 +2280,7 @@ export class Game {
   /** 방 목록 (서버 listRooms). 서버에 함수가 없거나 연결 실패면 ok: false — 목록을 지어내지 않음 */
   private async listRooms(): Promise<{ ok: boolean; reason?: string; rooms: Array<{ code: string; mode: NetMode; players: number; maxPlayers: number; phase: NetRoomSummary['phase']; joinable: boolean; reason?: string }> }> {
     try {
-      if (!(await this.netClient.connect())) return { ok: false, reason: this.netClient.status === 'no-verse' ? 'offline' : 'error', rooms: [] };
+      if (!(await this.netClient.connect())) return { ok: false, reason: this.netClient.status === 'no-verse' ? 'offline' : 'connect', rooms: [] };
       const r = await this.netClient.call<{ ok: boolean; rooms: NetRoomSummary[] }>('listRooms');
       if (!r?.ok || !Array.isArray(r.rooms)) return { ok: false, reason: 'error', rooms: [] };
       return {
@@ -2138,8 +2288,10 @@ export class Game {
         rooms: r.rooms.map((x) => ({ code: displayCode(x.roomId), mode: x.mode, players: x.players, maxPlayers: x.max, phase: x.phase, joinable: x.joinable, ...(x.reason ? { reason: x.reason } : {}) })),
       };
     } catch (e) {
-      this.netClient.addLog('warn', `listRooms: ${e instanceof Error ? e.message : String(e)}`);
-      return { ok: false, reason: 'error', rooms: [] };
+      const msg = errText(e);
+      this.netClient.addLog('warn', `listRooms: ${msg}`);
+      // 서버에 함수가 없음 = 이 기능이 들어간 서버가 아직 배포 안 됨 (연결 실패와 구분)
+      return { ok: false, reason: /function not found/i.test(msg) ? 'not_deployed' : 'error', rooms: [] };
     }
   }
 
@@ -2178,7 +2330,7 @@ export class Game {
   /**
    * 매치 결과·멀티 방에서 메인 로비로 (새로고침 없이): 방에서 나가고(멀티) 매치 상태를 대기로 되돌린 뒤
    * 로비 공간을 다시 만들고 커서 조작으로. 매치 리소스(원격 플레이어·멀티 HUD)는 정리.
-   * 멀티 입장 때 봇을 지웠으면 이후 연습전은 새로고침으로 시작 (playPractice)
+   * 멀티 입장 때 봇을 지웠으면 여기서 다시 만듦 (연습전은 새로고침 없이)
    */
   private async returnToLobby(): Promise<void> {
     if (this.inLobby || this.roomBusy) return;
@@ -2214,6 +2366,8 @@ export class Game {
     COMBAT.hostility = rules.hostility;
     const allSpawns = [...this.map.spawns.teamA, ...this.map.spawns.teamB];
     this.spawnPool = rules.spawns === 'all' ? allSpawns : this.map.spawns.teamA;
+    // 멀티 입장 때 지운 봇을 다시 (연습전을 새로고침 없이)
+    if (this.botsRemoved) this.rebuildBots();
     this.match = new Match(rules, {
       onStateChange: (state, prev) => this.onMatchState(state, prev),
       onFinish: (result) => this.onMatchFinish(result),
@@ -2267,13 +2421,6 @@ export class Game {
     this.hud.setMultiplayerCovered(!!this.mpMenu?.covering);
   }
 
-  /** 새로고침 (싱글플레이로 돌아가기 / 멀티 메뉴 다시 열기). Verse8이 붙인 주소 파라미터(account·auth 등)는 유지 */
-  private reloadPage(multiplayer: boolean): void {
-    const url = new URL(location.href);
-    if (multiplayer) url.searchParams.set('net', '1');
-    else url.searchParams.delete('net');
-    location.replace(url.toString());
-  }
 
   /** 첫 방 입장 성공: 봇 제거·멀티 테스트 규칙·테스트 HUD (싱글플레이 복귀는 새로고침) */
   private enterNetGame(): void {
@@ -2522,6 +2669,31 @@ export class Game {
     }
   }
 
+  /** 봇 외형 (팀 마스크·사망 눈): 처음 만들 때와 다시 만들 때 공용 */
+  private async setupBotAppearances(): Promise<void> {
+    await Promise.all(
+      this.bots.bots.map(async (b, i) => {
+        const cid = this.botCharacterIds[i] ?? PLAYER_CHARACTER;
+        const [mask, deadEyes] = await Promise.all([loadTeamMask(CHARACTERS[cid]), this.loadDeadEyesSafe(cid)]);
+        // 그사이 다시 지워졌으면 버림
+        if (!this.bots.bots.includes(b)) return;
+        this.appearances.set(b.id, new CharacterAppearance(b.avatar.bodyMeshes, cid, mask, deadEyes));
+        this.applyAppearance(b.id);
+      }),
+    );
+  }
+
+  /**
+   * 멀티 매치 때 지운 봇을 다시 만듦 (새로고침 없이 연습전): 같은 이동 격자·스폰 규칙, 이름(BOT 1~3)·id 그대로라
+   * 매치 등록·킬로그가 중복되지 않음. 외형은 비동기로 붙음 (불러오는 동안은 원래 색)
+   */
+  private rebuildBots(): void {
+    this.bots.recreate();
+    this.bots.hold = true;
+    this.botsRemoved = false;
+    void this.setupBotAppearances().catch((e) => console.warn('[bots] 외형을 다시 만들지 못함', e));
+  }
+
   /** 원격 플레이어 아바타: 캐릭터 GLB 캐시 복제 + 팀 마스크·사망 눈 외형 (봇과 같은 구성) */
   private async createRemoteAvatar(id: string, character: CharacterId): Promise<PlayerAvatar> {
     // 아바타는 로비 원격 캐릭터와 같은 생성 경로 + 매치만 외형(팀 색·사망 눈) 등록
@@ -2602,6 +2774,7 @@ export class Game {
     this.peers?.dispose();
     this.lobbySpace?.dispose();
     this.lobby?.dispose();
+    this.pauseMenu?.dispose();
     // 네트워크 먼저 (룸 나가기·원격 아바타 해제) → 그다음 장면 전체 해제
     this.netPanel?.dispose();
     this.netHud?.dispose();

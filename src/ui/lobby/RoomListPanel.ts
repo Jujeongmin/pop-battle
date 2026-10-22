@@ -10,6 +10,7 @@ export class RoomListPanel implements LobbyPanel {
   private request = 0;
   private active = false;
   private loading = false;
+  private loadedOnce = false;
   private readonly openCreate: () => void;
 
   constructor(private readonly host: LobbyHost, openCreate: () => void) {
@@ -49,6 +50,7 @@ export class RoomListPanel implements LobbyPanel {
     try {
       const result = await this.host.listRooms();
       if (!this.active || token !== this.request || !this.body) return;
+      this.loadedOnce = true;
       if (!result.ok) this.drawError(result.reason);
       else if (result.rooms.length === 0) this.drawEmpty();
       else this.drawRooms(result.rooms);
@@ -77,7 +79,8 @@ export class RoomListPanel implements LobbyPanel {
     const shell = this.shell();
     if (!shell) return;
     const state = el('div', 'lb-room-state lb-room-loading');
-    state.append(el('i', 'lb-room-spinner'), el('b', '', '방 목록을 불러오는 중…'));
+    // 첫 조회는 서버 연결부터 (이후 자동 새로고침은 목록 조회만)
+    state.append(el('i', 'lb-room-spinner'), el('b', '', this.loadedOnce ? '방 목록을 불러오는 중…' : '서버에 연결하는 중…'));
     shell.list.append(state);
   }
 
@@ -89,16 +92,24 @@ export class RoomListPanel implements LobbyPanel {
     shell.list.append(state);
   }
 
+  /**
+   * 실패 상태 (게임이 알려 준 실제 이유별): offline = 이 빌드에 서버 없음, not_deployed = 서버 준비 중(기능 미배포),
+   * connect = 연결 실패, error = 조회 실패. 서버가 있는 경우만 다시 시도
+   */
   private drawError(reason?: string): void {
     const shell = this.shell();
     if (!shell) return;
-    const unsupported = reason === 'not_supported';
+    const [title, desc] =
+      reason === 'offline'
+        ? ['이 빌드에는 멀티플레이 서버가 없어요', '· Verse8에 올린 게임에서 방 목록을 볼 수 있어요']
+        : reason === 'not_deployed'
+          ? ['서버 준비 중이에요', '· 방 목록 기능이 아직 서버에 배포되지 않았어요 · 방 코드로는 참가할 수 있어요']
+          : reason === 'connect'
+            ? ['서버에 연결하지 못했어요', '· 네트워크를 확인하고 다시 시도해 주세요']
+            : ['방 목록을 불러오지 못했어요', '· 잠시 후 다시 시도해 주세요'];
     const state = el('div', 'lb-room-state lb-room-error');
-    state.append(
-      el('b', '', unsupported ? '방 목록 기능 준비 중이에요' : '서버에 연결하지 못했어요'),
-      el('p', '', unsupported ? '· 방 코드로는 참가할 수 있어요' : '· 다시 시도'),
-    );
-    if (!unsupported) state.append(button('다시 시도', 'lb-room-retry', () => void this.load()));
+    state.append(el('b', '', title), el('p', '', desc));
+    if (reason !== 'offline') state.append(button('다시 시도', 'lb-room-retry', () => void this.load()));
     shell.list.append(state);
   }
 

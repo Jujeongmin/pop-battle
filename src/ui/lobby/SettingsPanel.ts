@@ -1,5 +1,5 @@
 // SETTINGS: 실제로 적용되는 항목만 슬라이더 (사운드 크기·마우스 감도·모바일 터치), 그래픽은 준비 중. 값은 이 기기에 저장
-import { comingSoon, el, slider, type LobbyHost, type LobbyPanel } from './lobbyDom';
+import { button, comingSoon, el, slider, type LobbyHost, type LobbyPanel } from './lobbyDom';
 import { nicknameEditor } from './nicknameUi';
 
 export class SettingsPanel implements LobbyPanel {
@@ -12,13 +12,39 @@ export class SettingsPanel implements LobbyPanel {
     body.appendChild(el('div', 'lb-section', '닉네임'));
     const nickname = el('div', 'lb-settings-nickname');
     const current = el('p', 'lb-settings-nickname-current');
-    current.append(el('span', '', '현재 닉네임'), el('b', '', this.host.playerName()));
+    const name = el('b', '', this.host.playerName());
+    current.append(el('span', '', '현재 닉네임'), name);
+    // 변경 창: 저장(서버 확인)·취소. 실패하면 이전 닉네임 그대로, 안내만 표시
+    const popup = el('div', 'lb-nick-popup');
+    popup.hidden = true;
+    popup.setAttribute('role', 'dialog');
+    popup.setAttribute('aria-label', '닉네임 변경');
+    const close = (): void => {
+      popup.hidden = true;
+      change.hidden = false;
+      change.focus();
+    };
+    const cancel = button('취소', 'lb-nick-cancel', close);
     const editor = nicknameEditor(this.host, {
-      buttonLabel: '변경',
+      buttonLabel: '저장',
       initialValue: this.host.nickname() ?? '',
-      onSuccess: (value) => { current.querySelector('b')!.textContent = value; },
+      requireChange: true,
+      extraButton: cancel,
+      onSuccess: (value) => {
+        name.textContent = value;
+        window.setTimeout(close, 700);
+      },
     });
-    nickname.append(current, editor.root);
+    popup.append(el('b', 'lb-nick-popup-title', '새 닉네임'), editor.root);
+    const change = button('변경', 'lb-nick-change', () => {
+      editor.reset(this.host.nickname() ?? '');
+      popup.hidden = false;
+      change.hidden = true;
+      editor.input.focus();
+      editor.input.select();
+    });
+    current.append(change);
+    nickname.append(current, popup);
     body.appendChild(nickname);
 
     const s = this.host.settings();

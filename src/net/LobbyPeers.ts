@@ -1,8 +1,10 @@
 // 온라인 로비: 같은 로비 사람들의 캐릭터 그리기 (LobbyHub가 준 보간 버퍼 → 아바타 자세).
 // 매치용 RemotePlayer와 달리 이동 캡슐·피격 판정이 없음 → 서로 밀거나 막지 않고, 공격·피해도 없다.
+// 손에는 그 사람이 장착한 주무기 (서버 사용자 상태 w, 매치와 같은 장착값 — 보이기만 하고 쏘지 않음).
 // 머리 위에는 닉네임만 (textContent, HTML 해석 없음). 계정·캐릭터 id는 화면에 내지 않음.
 import * as THREE from 'three';
 import type { CharacterId } from '../config/characters';
+import { WEAPONS } from '../config/weapons';
 import type { PlayerAvatar } from '../player/PlayerAvatar';
 import type { HubPeer } from './LobbyHub';
 import { poseRemoteAvatar } from './remotePose';
@@ -13,6 +15,8 @@ export interface LobbyPeersContext {
   createAvatar(character: CharacterId): Promise<PlayerAvatar>;
   /** 아바타 해제 (장면 제거·리소스 해제) */
   releaseAvatar(avatar: PlayerAvatar): void;
+  /** 무기 원본 모델 (복제해서 손에 붙임) */
+  weaponModel(weaponId: string): THREE.Object3D;
   camera(): THREE.Camera;
   /** 이름표를 붙일 화면 요소 */
   readonly container: HTMLElement;
@@ -26,6 +30,8 @@ interface Item {
   /** 지금 아바타 캐릭터 / 만드는 중인 캐릭터 */
   char: string;
   loading: string | null;
+  /** 지금 손에 붙인 무기 id */
+  weapon: string;
   tag: HTMLDivElement;
   lastQ: number;
   /** 멀리 있으면 몇 프레임에 한 번만 자세 갱신 (밀린 시간은 모아서) */
@@ -64,17 +70,18 @@ export class LobbyPeers {
     tag.textContent = peer.nick || '플레이어';
     tag.style.display = 'none';
     this.layer.appendChild(tag);
-    const item: Item = { peer, avatar: null, char: '', loading: null, tag, lastQ: -1, skip: 0, pendingDt: 0 };
+    const item: Item = { peer, avatar: null, char: '', loading: null, weapon: '', tag, lastQ: -1, skip: 0, pendingDt: 0 };
     this.items.set(peer.account, item);
     this.ensureAvatar(item);
   }
 
-  /** 닉네임·캐릭터 변경 */
+  /** 닉네임·캐릭터·무기 변경 */
   change(peer: HubPeer): void {
     const item = this.items.get(peer.account);
     if (!item) return;
     item.tag.textContent = peer.nick || '플레이어';
     this.ensureAvatar(item);
+    this.equip(item);
   }
 
   remove(account: string): void {
@@ -144,19 +151,30 @@ export class LobbyPeers {
           this.ctx.releaseAvatar(avatar);
           return;
         }
-        if (this.ctx.lowPower()) avatar.root.traverse((o) => (o.castShadow = false));
-        // 로비에서는 무기를 쓰지 않음 → 원격 캐릭터 라이플은 숨김 (1명당 약 7천 삼각형·그리기 호출 절약)
-        avatar.rifle.visible = false;
         if (item.avatar) this.ctx.releaseAvatar(item.avatar);
         item.avatar = avatar;
         item.char = want;
         item.loading = null;
         item.lastQ = -1;
+        // 새 아바타는 라이플을 들고 만들어짐 → 그 사람 무기로 바꿈
+        item.weapon = 'rifle';
+        this.equip(item);
+        if (this.ctx.lowPower()) avatar.root.traverse((o) => (o.castShadow = false));
       })
       .catch((err) => {
         if (item.loading === want) item.loading = null;
         console.warn('[lobby] 다른 플레이어 캐릭터를 불러오지 못함', err);
       });
+  }
+
+  /** 그 사람이 장착한 주무기를 손에 붙임 (매치 원격 플레이어와 같은 장착값). 모르는 id는 라이플 */
+  private equip(item: Item): void {
+    const a = item.avatar;
+    if (!a) return;
+    const id = WEAPONS[item.peer.weapon] ? item.peer.weapon : 'rifle';
+    if (item.weapon === id) return;
+    a.setWeapon(this.ctx.weaponModel(id).clone(true), WEAPONS[id]!.mount);
+    item.weapon = id;
   }
 
   /** 머리 위 이름표 (화면 좌표, 카메라 뒤·멀면 숨김) */

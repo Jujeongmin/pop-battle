@@ -1,5 +1,6 @@
 // 로비 공용: DOM 도우미 + 로비가 게임에 요청하는 동작(LobbyHost). 패널은 이 인터페이스만 알고 Game 내부는 모름.
 import type { NetMode } from '../../net/shared/protocol';
+import type { NickFailReason } from '../../net/shared/nickFilter';
 
 export interface LobbyCharacter {
   id: string;
@@ -68,10 +69,15 @@ export interface LobbyHost {
   /** 저장된 닉네임 (null = 아직 정하지 않음 → 처음 접속 닉네임 입력 창) */
   nickname(): string | null;
   /**
-   * 닉네임 정하기·바꾸기 (이 기기에 저장, 서버에도 알림). 규칙은 protocol.ts NICK_LIMITS·sanitizeNick
-   * (2~12자, 글자·숫자·공백·_ - . 만). 통과하면 정리된 값, 아니면 ok: false
+   * 서버에 저장된 닉네임 확인이 끝남 (true가 된 뒤에도 nickname()이 null이면 처음 접속 입력 창).
+   * 확인 중에는 입력 창을 열지 않음 (다른 기기에서 정한 이름이 있으면 건너뜀)
    */
-  setNickname(raw: string): { ok: boolean; value?: string };
+  nicknameReady(): boolean;
+  /**
+   * 닉네임 정하기·바꾸기: 1차 검사(nickFilter.checkNickname과 같은 규칙) → 서버 최종 검사·저장(계정별) → 이 기기에도 저장.
+   * 실패하면 기존 닉네임 유지. reason: NickFailReason(empty·length·chars·blocked) 또는 rate(너무 자주 바꿈)·server(서버 확인 실패)
+   */
+  setNickname(raw: string): Promise<NicknameResult>;
   /** 로비 시작 지점으로 복귀 (PC R 키와 같은 동작, 메뉴 창이 열려 있으면 무시) */
   returnToStart(): void;
   /** 같은 로비 인스턴스 인원 (매 프레임 읽어도 됨) */
@@ -84,6 +90,14 @@ export interface LobbyHost {
   createRoom(mode: NetMode): void;
   /** 코드로 참가 → 기존 멀티 흐름(대기실 화면)으로 */
   joinRoom(code: string): void;
+}
+
+/** 닉네임 저장 결과. rate일 때 retryMs = 서버(또는 이 기기 저장)가 알려 준 남은 시간 (모르면 없음) */
+export interface NicknameResult {
+  ok: boolean;
+  value?: string;
+  reason?: NickFailReason | 'rate' | 'server';
+  retryMs?: number;
 }
 
 /** 방 목록 한 줄 (서버가 아는 값만: 방 이름이 없어 코드로 표시) */
@@ -103,7 +117,10 @@ export interface LobbyRoomInfo {
 
 export interface LobbyRoomList {
   ok: boolean;
-  /** 실패 이유 (offline | not_supported | error 등) — 화면에 그대로 지어내지 말고 안내 문구로 */
+  /**
+   * 실패 이유: offline = 이 빌드에 멀티 서버 없음, not_deployed = 서버에 방 목록 기능이 아직 없음(서버 준비 중),
+   * connect = 서버 연결 실패, error = 연결은 됐지만 조회 실패 (안내 문구로)
+   */
   reason?: string;
   rooms: LobbyRoomInfo[];
 }
@@ -213,3 +230,20 @@ export const ICON = {
   refresh:
     '<svg viewBox="0 0 24 24"><path d="M19 8V4l-2 2a8 8 0 1 0 2.4 8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
+
+/** 매치 일시정지 메뉴 → 게임 요청 (Game이 구현). 메뉴가 열려도 매치·서버 타이머·다른 플레이어는 계속 진행 */
+export interface PauseHost {
+  /** 계속하기: 클릭 처리 안에서 바로 호출 (포인터 잠금·터치 조작 복원은 사용자 동작 안에서만 됨) */
+  resume(): void;
+  /** 설정 슬라이더 (로비 설정과 같은 값) */
+  settings(): { sound: LobbySlider[]; controls: LobbySlider[]; touch: LobbySlider[] };
+  /** 터치 기기 (조작 안내를 터치용으로) */
+  touch(): boolean;
+  /** 지금 매치 이름 (봇 연습전 · 팀 데스매치 · 개인전 · 자유 테스트) */
+  matchLabel(): string;
+  /** 멀티플레이 매치 (메뉴를 열어도 다른 플레이어·타이머는 계속된다는 안내) */
+  multiplayer(): boolean;
+  /** 매치 나가기 (확인 뒤 호출): 서버 퇴장 → 새로고침 없이 로비로 */
+  leaveMatch(): Promise<void>;
+}
+

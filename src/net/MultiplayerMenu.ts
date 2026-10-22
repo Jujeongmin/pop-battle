@@ -139,7 +139,8 @@ export class MultiplayerMenu {
   }
 
   private visible(v: View): boolean {
-    if (v === 'paused') return !this.host.locked();
+    // 매치 중 조작을 놓침 → 정식 일시정지 메뉴(PauseMenu)가 대신 뜸
+    if (v === 'paused') return false;
     if (v === 'left' || v === 'result' || v === 'reconnecting') return true;
     return this.opened || this.host.netGame();
   }

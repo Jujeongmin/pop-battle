@@ -207,7 +207,6 @@ export class Hud {
   private lastMatchKey = '';
   private lastCountdown = '';
   private lastScale = '';
-  private resultShown = false;
   private locked = false;
   /** 결과 화면 "다시 플레이" 버튼 */
   onReplay: (() => void) | null = null;
@@ -512,8 +511,8 @@ export class Hud {
     this.locked = locked;
     // 조작 중 (터치 모드 슬롯 바 입력은 이때만)
     this.root.classList.toggle('playing', locked);
-    // 결과 화면이 떠 있으면 시작 안내 카드는 숨김 (결과 화면의 버튼으로 다시 시작)
-    this.lockOverlay.classList.toggle('hidden', locked || this.resultShown);
+    // 옛 시작 안내 카드(프로토타입)는 쓰지 않음: 시작은 메인 로비, 매치 중 조작을 놓치면 정식 일시정지 메뉴(ui/lobby/PauseMenu)
+    this.lockOverlay.classList.add('hidden');
   }
 
   /** 카운트다운이 끝나 전투 시작 */
@@ -553,14 +552,12 @@ export class Hud {
       }
       body.appendChild(tr);
     }
-    this.resultShown = true;
     this.resultEl.classList.remove('hidden');
     this.root.classList.add('match-over');
     this.setLocked(this.locked);
   }
 
   hideResult(): void {
-    this.resultShown = false;
     this.resultEl.classList.add('hidden');
     this.root.classList.remove('match-over');
     this.setLocked(this.locked);
