@@ -2,6 +2,8 @@
 // 계속하기 · 설정(로비 설정과 같은 슬라이더) · 조작 안내(PC·터치 구분) · 매치 나가기(확인 뒤).
 // 메뉴는 열고 닫기만 요청받고, 실제 상태(연습전 정지·멀티 계속 진행)는 게임이 정한다 (PauseHost).
 import './pause.css';
+// Kenney UI 스킨: 로비·방·일시정지 CSS 모두 뒤에 와야 함 (Game 모듈 import 순서상 이 파일이 마지막)
+import './kenney.css';
 import { button, el, slider, type PauseHost } from './lobbyDom';
 
 type View = 'main' | 'settings' | 'controls';

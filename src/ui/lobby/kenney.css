@@ -1,0 +1,297 @@
+/* ================= Kenney UI Pack 스킨 (CC0, kenney/README.md) =================
+   버튼·카드·창·입력칸·슬라이더 면을 Kenney 사각 버튼 9-slice(border-image)로. 원본은 회색 → POP! BATTLE 파스텔로 다시 칠함.
+   이미지 64px: 모서리 10px·아래 두께 14px를 잘라 화면 절반 크기(5px·7px)로 그려 고해상도에서도 선명.
+   상태: 마우스 올림 = 약 10% 밝게, 누름 = 살짝 어둡게, 선택 = 노랑 테두리, 비활성 = 회색·효과 없음. 크기·위치 움직임 없음 */
+.lb-lobby,
+.lb-pause,
+.lb-mp-overlay {
+  --k-white: url('./kenney/sq_white.png');
+  --k-yellow: url('./kenney/sq_yellow.png');
+  --k-mint: url('./kenney/sq_mint.png');
+  --k-blue: url('./kenney/sq_blue.png');
+  --k-pink: url('./kenney/sq_pink.png');
+  --k-grey: url('./kenney/sq_grey.png');
+  --k-selected: url('./kenney/sq_selected.png');
+  --k-slice: 10 10 14 10 fill;
+  --k-width: 5px 5px 7px 5px;
+}
+
+/* ---------- 공통 버튼 면 ---------- */
+.lb-lobby .lb-btn,
+.lb-pause .lb-btn,
+.lb-mp-overlay .lb-btn,
+.lb-mp-overlay .lb-mp-btn {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 5px 5px 7px;
+  border-image-source: var(--k-white);
+  border-image-slice: var(--k-slice);
+  border-image-width: var(--k-width);
+  border-image-repeat: stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--lb-ink, #27325c);
+  transform: none;
+  transition: filter .15s ease, color .15s ease;
+}
+/* 색 버튼 */
+.lb-lobby .lb-btn.lb-nav-play,
+.lb-lobby .lb-btn.lb-char-equip,
+.lb-lobby .lb-btn.lb-create-submit,
+.lb-lobby .lb-btn.lb-code-submit,
+.lb-lobby .lb-btn.lb-nickname-submit,
+.lb-lobby .lb-btn.lb-nick-change,
+.lb-lobby .lb-btn.lb-mode-practice,
+.lb-pause .lb-btn.lb-pause-resume,
+.lb-mp-overlay .lb-mp-btn.lb-mp-primary {
+  border-image-source: var(--k-yellow);
+  color: #4a3200;
+}
+.lb-lobby .lb-btn.lb-room-create,
+.lb-lobby .lb-btn.lb-mode-tdm {
+  border-image-source: var(--k-mint);
+  color: #16473a;
+}
+.lb-lobby .lb-btn.lb-menu-button,
+.lb-lobby .lb-btn.lb-room-join,
+.lb-lobby .lb-btn.lb-mode-join,
+.lb-mp-overlay .lb-mp-btn.lb-mp-on {
+  border-image-source: var(--k-blue);
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(39, 50, 92, .45);
+}
+.lb-lobby .lb-btn.lb-rejoin,
+.lb-pause .lb-btn.lb-pause-leave,
+.lb-pause .lb-btn.lb-pause-confirm-leave {
+  border-image-source: var(--k-pink);
+  color: #5c1730;
+}
+/* 색 버튼 위 보조 글자·아이콘 칸은 면 색에 맞춤 */
+.lb-lobby .lb-btn.lb-menu-button kbd,
+.lb-lobby .lb-btn.lb-menu-button small { border-color: rgba(255, 255, 255, .7); color: #fff; }
+.lb-lobby .lb-mode-practice .lb-mode-copy small,
+.lb-lobby .lb-mode-tdm .lb-mode-copy small { color: rgba(39, 50, 92, .62); }
+.lb-lobby .lb-mode-join .lb-mode-copy small,
+.lb-lobby .lb-mode-join .lb-mode-copy span { color: rgba(255, 255, 255, .9); }
+.lb-lobby .lb-mode .lb-mode-icon { border-width: 2px; }
+
+/* ---------- 카드·타일 (흰 면, 선택 = 노랑 테두리) ---------- */
+.lb-lobby .lb-char-card,
+.lb-lobby .lb-weapon,
+.lb-lobby .lb-shop-weapon-card,
+.lb-lobby .lb-gamemenu-tile,
+.lb-lobby .lb-room-card,
+.lb-lobby .lb-soon,
+.lb-mp-overlay .lb-mp-player {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 5px 5px 7px;
+  border-image: var(--k-white) var(--k-slice) / var(--k-width) stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.lb-lobby .lb-btn.lb-selected,
+.lb-lobby .lb-btn.lb-equipped,
+.lb-lobby .lb-btn.lb-preview,
+.lb-lobby .lb-char-card.lb-preview,
+.lb-lobby .lb-weapon.lb-selected {
+  border-image-source: var(--k-selected);
+}
+.lb-lobby .lb-btn.lb-locked,
+.lb-lobby .lb-btn:disabled,
+.lb-pause .lb-btn:disabled,
+.lb-mp-overlay .lb-mp-btn:disabled {
+  border-image-source: var(--k-grey);
+  color: rgba(39, 50, 92, .5);
+  text-shadow: none;
+}
+
+/* ---------- 창 (흰 테두리 + 아래 두께) ---------- */
+.lb-lobby .lb-panel,
+.lb-pause .lb-pause-card,
+.lb-lobby .lb-nickname-card,
+.lb-mp-overlay .lb-mp-card {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 8px 8px 11px;
+  border-image: var(--k-white) var(--k-slice) / 8px 8px 11px 8px stretch;
+  border-radius: 0;
+  box-shadow: 0 14px 34px rgba(18, 28, 64, .28);
+  background-clip: padding-box;
+}
+.lb-lobby .lb-panel-head { border-radius: 0; }
+
+/* ---------- 입력칸 ---------- */
+.lb-lobby .lb-nickname-input,
+.lb-lobby .lb-code-join input,
+.lb-mp-overlay .lb-mp-code-input,
+.lb-mp-overlay .lb-mp-code-value {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 4px;
+  border-image: url('./kenney/input.png') 8 fill / 4px stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* ---------- 슬라이더 (설정·일시정지) ---------- */
+.lb-lobby .lb-slider input[type='range'],
+.lb-pause .lb-slider input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: none;
+  cursor: pointer;
+}
+.lb-lobby .lb-slider input[type='range']::-webkit-slider-runnable-track,
+.lb-pause .lb-slider input[type='range']::-webkit-slider-runnable-track {
+  height: 8px;
+  border: 4px solid transparent;
+  border-image: url('./kenney/slide_track.png') 8 fill / 4px stretch;
+  background: none;
+}
+.lb-lobby .lb-slider input[type='range']::-moz-range-track,
+.lb-pause .lb-slider input[type='range']::-moz-range-track {
+  height: 8px;
+  border: 4px solid transparent;
+  border-image: url('./kenney/slide_track.png') 8 fill / 4px stretch;
+  background: none;
+}
+.lb-lobby .lb-slider input[type='range']::-webkit-slider-thumb,
+.lb-pause .lb-slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 21px;
+  height: 28px;
+  margin-top: -14px;
+  border: 0;
+  background: url('./kenney/slide_handle.png') center / contain no-repeat;
+  box-shadow: none;
+}
+.lb-lobby .lb-slider input[type='range']::-moz-range-thumb,
+.lb-pause .lb-slider input[type='range']::-moz-range-thumb {
+  width: 21px;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: url('./kenney/slide_handle.png') center / contain no-repeat;
+}
+
+/* ---------- 상태: 밝기만 (확대·이동 없음) ---------- */
+@media (hover: hover) {
+  .lb-lobby .lb-btn:hover:not(:disabled):not(.lb-locked),
+  .lb-pause .lb-btn:hover:not(:disabled),
+  .lb-mp-overlay .lb-mp-btn:hover:not(:disabled) { filter: brightness(1.1) saturate(1.05); transform: none; }
+}
+.lb-lobby .lb-btn:active:not(:disabled):not(.lb-locked),
+.lb-pause .lb-btn:active:not(:disabled),
+.lb-mp-overlay .lb-mp-btn:active:not(:disabled) { filter: brightness(.9); transform: none; box-shadow: none; }
+.lb-lobby .lb-btn:disabled,
+.lb-lobby .lb-btn.lb-locked,
+.lb-pause .lb-btn:disabled,
+.lb-mp-overlay .lb-mp-btn:disabled { filter: none; cursor: default; }
+.lb-lobby .lb-btn:focus-visible,
+.lb-pause .lb-btn:focus-visible,
+.lb-mp-overlay .lb-mp-btn:focus-visible { outline: 3px solid var(--lb-blue, #5b8cff); outline-offset: 2px; box-shadow: none; }
+
+/* ---------- 예전 그림자 깊이 제거 (깊이는 이미지에) ---------- */
+.lb-lobby .lb-char-card.lb-equipped,
+.lb-lobby .lb-char-card.lb-preview,
+.lb-lobby .lb-weapon.lb-selected,
+.lb-lobby .lb-nav .lb-btn,
+.lb-lobby .lb-menu-button.lb-active,
+.lb-lobby .lb-gamemenu-tile,
+.lb-pause .lb-pause-item,
+.lb-pause .lb-pause-resume,
+.lb-pause .lb-pause-cancel,
+.lb-pause .lb-pause-confirm-leave { box-shadow: none; }
+
+/* ---------- 로비 상단: 게임 시작 = 큰 노랑 버튼 (아이콘 + 글자) ---------- */
+.lb-lobby .lb-nav .lb-btn.lb-nav-play { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; padding: 0 10px; }
+.lb-lobby .lb-nav .lb-nav-play .lb-nav-label { display: block; width: auto; }
+.lb-lobby .lb-nav .lb-nav-play .lb-nav-icon {
+  display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center;
+  border: 0; border-radius: 50%; background: rgba(255, 255, 255, .6); box-shadow: none; color: #4a3200;
+}
+.lb-lobby .lb-nav .lb-nav-play .lb-nav-icon svg { width: 18px; height: 18px; }
+.lb-lobby .lb-nav .lb-nav-play .lb-nav-label b { color: #4a3200; font-size: 18px; -webkit-text-stroke: 0; white-space: nowrap; }
+.lb-lobby .lb-nav .lb-nav-play .lb-nav-label small { display: none; }
+@media (max-width: 1000px), (max-height: 520px) {
+  .lb-lobby .lb-nav .lb-nav-play .lb-nav-icon { display: grid; width: 24px; height: 24px; }
+  .lb-lobby .lb-nav .lb-nav-play .lb-nav-label b { font-size: 15px; }
+}
+
+/* ---------- 방 목록: 빈 상태·코드 참가 칸도 같은 흰 면 ---------- */
+.lb-lobby .lb-room-state,
+.lb-lobby .lb-code-join {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 5px 5px 7px;
+  border-image: var(--k-white) var(--k-slice) / var(--k-width) stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.lb-lobby .lb-room-join { min-width: 64px; font-size: 14px; }
+.lb-lobby .lb-code-submit { min-width: 72px; font-size: 15px; }
+
+/* ---------- 장비: 왼쪽 3D 미리보기 | 오른쪽 무기 목록 ---------- */
+.lb-lobby .lb-panel-body:has(> .lb-weapon-preview) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-auto-flow: row dense;
+  align-content: start;
+  column-gap: 12px;
+  row-gap: 8px;
+}
+.lb-lobby .lb-panel-body:has(> .lb-weapon-preview) > .lb-weapon-preview { grid-column: 1; grid-row: 1 / span 8; position: sticky; top: 0; align-self: start; }
+.lb-lobby .lb-panel-body:has(> .lb-weapon-preview) > :not(.lb-weapon-preview) { grid-column: 2; }
+.lb-lobby .lb-panel-body:has(> .lb-weapon-preview) .lb-weapon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; overflow: visible; height: auto; }
+
+/* ---------- 상점: 상품 카드 = 이름 띠 · 큰 무기 이미지 · 노랑 하단 띠 ---------- */
+.lb-lobby .lb-shop-weapon-card { display: flex; flex-direction: column; gap: 0; padding: 0; filter: none; overflow: hidden; }
+.lb-lobby .lb-shop-weapon-card b { order: 0; padding: 5px 6px 3px; text-align: center; }
+.lb-lobby .lb-shop-weapon-image { order: 1; height: 58px; margin: 0 4px; border-radius: 6px; background: #eef1f8; }
+.lb-lobby .lb-shop-weapon-image img { max-height: 50px; }
+.lb-lobby .lb-shop-weapon-badge {
+  order: 2; margin: 5px 3px 2px; padding: 3px 4px;
+  border-style: solid; border-color: transparent; border-width: 4px 4px 6px;
+  border-image: var(--k-yellow) var(--k-slice) / 4px 4px 6px 4px stretch;
+  border-radius: 0; background: none; color: #4a3200; font-size: 11px; text-align: center;
+}
+@media (max-height: 520px) {
+  .lb-lobby .lb-shop-weapon-image { height: 42px; }
+  .lb-lobby .lb-shop-weapon-image img { max-height: 36px; }
+}
+
+/* ---------- 설정 행·닉네임 칸·무기 카드 글자 ---------- */
+.lb-lobby .lb-slider,
+.lb-pause .lb-slider,
+.lb-lobby .lb-settings-nickname,
+.lb-lobby .lb-weapon-preview {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 5px 5px 7px;
+  border-image: var(--k-white) var(--k-slice) / var(--k-width) stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.lb-lobby .lb-weapon b { font-size: 13px; }
+.lb-lobby .lb-weapon-slot { font-size: 10px; }
+
+/* 예전 단색 깊이 그림자는 모든 상태에서 제거 (선택·활성 규칙이 더 구체적이라 여기서 한 번에) */
+.lb-lobby .lb-btn,
+.lb-pause .lb-btn,
+.lb-mp-overlay .lb-mp-btn { box-shadow: none !important; }
+.lb-lobby .lb-create-rule {
+  border-style: solid;
+  border-color: transparent;
+  border-width: 5px 5px 7px;
+  border-image: var(--k-white) var(--k-slice) / var(--k-width) stretch;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
