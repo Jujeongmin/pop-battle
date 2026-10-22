@@ -254,3 +254,26 @@
 
 /* 전체 화면 메뉴 동안 로비 터치 조이스틱 숨김 (메뉴가 열리면 이동은 이미 멈춤) */
 .pop-lobby-fullscreen .touch-layer { display: none !important; }
+
+/* ================= 상단 아이콘 누름 피드백 · 전체 화면 메뉴 전환 ================= */
+/* 아이콘: 올리면 밝게(150ms), 누르면 100ms 어둡게 후 복귀 (마우스·터치 같은 클래스), 크기·위치 변화 없음 */
+.lb-lobby .lb-topbar .lb-top-icon-btn { transition: filter .15s ease; }
+@media (hover: hover) {
+  .lb-lobby .lb-topbar .lb-top-icon-btn:hover { filter: brightness(1.12) saturate(1.06); }
+}
+.lb-lobby .lb-topbar .lb-top-icon-btn.lb-tap,
+.lb-lobby .lb-topbar .lb-top-icon-btn:active { filter: brightness(.86); transition: filter .1s ease; }
+/* 열림 200ms 페이드인 / 다른 메뉴로 바꿀 때 내용 페이드인 / 닫힘 150ms 페이드아웃 (그동안 입력 막음) */
+@keyframes lb-fs-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lb-fs-out { from { opacity: 1; } to { opacity: 0; } }
+.lb-lobby.lb-fullscreen.lb-menu-open .lb-menu-layer { animation: lb-fs-in .2s ease both; }
+.lb-lobby.lb-fullscreen .lb-panel.lb-panel-in { animation: lb-fs-in .2s ease both; }
+.lb-lobby.lb-fs-out .lb-menu-layer { display: block; pointer-events: none; animation: lb-fs-out .15s ease both; }
+.lb-lobby.lb-fs-out .lb-panel { visibility: visible; opacity: 1; transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .lb-lobby .lb-topbar .lb-top-icon-btn,
+  .lb-lobby .lb-topbar .lb-top-icon-btn.lb-tap { transition: none; }
+  .lb-lobby.lb-fullscreen.lb-menu-open .lb-menu-layer,
+  .lb-lobby.lb-fullscreen .lb-panel.lb-panel-in,
+  .lb-lobby.lb-fs-out .lb-menu-layer { animation: none; }
+}

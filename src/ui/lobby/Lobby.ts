@@ -42,6 +42,9 @@ export class Lobby {
   /** 로비에 늘 보이는 방 목록 칸 (창이 열리면 숨김, 서버 연결·방 목록 갱신은 보일 때만) */
   private readonly roomDock = el('section', 'lb-room-dock');
   private dockOn = false;
+  /** 전체 화면 메뉴 닫힘 페이드아웃 (끝나면 화면 배치 클래스를 뗌). 다시 열면 바로 취소 */
+  private fadeOutTimer: number | null = null;
+  private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private readonly closeLabel = el('span', '', '닫기');
   private readonly navButtons = new Map<string, HTMLButtonElement>();
   private readonly nav = el('nav', 'lb-nav');
@@ -143,6 +146,7 @@ export class Lobby {
       return;
     }
     const next = panel && this.panels.has(panel) ? panel : 'play';
+    this.cancelFadeOut();
     const changed = !this.menu || this.open !== next;
     this.menu = true;
     this.root.classList.add('lb-menu-open', 'lb-panel-open');
@@ -163,7 +167,15 @@ export class Lobby {
     this.open = null;
     this.menu = false;
     this.characterSuspended = false;
-    this.root.classList.remove('lb-menu-open', 'lb-panel-open', 'lb-character-open', 'lb-fullscreen');
+    // 전체 화면 메뉴는 150ms 페이드아웃 동안 배치 그대로 두고 입력만 막음 (screens.css lb-fs-out)
+    const fading = this.root.classList.contains('lb-fullscreen') && this.visible && !this.reducedMotion.matches;
+    this.root.classList.remove('lb-menu-open', 'lb-panel-open');
+    if (fading) {
+      this.root.classList.add('lb-fs-out');
+      this.fadeOutTimer = window.setTimeout(() => this.finishFadeOut(), 150);
+    } else {
+      this.root.classList.remove('lb-character-open', 'lb-fullscreen');
+    }
     document.documentElement.classList.remove('pop-lobby-fullscreen');
     this.panelBox.classList.remove('lb-panel-in');
     this.menuLayer.inert = true;
@@ -172,6 +184,19 @@ export class Lobby {
     this.syncDock();
     this.host.panelChanged(null);
     this.host.menuChanged(false, null);
+  }
+
+  private finishFadeOut(): void {
+    this.fadeOutTimer = null;
+    this.root.classList.remove('lb-fs-out');
+    if (!this.menu) this.root.classList.remove('lb-character-open', 'lb-fullscreen');
+  }
+
+  /** 페이드아웃 중 다시 열면 바로 끝내고 새 화면으로 (빠른 연속 클릭에도 화면이 겹치지 않게) */
+  private cancelFadeOut(): void {
+    if (this.fadeOutTimer === null) return;
+    window.clearTimeout(this.fadeOutTimer);
+    this.finishFadeOut();
   }
 
   /** TAB: 닫혀 있으면 게임 시작 창, 열려 있으면(어느 창이든) 닫기 */
@@ -191,6 +216,7 @@ export class Lobby {
 
   setVisible(on: boolean): void {
     if (on === this.visible) return;
+    if (!on) this.cancelFadeOut();
     // 매치 중에는 로비 전체 화면 표시가 터치 조작을 숨기지 않게
     document.documentElement.classList.toggle('pop-lobby-fullscreen', on && this.root.classList.contains('lb-fullscreen'));
     if (!on) {
@@ -280,6 +306,13 @@ export class Lobby {
       );
       navButton.setAttribute('aria-label', item.korean);
       navButton.setAttribute('aria-pressed', 'false');
+      // 누름 피드백: 마우스·터치 똑같이 100ms 어둡게 (짧은 탭은 :active가 거의 안 보여서 클래스로)
+      let tapTimer = 0;
+      navButton.addEventListener('pointerdown', () => {
+        navButton.classList.add('lb-tap');
+        window.clearTimeout(tapTimer);
+        tapTimer = window.setTimeout(() => navButton.classList.remove('lb-tap'), 100);
+      }, { signal: this.abort.signal });
       this.navButtons.set(item.id, navButton);
       icons.append(navButton);
     }
