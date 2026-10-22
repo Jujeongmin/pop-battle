@@ -124,13 +124,17 @@ function readLastRoomCode(): string | null {
  * 로비 고정 구도 카메라: 방향은 고정(yaw 0 = 남쪽에서 북쪽을 봄), 캐릭터 위치만 부드럽게 따라감.
  * 마우스·터치로 돌지 않음. 장애물에 가리면 캐릭터 쪽으로 당김
  */
-const LOBBY_CAM = { yaw: 0, distance: 6.4, height: 3.3, lookHeight: 0.8, followSharpness: 6, heightSharpness: 3.5 };
+const LOBBY_CAM = { yaw: 0, distance: 6.4, height: 3.3, lookHeight: 0.8, followSharpness: 6, heightSharpness: 3.5, pullInSharpness: 5, easeOutSharpness: 2.2, wallSharpness: 30 };
+/** 가림 때문에 당겨도 이보다 가까이 오지 않음 (m) */
+const LOBBY_CAM_MIN_DIST = 1.6;
 
 /** 로비 카메라 기준 키 (m): 캐릭터마다 줌을 바꾸지 않아 크기 차이가 보이게 */
 const LOBBY_FRAME_HEIGHT = 1.4;
 
 const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
+const _v3 = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 
 function dampAngle(current: number, target: number, sharpness: number, dt: number): number {
   const diff = Math.atan2(Math.sin(target - current), Math.cos(target - current));
@@ -279,6 +283,8 @@ export class Game {
   private lobbyFollowReady = false;
   /** 로비 카메라 방향 (기본 고정, 하늘 탑 근처에서만 보정) — 이동 방향 기준도 이것 */
   private lobbyCamYaw = LOBBY_CAM.yaw;
+  /** 로비 카메라 현재 거리 (가림 회피로 줄었다가 천천히 돌아감) */
+  private lobbyCamDist = Math.hypot(LOBBY_CAM.distance, LOBBY_CAM.height);
   /** 표시용 닉네임 (이 기기 저장, null = 아직 정하지 않음) */
   private nick: string | null = loadNickname();
   /** 마지막 닉네임 변경 시각 (서버 없는 빌드의 변경 간격 제한) */
@@ -1813,15 +1819,22 @@ export class Game {
   }
 
   /**
-   * 로비 고정 구도 따라가기 카메라 (TPS 카메라 결과를 덮어씀). 위치만 부드럽게 따라가고 방향은 고정 →
-   * 이동 방향에 따라 급하게 돌지 않음. 높은 곳에 올라가면 높이도 따라감. 장애물이 캐릭터를 가리면 캐릭터 쪽으로 당김
+   * 로비 고정 구도 따라가기 카메라 (TPS 카메라 결과를 덮어씀). 수평 방향(yaw)은 항상 고정, 위치만 부드럽게 따라감.
+   * (예전엔 하늘 탑 근처에서 탑 바깥쪽을 보도록 yaw가 돌았는데, 로비 이동이 카메라 방향 기준이라 나선 경사로에서
+   * W만 눌러도 카메라·이동 방향이 서로를 계속 돌려 빙글빙글 돎 → 회전 없이 고정)
+   * 구조물이 캐릭터를 가리면 방향은 그대로 두고 거리만 줄임: 레이 3개(가운데·좌우)로 가림을 미리 잡고,
+   * 가까워질 때는 빠르게·멀어질 때는 천천히 (갑자기 튀는 줌 방지)
    */
   private updateLobbyFollowCamera(cam: THREE.PerspectiveCamera, dt: number): void {
     const f = this.renderFeet;
     const t = this.lobbyFollow;
-    if (!this.lobbyFollowReady || t.distanceToSquared(f) > 400) {
+    const yaw = LOBBY_CAM.yaw;
+    this.lobbyCamYaw = yaw;
+    const full = Math.hypot(LOBBY_CAM.distance, LOBBY_CAM.height);
+    const reset = !this.lobbyFollowReady || t.distanceToSquared(f) > 400;
+    if (reset) {
       t.copy(f);
-      this.lobbyCamYaw = this.lobbySpace?.cameraYawHint(f.x, f.z) ?? LOBBY_CAM.yaw;
+      this.lobbyCamDist = full;
       this.lobbyFollowReady = true;
     } else {
       const k = 1 - Math.exp(-LOBBY_CAM.followSharpness * dt);
@@ -1829,17 +1842,25 @@ export class Game {
       t.z += (f.z - t.z) * k;
       t.y += (f.y - t.y) * (1 - Math.exp(-LOBBY_CAM.heightSharpness * dt));
     }
-    // 방향은 고정, 하늘 탑 근처만 탑 바깥쪽에서 보도록 천천히 돌아감 (급하게 돌지 않게)
-    const hint = this.lobbySpace?.cameraYawHint(t.x, t.z) ?? LOBBY_CAM.yaw;
-    this.lobbyCamYaw = dampAngle(this.lobbyCamYaw, hint, 2.2, dt);
-    const yaw = this.lobbyCamYaw;
     const look = _v1.set(t.x, t.y + LOBBY_CAM.lookHeight, t.z);
-    const dir = _v2.set(Math.sin(yaw) * LOBBY_CAM.distance, LOBBY_CAM.height, Math.cos(yaw) * LOBBY_CAM.distance);
-    let dist = dir.length();
-    dir.divideScalar(dist);
-    const hit = this.physics.raycast(look, dir, dist, undefined, this.player.body);
-    if (hit) dist = Math.max(1.6, hit.distance - 0.35);
-    cam.position.copy(look).addScaledVector(dir, dist);
+    const dir = _v2.set(Math.sin(yaw) * LOBBY_CAM.distance, LOBBY_CAM.height, Math.cos(yaw) * LOBBY_CAM.distance).divideScalar(full);
+    // 가림 검사: 가까운 레이(가운데·좌우 0.3m) = 넘으면 벽 안이 보이는 한계, 먼 레이(좌우 1.8m) = 곧 가릴 구조물을 미리 보고
+    // 천천히 당기기 시작 (옆으로 걸어 탑 뒤로 갈 때 한 번에 확 당겨지지 않게)
+    const side = _v3.set(Math.cos(yaw), 0, -Math.sin(yaw));
+    const ray = (offset: number): number => {
+      const hit = this.physics.raycast(_v4.copy(look).addScaledVector(side, offset), dir, full, undefined, this.player.body);
+      return hit ? Math.max(LOBBY_CAM_MIN_DIST, hit.distance - 0.35) : full;
+    };
+    const hard = Math.min(ray(0), ray(0.3), ray(-0.3));
+    const soft = Math.min(hard, ray(1.8), ray(-1.8));
+    if (reset) this.lobbyCamDist = hard;
+    else {
+      const sharp = soft < this.lobbyCamDist ? LOBBY_CAM.pullInSharpness : LOBBY_CAM.easeOutSharpness;
+      this.lobbyCamDist += (soft - this.lobbyCamDist) * (1 - Math.exp(-sharp * dt));
+      // 벽 안으로 들어가지 않게 가까운 레이 거리로 빠르게 맞춤 (순간 이동 대신 몇 프레임에 걸쳐 → 머리 위 발판이 갑자기 지나갈 때 튐 완화)
+      if (this.lobbyCamDist > hard) this.lobbyCamDist += (hard - this.lobbyCamDist) * (1 - Math.exp(-LOBBY_CAM.wallSharpness * dt));
+    }
+    cam.position.copy(look).addScaledVector(dir, this.lobbyCamDist);
     cam.lookAt(look);
     cam.updateMatrixWorld();
   }
