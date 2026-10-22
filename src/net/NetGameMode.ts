@@ -10,12 +10,15 @@ import type { CharacterId } from '../config/characters';
 import type { AttackerInfo, HitInfo, Physics } from '../physics/Physics';
 import type { PlayerAvatar } from '../player/PlayerAvatar';
 import type { DeathCause } from '../ui/KillFeed';
+import type { NetClient } from './NetClient';
 import { NetSession, type LocalState } from './NetSession';
 import { RemotePlayer } from './RemotePlayer';
 import { NET_CHARACTER_HP, type NetHitResult, type NetPlayers, type NetShot } from './shared/protocol';
 
 /** Game이 넘겨주는 것 (게임 내부 객체 대신 필요한 동작만) */
 export interface NetGameContext {
+  /** 서버 연결 (온라인 로비와 공유: 같은 계정은 SDK 연결이 하나) */
+  readonly client: NetClient;
   readonly localId: string;
   readonly physics: Physics;
   camera(): THREE.Camera;
@@ -87,7 +90,7 @@ export class NetGameMode {
         this.ctx.leftRoom(reason, byUser);
       },
       onRoomInfo: () => this.ctx.roomInfo(),
-    });
+    }, ctx.client);
   }
 
   get labels(): BotLabel[] {

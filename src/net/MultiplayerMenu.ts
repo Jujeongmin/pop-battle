@@ -1,8 +1,9 @@
 // 시작 화면의 "Multiplayer" 화면: 모드 선택(TDM 2v2 / FFA 4인 / 자유 테스트) · 방 만들기 · 코드로 입장 ·
-// 대기실(팀·준비 상태·방장 Start Match) · 진행 중 일시정지 · 결과 화면 · 연결 끊김.
+// 대기실(팀·방장 시작) · 진행 중 일시정지 · 결과 화면 · 연결 끊김. 서버에는 준비 상태가 없다.
 // 표시는 전부 서버가 확인한 상태(NetSession)만 읽는다 — 클라이언트가 임의로 성공·결과를 만들지 않음.
 import { displayCode, type NetSession } from './NetSession';
-import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEAM_SIZE, NET_TEST_TIME_LIMIT_SEC, type NetMode, type NetTeam } from './shared/protocol';
+import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEAM_SIZE, NET_TEST_TIME_LIMIT_SEC, type NetMode, type NetPlayerRecord, type NetTeam } from './shared/protocol';
+import '../ui/lobby/room.css';
 
 export interface MultiplayerMenuHost {
   /** 세션 (첫 연결 전에는 null) */
@@ -11,6 +12,8 @@ export interface MultiplayerMenuHost {
   characterName(): string;
   /** 캐릭터 id → 표시 이름 */
   characterLabel(id: string): string;
+  /** 캐릭터 id → 대표 색 (CSS 색) */
+  characterColor(id: string): string;
   /** 멀티 게임으로 전환됨 (봇 제거됨) */
   netGame(): boolean;
   /** 연결 끊김 등으로 룸에서 밀려남 (직접 나간 것 아님) */
@@ -58,8 +61,8 @@ export function modeRuleText(mode: NetMode): string {
 }
 
 export class MultiplayerMenu {
-  readonly root = el('div', 'mp-overlay hidden');
-  private readonly card = el('div', 'mp-card');
+  readonly root = el('div', 'lb-mp-overlay lb-mp-hidden');
+  private readonly card = el('div', 'lb-mp-card');
   private opened = false;
   private busy = false;
   private notice = '';
@@ -85,7 +88,7 @@ export class MultiplayerMenu {
 
   /** 지금 화면을 덮고 있는지 (시작 화면 카드를 숨길지 판단) */
   get covering(): boolean {
-    return !this.root.classList.contains('hidden');
+    return !this.root.classList.contains('lb-mp-hidden');
   }
 
   open(): void {
@@ -103,6 +106,19 @@ export class MultiplayerMenu {
   openWith(mode: NetMode | null): void {
     if (mode) this.createMode = mode;
     this.open();
+  }
+
+  /** 로비 CREATE ROOM: 이 모드로 바로 방 만들기 (진행 중·실패 안내는 이 화면이 보여 줌) */
+  createNow(mode: NetMode): void {
+    this.createMode = mode;
+    this.open();
+    void this.run(() => this.host.create(mode));
+  }
+
+  /** 로비 ROOM LIST·코드 입장: 바로 참가 */
+  joinNow(code: string): void {
+    this.open();
+    void this.run(() => this.host.join(code));
   }
 
   /** 로비 "이전 방 다시 입장" */
@@ -132,9 +148,9 @@ export class MultiplayerMenu {
   refresh(force = false): void {
     const v = this.view();
     const show = this.visible(v);
-    this.root.classList.toggle('hidden', !show);
+    this.root.classList.toggle('lb-mp-hidden', !show);
     // 진행 중 일시정지 화면: 카드 밖을 누르면 게임으로 (포인터 잠금)
-    this.root.classList.toggle('pass-through', v === 'paused');
+    this.root.classList.toggle('lb-mp-pass-through', v === 'paused');
     if (!show) return;
     const key = this.stateKey(v);
     if (!force && key === this.lastKey) return;
@@ -155,10 +171,10 @@ export class MultiplayerMenu {
   private render(v: View): void {
     const c = this.card;
     c.textContent = '';
-    c.append(el('div', 'mp-kicker', 'POP! BATTLE'), el('h2', 'mp-title', 'MULTIPLAYER'));
+    c.append(el('div', 'lb-mp-kicker', 'POP! BATTLE'), el('h2', 'lb-mp-title', 'MULTIPLAYER'));
     const s = this.host.session();
     if (v === 'busy') {
-      c.append(el('p', 'mp-status', s?.inRoom ? '처리하는 중…' : '서버에 연결하는 중…'));
+      c.append(el('p', 'lb-mp-status', s?.inRoom ? '처리하는 중…' : '서버에 연결하는 중…'));
       return;
     }
     if (v === 'reconnecting' && s) return this.renderReconnecting(c, s);
@@ -170,9 +186,9 @@ export class MultiplayerMenu {
   }
 
   private modePicker(current: NetMode, onPick: (m: NetMode) => void, disabled = false): HTMLElement {
-    const row = el('div', 'mp-modes');
+    const row = el('div', 'lb-mp-modes');
     for (const m of MODES) {
-      const b = this.button(NET_MODE_RULES[m].short, `mp-mode${m === current ? ' on' : ''}`, () => onPick(m));
+      const b = this.button(NET_MODE_RULES[m].short, `lb-mp-mode${m === current ? ' lb-mp-on' : ''}`, () => onPick(m));
       b.disabled = disabled;
       b.title = NET_MODE_RULES[m].label;
       row.appendChild(b);
@@ -181,28 +197,28 @@ export class MultiplayerMenu {
   }
 
   private renderHome(c: HTMLElement, s: NetSession | null): void {
-    c.append(el('p', 'mp-sub', `캐릭터: ${this.host.characterName()} · 최대 ${NET_MAX_PLAYERS}명 (봇 없음)`));
+    c.append(el('p', 'lb-mp-sub', `캐릭터: ${this.host.characterName()} · 최대 ${NET_MAX_PLAYERS}명 (봇 없음)`));
     c.append(
-      el('div', 'mp-label', '게임 모드 (방 만들 때 선택)'),
+      el('div', 'lb-mp-label', '게임 모드 (방 만들 때 선택)'),
       this.modePicker(this.createMode, (m) => {
         this.createMode = m;
         this.refresh(true);
       }),
-      el('p', 'mp-hint', modeRuleText(this.createMode)),
+      el('p', 'lb-mp-hint', modeRuleText(this.createMode)),
     );
-    const create = this.button('Create Room', 'mp-primary', () => this.run(() => this.host.create(this.createMode)));
+    const create = this.button('방 만들기', 'lb-mp-primary', () => this.run(() => this.host.create(this.createMode)));
     // 새로고침·끊김 뒤: 같은 탭에서 마지막으로 있던 룸으로 (진행 중 매치도 같은 계정이면 기록 그대로 복귀)
     const last = this.host.lastRoomCode();
-    if (last) c.append(this.button(`이전 방 다시 입장 (${displayCode(last)})`, 'mp-primary', () => this.run(() => this.host.rejoin())));
-    const row = el('div', 'mp-join');
-    const input = el('input', 'mp-code-input');
-    input.placeholder = 'Room Code';
+    if (last) c.append(this.button(`이전 방 다시 입장 (${displayCode(last)})`, 'lb-mp-primary', () => this.run(() => this.host.rejoin())));
+    const row = el('div', 'lb-mp-join');
+    const input = el('input', 'lb-mp-code-input');
+    input.placeholder = '방 코드';
     input.maxLength = 15;
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.value = this.codeValue;
     input.oninput = () => (this.codeValue = input.value.toUpperCase().replace(/\s/g, ''));
-    const join = this.button('Join Room', '', () => {
+    const join = this.button('참가', '', () => {
       const code = this.codeValue.trim();
       if (!code) {
         this.notice = '방 코드를 입력하세요';
@@ -218,76 +234,80 @@ export class MultiplayerMenu {
     row.append(input, join);
     c.append(create, row);
     const err = this.notice || s?.lastError;
-    if (err) c.append(el('p', 'mp-error', err));
+    if (err) c.append(el('p', 'lb-mp-error', err));
     // 멀티로 전환된 뒤에는 봇이 없으므로 싱글플레이는 새로고침으로 복귀
-    c.append(this.host.netGame() ? this.button('메인 로비로', 'mp-ghost', () => this.host.singlePlayer()) : this.button('Back', 'mp-ghost', () => this.close()));
-    c.append(el('p', 'mp-hint', '같은 게임 링크를 연 다른 사람(다른 브라우저·기기, 다른 계정)이 Room Code로 들어와요.'));
+    c.append(this.host.netGame() ? this.button('메인 로비로', 'lb-mp-ghost', () => this.host.singlePlayer()) : this.button('뒤로', 'lb-mp-ghost', () => this.close()));
+    c.append(el('p', 'lb-mp-hint', '같은 게임 링크를 연 다른 사람(다른 브라우저·기기, 다른 계정)이 방 코드로 들어와요.'));
   }
 
   /** 자동 재접속 중: 시도 횟수 + 취소 (취소하면 끊김 화면의 수동 "다시 입장") */
   private renderReconnecting(c: HTMLElement, s: NetSession): void {
-    const box = el('div', 'mp-reconnect');
-    box.append(el('div', 'mp-spinner'), el('b', '', 'RECONNECTING…'));
+    const box = el('div', 'lb-mp-reconnect');
+    box.append(el('div', 'lb-mp-spinner'), el('b', '', '다시 연결 중…'));
     c.append(box);
     const attempt = s.reconnectAttempt > 0 ? `시도 ${s.reconnectAttempt}/${s.reconnectMax}` : '곧 다시 연결해요';
-    c.append(el('p', 'mp-status', `연결이 끊겼어요 — 같은 방(${displayCode(s.lastRoomId)})으로 자동 복귀 중 · ${attempt}`));
-    c.append(el('p', 'mp-hint', '복귀하면 팀·캐릭터·킬/데스·체력이 그대로 이어져요'));
-    c.append(this.button('취소', 'mp-ghost', () => this.host.cancelReconnect()));
+    c.append(el('p', 'lb-mp-status', `연결이 끊겼어요 — 같은 방(${displayCode(s.lastRoomId)})으로 자동 복귀 중 · ${attempt}`));
+    c.append(el('p', 'lb-mp-hint', '복귀하면 팀·캐릭터·킬/데스·체력이 그대로 이어져요'));
+    c.append(this.button('취소', 'lb-mp-ghost', () => this.host.cancelReconnect()));
   }
 
   private renderLeft(c: HTMLElement, s: NetSession | null): void {
-    c.append(el('p', 'mp-error', s?.lastError || '룸에서 나왔어요'));
-    if (s?.lastRoomId) c.append(this.button(`다시 입장 (${displayCode(s.lastRoomId)})`, 'mp-primary', () => this.run(() => this.host.rejoin())));
-    c.append(this.button('메인 로비로', 'mp-ghost', () => this.host.singlePlayer()));
+    c.append(el('p', 'lb-mp-error', s?.lastError || '룸에서 나왔어요'));
+    if (s?.lastRoomId) c.append(this.button(`다시 입장 (${displayCode(s.lastRoomId)})`, 'lb-mp-primary', () => this.run(() => this.host.rejoin())));
+    c.append(this.button('메인 로비로', 'lb-mp-ghost', () => this.host.singlePlayer()));
   }
 
-  private codeRow(s: NetSession): HTMLElement {
+  private roomHeader(s: NetSession): HTMLElement {
     const code = displayCode(s.roomId);
-    const row = el('div', 'mp-code');
-    const box = el('input', 'mp-code-value');
+    const row = el('div', 'lb-mp-room-head');
+    const title = el('div', 'lb-mp-room-title');
+    title.append(el('small', '', '대기실'), el('b', '', `방 ${code}`));
+    const box = el('input', 'lb-mp-code-value');
     box.readOnly = true;
     box.value = code;
-    const copy = this.button('Copy', 'mp-small', async () => {
+    const copy = this.button('코드 복사', 'lb-mp-small', async () => {
       const ok = await copyText(code, box);
       this.notice = ok ? '방 코드를 복사했어요' : '복사가 막혀 있어요 — 코드를 직접 선택해 복사하세요';
       this.refresh(true);
     });
-    row.append(el('span', 'mp-label', 'Room'), box, copy);
+    const codeTools = el('div', 'lb-mp-code-tools');
+    codeTools.append(box, copy);
+    const meta = el('div', 'lb-mp-room-meta');
+    meta.append(
+      el('span', `lb-mp-mode-badge lb-mp-mode-${s.mode}`, NET_MODE_RULES[s.mode].short),
+      el('span', 'lb-mp-player-count', `${Object.keys(s.players).length}/${NET_MAX_PLAYERS}명`),
+    );
+    row.append(title, codeTools, meta);
     return row;
   }
 
   private renderRoom(c: HTMLElement, s: NetSession, v: View): void {
     const mode = s.mode;
     const rule = NET_MODE_RULES[mode];
-    c.append(this.codeRow(s));
-    const modeRow = el('div', 'mp-mode-line');
-    modeRow.append(el('b', '', rule.label), el('span', 'mp-hint', modeRuleText(mode)));
+    c.append(this.roomHeader(s));
+    const modeRow = el('div', 'lb-mp-mode-line');
+    modeRow.append(el('b', '', rule.label), el('span', 'lb-mp-hint', modeRuleText(mode)));
     c.append(modeRow);
     if (v === 'lobby' && s.isHost) c.append(this.modePicker(mode, (m) => void this.run(() => this.host.setMode(m))));
 
-    const list = el('div', `mp-players${rule.teams ? ' teams' : ''}`);
     const bySlot = new Map(Object.entries(s.players).map(([acc, p]) => [p.slot, { acc, p }]));
-    for (let slot = 0; slot < NET_MAX_PLAYERS; slot++) {
-      const e = bySlot.get(slot);
-      const row = el('div', 'mp-player');
-      row.append(el('b', '', `P${slot + 1}`));
-      if (!e) {
-        row.append(el('span', 'mp-wait', '기다리는 중…'));
-      } else {
-        const mine = e.acc === s.me;
-        const lost = s.isLost(e.acc);
-        const status = lost ? 'Disconnected (재접속 대기 30초)' : mine || s.remotes.has(e.acc) ? 'Connected · Ready' : 'Connected';
-        const name = el('span', 'mp-name', `${mine ? '나' : `P${e.p.slot + 1}`} · ${this.host.characterLabel(e.p.char)}${s.host === e.acc ? ' · ★방장' : ''}`);
-        if (rule.teams && e.p.team) row.classList.add(e.p.team === 'BLUE' ? 'team-blue' : 'team-red');
-        row.append(name);
-        if (rule.teams && e.p.team) row.append(el('span', `mp-team ${e.p.team === 'BLUE' ? 'blue' : 'red'}`, e.p.team));
-        row.append(el('span', lost ? 'mp-bad' : 'mp-ok', status));
-        if (v === 'paused') row.append(el('span', 'mp-hp', `HP ${Math.round(e.p.hp)}/${e.p.max}${e.p.dead ? ' 사망' : ''} · K${e.p.k}/D${e.p.d}`));
+    const list = el('div', `lb-mp-players${rule.teams ? ' lb-mp-teams' : ' lb-mp-ffa'}`);
+    if (rule.teams) {
+      for (const team of ['BLUE', 'RED'] as const) {
+        const column = el('section', `lb-mp-team-column lb-mp-team-${team.toLowerCase()}`);
+        column.append(el('h3', '', `${team} TEAM`));
+        const entries = Object.entries(s.players).filter(([, p]) => p.team === team).sort((a, b) => a[1].slot - b[1].slot);
+        for (let index = 0; index < NET_TEAM_SIZE; index++) {
+          const entry = entries[index];
+          column.append(this.playerSlot(s, entry ? { acc: entry[0], p: entry[1] } : undefined, v));
+        }
+        list.append(column);
       }
-      list.appendChild(row);
+    } else {
+      for (let slot = 0; slot < NET_MAX_PLAYERS; slot++) list.append(this.playerSlot(s, bySlot.get(slot), v));
     }
     const n = Object.keys(s.players).length;
-    c.append(list, el('p', 'mp-count', `Players: ${n}/${NET_MAX_PLAYERS}`));
+    c.append(list);
 
     if (v === 'lobby') {
       const blue = Object.values(s.players).filter((p) => p.team === 'BLUE').length;
@@ -295,35 +315,59 @@ export class MultiplayerMenu {
       if (rule.teams) {
         const team = this.host.localTeam();
         const other = team === 'BLUE' ? red : blue;
-        const sw = this.button(`팀 바꾸기 (${team === 'BLUE' ? '→ RED' : '→ BLUE'})`, 'mp-small', () => this.run(() => this.host.switchTeam()));
+        const sw = this.button(`팀 바꾸기 (${team === 'BLUE' ? '→ RED' : '→ BLUE'})`, 'lb-mp-small', () => this.run(() => this.host.switchTeam()));
         sw.disabled = other >= NET_TEAM_SIZE;
-        c.append(el('p', 'mp-count', `BLUE ${blue}/${NET_TEAM_SIZE} · RED ${red}/${NET_TEAM_SIZE}`), sw);
+        c.append(sw);
       }
       const anyLost = Object.keys(s.players).some((a) => s.isLost(a));
       const enough = n >= rule.requiredPlayers && (!rule.teams || (blue === NET_TEAM_SIZE && red === NET_TEAM_SIZE));
       const ready = enough && !anyLost;
       if (s.isHost) {
         if (import.meta.env.DEV && rule.timeLimitMs > 0) c.append(this.testTimePicker());
-        const start = this.button('Start Match', 'mp-primary', () => this.run(() => this.host.start(this.testTime || undefined)));
+        const start = this.button('게임 시작', 'lb-mp-primary', () => this.run(() => this.host.start(this.testTime || undefined)));
         start.disabled = !ready;
         const hint = anyLost
           ? '연결이 끊긴 플레이어가 돌아오거나 나갈 때까지 기다려요'
           : n < rule.requiredPlayers
-            ? `${rule.requiredPlayers}명이 모두 들어와야 시작할 수 있어요 (지금 ${n}명) — Room Code를 알려 주세요`
+            ? `${rule.requiredPlayers}명이 모두 들어와야 시작할 수 있어요 (지금 ${n}명) — 방 코드를 알려 주세요`
             : rule.teams && !enough
               ? '팀 인원을 2:2로 맞춰 주세요'
               : '시작하면 모두 같은 맵에서 3초 카운트다운 후 시작해요';
-        c.append(start, el('p', 'mp-hint', hint));
+        c.append(start, el('p', 'lb-mp-hint', hint));
       } else {
-        c.append(el('p', 'mp-status', '방장이 Start Match를 누르면 시작해요'));
+        c.append(el('p', 'lb-mp-status', '방장이 시작하면 바로 카운트다운이 시작돼요'));
       }
     } else {
       const counting = s.matchPhase === 'countdown';
-      c.append(el('p', 'mp-status', !this.host.matchStarted() || counting ? '곧 시작! 화면을 클릭해서 들어가요' : '매치 진행 중 — 화면을 클릭하면 계속'));
+      c.append(el('p', 'lb-mp-status', !this.host.matchStarted() || counting ? '곧 시작! 화면을 클릭해서 들어가요' : '매치 진행 중 — 화면을 클릭하면 계속'));
     }
     const err = this.notice || s.lastError;
-    if (err) c.append(el('p', this.notice ? 'mp-hint' : 'mp-error', err));
-    c.append(this.button('Leave Room', 'mp-ghost', () => this.run(() => this.host.leave())));
+    if (err) c.append(el('p', this.notice ? 'lb-mp-hint' : 'lb-mp-error', err));
+    c.append(el('p', 'lb-mp-ready-note', '준비 버튼은 없어요 · 방장이 시작하면 바로 카운트다운이 시작돼요'));
+    c.append(this.button('방 나가기', 'lb-mp-ghost', () => this.run(() => this.host.leave())));
+  }
+
+  private playerSlot(s: NetSession, entry: { acc: string; p: NetPlayerRecord } | undefined, v: View): HTMLElement {
+    const row = el('article', entry ? 'lb-mp-player' : 'lb-mp-player lb-mp-empty');
+    if (!entry) {
+      row.append(el('span', 'lb-mp-empty-icon', '+'), el('b', '', '빈 자리'));
+      return row;
+    }
+    const mine = entry.acc === s.me;
+    const lost = s.isLost(entry.acc);
+    const swatch = el('i', 'lb-mp-char-swatch');
+    swatch.style.setProperty('--lb-char-color', this.host.characterColor(entry.p.char));
+    const copy = el('span', 'lb-mp-player-copy');
+    // 닉네임(서버 검사 값) 우선, 없으면 자리 번호. 계정·캐릭터 id는 표시하지 않음
+    const nick = s.nickOf(entry.acc) ?? (mine ? s.nick : null);
+    const player = el('b', '', mine ? `${nick ?? '나'} (나)` : nick ?? `P${entry.p.slot + 1}`);
+    const character = el('small', '', this.host.characterLabel(entry.p.char));
+    copy.append(player, character);
+    if (s.host === entry.acc) copy.append(el('em', '', '★ 방장'));
+    const connection = el('span', lost ? 'lb-mp-connection lb-mp-lost' : 'lb-mp-connection', lost ? '연결 끊김 대기' : '연결됨');
+    row.append(swatch, copy, connection);
+    if (v === 'paused') row.append(el('span', 'lb-mp-stats', `HP ${Math.round(entry.p.hp)}/${entry.p.max}${entry.p.dead ? ' · 사망' : ''} · K${entry.p.k}/D${entry.p.d}`));
+    return row;
   }
 
   /** 결과 화면: 서버가 확정한 결과 그대로 (모든 플레이어 같은 값) */
@@ -331,20 +375,20 @@ export class MultiplayerMenu {
     const r = s.result!;
     const mine = r.winners.includes(s.me);
     const outcome = r.draw ? (r.mode === 'tdm' || mine ? 'draw' : 'lose') : mine ? 'win' : 'lose';
-    c.append(el('div', `mp-outcome ${outcome}`, { win: 'VICTORY', lose: 'DEFEAT', draw: 'DRAW' }[outcome]));
+    c.append(el('div', `lb-mp-outcome lb-mp-${outcome}`, { win: '승리', lose: '패배', draw: '무승부' }[outcome]));
     const why = r.reason === 'score' ? `${NET_MODE_RULES[r.mode].scoreToWin}킬 달성` : '시간 종료';
     if (r.mode === 'tdm') {
-      const sc = el('div', 'mp-final');
+      const sc = el('div', 'lb-mp-final');
       sc.append(
-        el('span', `mp-team blue${r.winnerTeam === 'BLUE' ? ' win' : ''}`, `BLUE ${r.teamScore.BLUE}`),
+        el('span', `lb-mp-team lb-mp-blue${r.winnerTeam === 'BLUE' ? ' lb-mp-winner' : ''}`, `BLUE ${r.teamScore.BLUE}`),
         el('span', '', ':'),
-        el('span', `mp-team red${r.winnerTeam === 'RED' ? ' win' : ''}`, `${r.teamScore.RED} RED`),
+        el('span', `lb-mp-team lb-mp-red${r.winnerTeam === 'RED' ? ' lb-mp-winner' : ''}`, `${r.teamScore.RED} RED`),
       );
-      c.append(sc, el('p', 'mp-hint', `${NET_MODE_RULES[r.mode].label} · ${why}${r.winnerTeam ? ` · ${r.winnerTeam} 승리` : ' · 무승부'}`));
+      c.append(sc, el('p', 'lb-mp-hint', `${NET_MODE_RULES[r.mode].label} · ${why}${r.winnerTeam ? ` · ${r.winnerTeam} 승리` : ' · 무승부'}`));
     } else {
-      c.append(el('p', 'mp-hint', `${NET_MODE_RULES[r.mode].label} · ${why}${r.draw ? ' · 공동 1위 무승부' : ''}`));
+      c.append(el('p', 'lb-mp-hint', `${NET_MODE_RULES[r.mode].label} · ${why}${r.draw ? ' · 공동 1위 무승부' : ''}`));
     }
-    const table = el('table', 'mp-table');
+    const table = el('table', 'lb-mp-table');
     const head = el('tr');
     for (const h of ['순위', '플레이어', r.mode === 'tdm' ? '팀' : '캐릭터', '킬', '데스']) head.append(el('th', '', h));
     table.append(head);
@@ -354,39 +398,40 @@ export class MultiplayerMenu {
       const k = `${p.k}:${p.d}`;
       if (k !== prev) rank = i + 1;
       prev = k;
-      const tr = el('tr', p.account === s.me ? 'me' : '');
+      const tr = el('tr', p.account === s.me ? 'lb-mp-me' : '');
       // TDM: 팀 색 줄, FFA: 1위(공동 포함) 강조. 나간 사람은 흐리게
-      if (r.mode === 'tdm' && p.team) tr.classList.add(p.team === 'BLUE' ? 'team-blue' : 'team-red');
-      if (r.mode !== 'tdm' && r.winners.includes(p.account)) tr.classList.add('first');
-      if (p.left) tr.classList.add('left');
+      if (r.mode === 'tdm' && p.team) tr.classList.add(p.team === 'BLUE' ? 'lb-mp-row-blue' : 'lb-mp-row-red');
+      if (r.mode !== 'tdm' && r.winners.includes(p.account)) tr.classList.add('lb-mp-first');
+      if (p.left) tr.classList.add('lb-mp-left');
       const team = r.mode === 'tdm' ? (p.team ?? '-') : this.host.characterLabel(p.char);
-      const cells = [String(rank), `${s.displayName(p.account)}${p.left ? (p.quit ? ' (나감)' : ' (끊김)') : ''}`, team, String(p.k), String(p.d)];
-      cells.forEach((v, i) => tr.append(el('td', i === 0 ? 'rank' : '', v)));
+      const playerLabel = p.account === s.me ? `${p.nick ?? '나'} (나)` : p.nick ?? `P${p.slot + 1}`;
+      const cells = [String(rank), `${playerLabel}${p.left ? (p.quit ? ' (나감)' : ' (끊김)') : ''}`, team, String(p.k), String(p.d)];
+      cells.forEach((v, i) => tr.append(el('td', i === 0 ? 'lb-mp-rank' : '', v)));
       table.append(tr);
     });
     c.append(table);
-    c.append(this.button('Return to Lobby', 'mp-primary', () => this.run(() => this.host.toLobby())));
-    c.append(this.button('Leave Room', 'mp-ghost', () => this.run(() => this.host.leave())));
+    c.append(this.button('대기실로 돌아가기', 'lb-mp-primary', () => this.run(() => this.host.toLobby())));
+    c.append(this.button('방 나가기', 'lb-mp-ghost', () => this.run(() => this.host.leave())));
   }
 
   /** 개발 빌드 전용: 시간 종료·무승부 확인용 짧은 제한 시간 (기본 규칙 3분은 그대로) */
   private testTimePicker(): HTMLElement {
-    const row = el('div', 'mp-modes');
+    const row = el('div', 'lb-mp-modes');
     for (const [label, sec] of [['3분 (기본)', 0], ['60초', 60], [`${NET_TEST_TIME_LIMIT_SEC.min}초`, NET_TEST_TIME_LIMIT_SEC.min]] as const) {
       row.appendChild(
-        this.button(label, `mp-mode${this.testTime === sec ? ' on' : ''}`, () => {
+        this.button(label, `lb-mp-mode${this.testTime === sec ? ' lb-mp-on' : ''}`, () => {
           this.testTime = sec;
           this.refresh(true);
         }),
       );
     }
     const wrap = el('div');
-    wrap.append(el('div', 'mp-label', '테스트용 제한 시간 (개발 빌드에서만)'), row);
+    wrap.append(el('div', 'lb-mp-label', '테스트용 제한 시간 (개발 빌드에서만)'), row);
     return wrap;
   }
 
   private button(label: string, cls: string, fn: () => unknown): HTMLButtonElement {
-    const b = el('button', `mp-btn ${cls}`.trim(), label);
+    const b = el('button', `lb-mp-btn ${cls}`.trim(), label);
     b.type = 'button';
     b.onclick = () => void fn();
     return b;

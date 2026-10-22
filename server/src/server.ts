@@ -13,7 +13,13 @@
  * 읽기-수정-쓰기는 $lock(`room:<id>`)으로 직렬화.
  */
 import {
+  HUB_MAX_PLAYERS,
+  HUB_MAX_SPEED,
+  HUB_TIMING,
+  HUB_WORLD,
+  isHubRoom,
   isNetMode,
+  sanitizeNick,
   NET_CHARACTER_HP,
   NET_DEFAULT_HP,
   NET_MAX_PLAYERS,
@@ -33,7 +39,9 @@ import {
   type NetPlayerRecord,
   type NetPlayers,
   type NetRejected,
+  type NetHubPacket,
   type NetRoomState,
+  type NetRoomSummary,
   type NetShot,
   type NetStanding,
   type NetTeam,
@@ -68,10 +76,74 @@ function slog(event: string, roomId: string, data: Record<string, unknown> = {})
 }
 
 /** 'ABC123' 또는 'pb-abc123' → 'pb-abc123' */
-/** 호출한 클라이언트의 룸 (룸 밖이면 null — SDK는 룸 밖에서 '__no_room__'을 줌) */
+/**
+ * 호출한 클라이언트의 매치 룸 (룸 밖이면 null — SDK는 룸 밖에서 '__no_room__'을 줌).
+ * 로비 룸(lb-)도 null → 매치 함수(hello·st·startMatch·respawn …)는 로비 룸에서 모두 거절됨
+ */
 function roomOf(): string | null {
   const r = $sender.roomId;
-  return r && r !== NO_ROOM ? r : null;
+  return r && r !== NO_ROOM && !isHubRoom(r) ? r : null;
+}
+
+/** 호출한 클라이언트의 로비 룸 (아니면 null) */
+function hubOf(): string | null {
+  const r = $sender.roomId;
+  return isHubRoom(r) ? r : null;
+}
+
+/** 로비 매칭 예약 (글로벌 상태 하나): 룸 id → 계정 → 예약 시각. 자리를 잡고 실제로 들어오기 전까지 정원 계산에 포함 */
+const HUB_RESERVE = 'hub_reserve';
+type HubReserve = Record<string, Record<string, number>>;
+
+async function readReserve(): Promise<HubReserve> {
+  const g = ((await $global.getGlobalState([HUB_RESERVE])) || {}) as Record<string, unknown>;
+  const v = g[HUB_RESERVE];
+  return v && typeof v === 'object' ? (v as HubReserve) : {};
+}
+
+/** 오래된 예약 정리 (빈 룸 키도 지움) */
+function pruneReserve(res: HubReserve, now: number): void {
+  for (const [id, accs] of Object.entries(res)) {
+    for (const [acc, t] of Object.entries(accs)) if (!(now - t < HUB_TIMING.reserveMs)) delete accs[acc];
+    if (Object.keys(accs).length === 0) delete res[id];
+  }
+}
+
+/** 로비 위치 패킷 검사: 길이·숫자·로비 범위. 통과하면 반올림한 사본 */
+function sanitizeHubPacket(pkt: unknown): NetHubPacket | null {
+  if (!Array.isArray(pkt) || pkt.length !== 11 || !pkt.every((v) => finite(v, 1e13))) return null;
+  const [q, t, x, y, z, yaw, vx, vy, vz, m, f] = pkt as number[];
+  if (Math.hypot(x! - HUB_WORLD.cx, z! - HUB_WORLD.cz) > HUB_WORLD.radius) return null;
+  if (y! < HUB_WORLD.minY || y! > HUB_WORLD.maxY || Math.abs(yaw!) > 100) return null;
+  if (Math.hypot(vx!, vz!) > 40 || Math.abs(vy!) > 60) return null;
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const r3 = (v: number) => Math.round(v * 1000) / 1000;
+  return [q!, t!, r3(x!), r3(y!), r3(z!), r3(yaw!), r2(vx!), r2(vy!), r2(vz!), m! >= 0 && m! <= 2 ? Math.round(m!) : 0, Math.round(f!) & 0xff];
+}
+
+/**
+ * 로비 이동 검사 (물리 없음): 직전에 받아들인 위치에서 시간당 갈 수 있는 거리 안인지.
+ * 수평은 최대 속도 × 경과 시간 + 여유, 수직은 범위만 (낙하·점프). 시작 지점 근처로의 순간이동(R·낙하 복귀)은 허용
+ */
+function hubMoveOk(prev: NetHubPacket | undefined, prevT: number, next: NetHubPacket, now: number): boolean {
+  if (!prev) return true;
+  const s = HUB_WORLD.spawn;
+  if (Math.hypot(next[2] - s[0], next[3] - s[1], next[4] - s[2]) < 2) return true;
+  const dt = Math.min(3, Math.max(0.05, (now - prevT) / 1000));
+  return Math.hypot(next[2] - prev[2], next[4] - prev[4]) <= HUB_MAX_SPEED * dt * 1.3 + 1.2;
+}
+
+/** 방 입장 가능 여부 (findRoom·listRooms 공용): 정원·진행 중 매치·직접 나간 매치 */
+function joinCheck(m: RoomMirror, account: string): { ok: boolean; reason?: string } {
+  // 짧게 끊긴 사람(30초 유예 중, 자리가 아직 있음)은 정원이 차 있어도 자기 자리로 돌아옴
+  const present = !!m.in?.includes(account);
+  if (m.n >= NET_MAX_PLAYERS && !present) return { ok: false, reason: 'full' };
+  // 진행 중인 TDM·FFA: 이번 매치에서 끊겨 나갔던 같은 계정(새로고침·끊김)만 돌아올 수 있음. Leave Room으로 나간 계정은 이 매치에 다시 못 들어옴
+  const inMatch = m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing');
+  if (inMatch && !present && m.quit?.includes(account)) return { ok: false, reason: 'left_match' };
+  const returning = present || !!m.gone?.includes(account);
+  if (inMatch && !returning) return { ok: false, reason: 'in_progress' };
+  return { ok: true };
 }
 
 function normalizeCode(code: unknown): string {
@@ -155,7 +227,7 @@ function isLive(r: NetRoomState, now: number): boolean {
 }
 
 function standingOf(acc: string, p: NetPlayerRecord): NetStanding {
-  return { account: acc, slot: p.slot, char: p.char, team: p.team ?? null, k: p.k, d: p.d };
+  return { account: acc, slot: p.slot, char: p.char, team: p.team ?? null, k: p.k, d: p.d, ...(p.nick ? { nick: p.nick } : {}) };
 }
 
 /** 매치 종료 확정 (한 번만): 순위·승자·무승부 → 결과 단계 */
@@ -295,14 +367,8 @@ export class Server {
     const m = ((await $global.getGlobalState([MIRROR(id)])) || {})[MIRROR(id)] as RoomMirror | undefined;
     const users = await $global.countRoomUsers(id);
     if (!m || users <= 0 || m.n <= 0) return { ok: false, reason: 'not_found', count: 0 };
-    // 짧게 끊긴 사람(30초 유예 중, 자리가 아직 있음)은 정원이 차 있어도 자기 자리로 돌아옴
-    const present = !!m.in?.includes($sender.account);
-    if (m.n >= NET_MAX_PLAYERS && !present) return { ok: false, reason: 'full', count: m.n, mode: m.mode };
-    // 진행 중인 TDM·FFA: 이번 매치에서 끊겨 나갔던 같은 계정(새로고침·끊김)만 돌아올 수 있음. Leave Room으로 나간 계정은 이 매치에 다시 못 들어옴
-    const inMatch = m.mode !== 'test' && (m.phase === 'countdown' || m.phase === 'playing');
-    if (inMatch && !present && m.quit?.includes($sender.account)) return { ok: false, reason: 'left_match', count: m.n, mode: m.mode };
-    const returning = present || !!m.gone?.includes($sender.account);
-    if (inMatch && !returning) return { ok: false, reason: 'in_progress', count: m.n, mode: m.mode };
+    const check = joinCheck(m, $sender.account);
+    if (!check.ok) return { ok: false, reason: check.reason, count: m.n, mode: m.mode };
     return { ok: true, roomId: id, count: m.n, phase: m.phase, mode: m.mode };
   }
 
@@ -319,6 +385,141 @@ export class Server {
     return { ok: true, roomId: newRoomId(), waiting: false };
   }
 
+  /**
+   * 방 목록 (룸 밖·로비 룸에서 호출): 글로벌 룸 요약 중 실제 접속자가 있는 매치 룸만. 서버가 아는 값만 돌려줌
+   * (방 이름은 없음 → 코드). 최대 30개, 들어갈 수 있는 방·인원 많은 방 먼저
+   */
+  async listRooms(): Promise<{ ok: true; rooms: NetRoomSummary[] }> {
+    const all = (await $global.getGlobalState()) || {};
+    const now = Date.now();
+    const rooms: NetRoomSummary[] = [];
+    for (const [k, v] of Object.entries(all)) {
+      const m = v as RoomMirror;
+      if (!k.startsWith('room_') || !m || m.n <= 0 || !(now - m.t < MIRROR_TTL_MS)) continue;
+      const id = k.slice('room_'.length);
+      if (!id.startsWith(NET_ROOM_PREFIX)) continue;
+      if ((await $global.countRoomUsers(id)) <= 0) continue;
+      const check = joinCheck(m, $sender.account);
+      rooms.push({ roomId: id, mode: m.mode, players: m.n, max: NET_MAX_PLAYERS, phase: m.phase, joinable: check.ok, ...(check.reason ? { reason: check.reason } : {}) });
+      if (rooms.length >= 30) break;
+    }
+    rooms.sort((a, b) => Number(b.joinable) - Number(a.joinable) || b.players - a.players);
+    return { ok: true, rooms };
+  }
+
+  // ---------------- 온라인 로비 (lb- 룸) ----------------
+
+  /**
+   * 로비 인스턴스 배정 (룸 밖에서 호출, 클라이언트가 결과 룸에 joinRoom):
+   * 이미 들어가 있는 로비(30초 유예 포함)가 있으면 그 로비 → 중복 입장 방지·재접속은 같은 로비.
+   * 아니면 정원(HUB_MAX_PLAYERS)이 남은 로비 중 가장 많이 찬 곳 (적은 수의 로비에 모음), 모두 차면 새 번호.
+   * 실제 접속자 + 아직 들어오지 않은 예약을 함께 셈 (동시에 여러 명이 배정받아도 정원을 넘지 않게)
+   */
+  async hubFind(): Promise<{ ok: true; roomId: string; max: number }> {
+    const me = $sender.account;
+    return $lock('hub:match', async () => {
+      const now = Date.now();
+      const res = await readReserve();
+      pruneReserve(res, now);
+      const occ = new Map<string, Set<string>>();
+      for (const id of (await $global.getAllRoomIds()).filter(isHubRoom)) occ.set(id, new Set(await $global.getRoomUserAccounts(id)));
+      for (const [id, accs] of Object.entries(res)) {
+        if (!occ.has(id)) occ.set(id, new Set());
+        for (const acc of Object.keys(accs)) occ.get(id)!.add(acc);
+      }
+      let pick: string | null = null;
+      for (const [id, set] of occ) if (set.has(me)) pick = id;
+      if (!pick) {
+        for (const [id, set] of occ) if (set.size < HUB_MAX_PLAYERS && (!pick || set.size > occ.get(pick)!.size)) pick = id;
+      }
+      if (!pick) {
+        let n = 1;
+        while (occ.has(`lb-${n}`)) n++;
+        pick = `lb-${n}`;
+      }
+      for (const accs of Object.values(res)) delete accs[me];
+      (res[pick] ??= {})[me] = now;
+      pruneReserve(res, now);
+      await $global.updateGlobalState({ [HUB_RESERVE]: res });
+      return { ok: true as const, roomId: pick, max: HUB_MAX_PLAYERS };
+    });
+  }
+
+  /**
+   * 로비 입장 직후: 캐릭터·닉네임 등록 + 시작 위치. 정원 초과면 거절 (클라이언트가 나가서 다시 배정받음).
+   * 잘못된 캐릭터 id는 거절, 닉네임은 검사 통과 못 하면 빈 값(화면은 기본 이름)
+   */
+  async hubHello(info: { c?: unknown; n?: unknown }): Promise<{ ok: boolean; reason?: string; max: number; count: number }> {
+    const roomId = hubOf();
+    if (!roomId) return { ok: false, reason: 'not_in_hub', max: HUB_MAX_PLAYERS, count: 0 };
+    const c = typeof info?.c === 'string' && info.c in NET_CHARACTER_HP ? info.c : null;
+    if (!c) return { ok: false, reason: 'bad_char', max: HUB_MAX_PLAYERS, count: 0 };
+    const users = await $room.getUserAccounts();
+    if (users.length > HUB_MAX_PLAYERS) return { ok: false, reason: 'full', max: HUB_MAX_PLAYERS, count: users.length };
+    const now = Date.now();
+    const s = HUB_WORLD.spawn;
+    const pkt: NetHubPacket = [0, 0, s[0], s[1], s[2], Math.PI, 0, 0, 0, 0, 1];
+    await $room.updateMyState({ c, n: sanitizeNick(info?.n) ?? '', p: pkt, t: now, x: 0 }, { returnState: false });
+    // 들어왔으니 예약은 지움 (이제 실제 접속자로 셈)
+    const me = $sender.account;
+    await $lock('hub:match', async () => {
+      const res = await readReserve();
+      if (res[roomId]?.[me] === undefined) return;
+      delete res[roomId]![me];
+      pruneReserve(res, now);
+      await $global.updateGlobalState({ [HUB_RESERVE]: res });
+    });
+    slog('hub_hello', roomId, { account: me, users: users.length });
+    return { ok: true, max: HUB_MAX_PLAYERS, count: users.length };
+  }
+
+  /** 로비 캐릭터·닉네임 변경 (정비소에서 장착·설정에서 닉네임 바꿈) */
+  async hubInfo(info: { c?: unknown; n?: unknown }): Promise<{ ok: boolean; reason?: string }> {
+    if (!hubOf()) return { ok: false, reason: 'not_in_hub' };
+    const patch: Record<string, unknown> = {};
+    if (info?.c !== undefined) {
+      if (typeof info.c !== 'string' || !(info.c in NET_CHARACTER_HP)) return { ok: false, reason: 'bad_char' };
+      patch.c = info.c;
+    }
+    if (info?.n !== undefined) {
+      const n = sanitizeNick(info.n);
+      if (!n) return { ok: false, reason: 'bad_nick' };
+      patch.n = n;
+    }
+    if (Object.keys(patch).length) await $room.updateMyState(patch, { returnState: false });
+    return { ok: true };
+  }
+
+  /**
+   * 로비 위치 (throttle 호출, 응답 없음): 형식·범위·전송 빈도·이동 속도 검사 후 내 사용자 상태에 저장 → SDK가 같은 로비에 푸시.
+   * 너무 잦으면 버림, 너무 멀리 갔으면 버림(직전 위치 유지) — 단 3초 넘게 버려졌으면 다시 맞춤 (정상 이동이 계속 막히지 않게)
+   */
+  async hubMove(raw: unknown): Promise<void> {
+    if (!hubOf()) return;
+    const pkt = sanitizeHubPacket(raw);
+    if (!pkt) return;
+    const now = Date.now();
+    const st = ((await $room.getMyState()) || {}) as { p?: NetHubPacket; t?: number; x?: number };
+    const lastT = st.t ?? 0;
+    if (now - lastT < HUB_TIMING.minAcceptMs) return;
+    if (!hubMoveOk(st.p, lastT, pkt, now) && now - lastT < 3000) return;
+    await $room.updateMyState({ p: pkt, t: now, ...(st.x ? { x: 0 } : {}) }, { returnState: false });
+  }
+
+  /** 같은 로비의 사용자 상태 (구독으로 받는 것과 같은 값: 닉네임·캐릭터·위치·숨김). 입장 직후 한 번·테스트용 */
+  async hubState(): Promise<{ ok: boolean; users: Array<{ account: string } & Record<string, unknown>> }> {
+    if (!hubOf()) return { ok: false, users: [] };
+    const all = await $room.getAllUserStates();
+    return { ok: true, users: all.map((u) => ({ account: u.account, n: u.n, c: u.c, p: u.p, x: u.x })) };
+  }
+
+  /** 로비에서 나감 (매치로 이동): 다른 사람 화면에서 바로 숨김 (SDK 30초 유예와 별개) */
+  async hubBye(): Promise<{ ok: boolean }> {
+    if (!hubOf()) return { ok: false };
+    await $room.updateMyState({ x: 1 }, { returnState: false });
+    return { ok: true };
+  }
+
   /** RTT 측정·서버 시각 (룸 안팎 모두) */
   async ping(t: number): Promise<{ t: number; s: number }> {
     return { t: finite(t, 1e13) ? t : 0, s: Date.now() };
@@ -327,6 +528,8 @@ export class Server {
   // ---------------- 룸 수명 주기 ----------------
 
   async onRoomJoin(roomId: string, account: string): Promise<void> {
+    // 로비 룸: 매치 기록·자리 배정 없음 (등록은 hubHello)
+    if (isHubRoom(roomId)) return;
     const slot = await $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       if (r.players[account]) return r.players[account]!.slot;
@@ -340,17 +543,27 @@ export class Server {
   }
 
   async onRoomDisconnect(roomId: string, account: string): Promise<void> {
+    if (isHubRoom(roomId)) {
+      // 30초 유예 동안 다른 사람 화면에서 숨김 (다시 들어오면 hubHello·hubMove가 x: 0)
+      await $room.updateUserState(account, { x: 1 }, { returnState: false });
+      return;
+    }
     // 30초 유예: 아직 룸 안 (재접속하면 그대로 이어짐)
     $room.broadcastToRoom('dc', { account, roomId });
     slog('disconnect', roomId, { account });
   }
 
   async onRoomLeave(roomId: string, account: string): Promise<void> {
+    if (isHubRoom(roomId)) {
+      slog('hub_leave', roomId, { account });
+      return;
+    }
     if (await this.removePlayer(roomId, account)) $room.broadcastToRoom('left', { account });
     slog('leave', roomId, { account });
   }
 
   async onRoomDestroy(roomId: string): Promise<void> {
+    if (isHubRoom(roomId)) return;
     await $global.clearGlobalState([MIRROR(roomId)]);
   }
 
@@ -359,6 +572,8 @@ export class Server {
    * 대부분의 틱은 단계·시각만 읽고 끝남 (락·쓰기 없음)
    */
   async $roomTick(_delta: number, roomId: string): Promise<void> {
+    // 로비 룸: 매치 단계·타이머 없음 (상태도 읽지 않음)
+    if (isHubRoom(roomId)) return;
     const st = ((await $room.getRoomState(['phase', 'startAt', 'endAt'])) || {}) as Partial<NetRoomState>;
     if (st.phase !== 'countdown' && st.phase !== 'playing') return;
     const now = Date.now();
@@ -438,7 +653,7 @@ export class Server {
   // ---------------- 룸 안 ----------------
 
   /** 입장 직후: 캐릭터(최대 체력) 등록. @returns 자리(-1 = 못 들어옴, reason), 서버 시각, 룸 전체 상태 */
-  async hello(char: string): Promise<HelloResult> {
+  async hello(char: string, nick?: unknown): Promise<HelloResult> {
     const me = $sender.account;
     if (!roomOf()) throw new Error('not in room');
     const roomId = roomOf()!;
@@ -452,6 +667,12 @@ export class Server {
         p = r.players[me]!;
         await saveRoom(roomId, r);
         $room.broadcastToRoom('joined', { account: me, slot });
+      }
+      // 표시 닉네임 (검사 통과한 값만, 바뀔 때만 저장)
+      const n = sanitizeNick(nick);
+      if (n && n !== p.nick) {
+        p.nick = n;
+        await $room.updateRoomState({ players: r.players }, { returnState: false });
       }
       if (typeof char === 'string' && char in NET_CHARACTER_HP && (char !== p.char || p.max !== NET_CHARACTER_HP[char])) {
         const max = NET_CHARACTER_HP[char]!;

@@ -582,6 +582,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 .tc-reload.busy svg { animation: tc-spin .7s linear infinite; }
 @keyframes tc-spin { to { transform: rotate(360deg); } }
 .touch-layer.melee .tc-ads, .touch-layer.melee .tc-reload { opacity: .35; }
+/* 온라인 로비: 다른 플레이어 머리 위 닉네임 (화면 좌표는 LobbyPeers가 transform으로) */
+.lobby-nametags { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+.lobby-nametag {
+  position: absolute; left: 0; top: 0; max-width: 160px; padding: 2px 9px; border-radius: 999px;
+  background: rgba(39, 50, 92, .62); color: #fff; font: 800 12px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border: 2px solid rgba(255, 255, 255, .7); will-change: transform;
+}
+
+/* 메인 로비 자유 이동: 전투 버튼 없이 점프(크게)·슬라이딩만 오른쪽 아래 엄지 자리에 */
+.touch-layer.lobby .tc-fire, .touch-layer.lobby .tc-ads, .touch-layer.lobby .tc-reload, .touch-layer.lobby .tc-pause { display: none; }
+.touch-layer.lobby .tc-jump { --s: 84px; right: calc(30px * var(--tu)); bottom: calc(34px * var(--tu)); }
+.touch-layer.lobby .tc-slide { --s: 64px; right: calc((30px + 84px * var(--btn) + 18px) * var(--tu)); bottom: calc(22px * var(--tu)); }
 .tc-pause {
   position: absolute; left: calc(var(--safe-l) + 10px); top: calc(var(--safe-t) + 10px);
   width: 44px; height: 44px; border-radius: 12px; border: 2px solid #fff;

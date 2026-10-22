@@ -105,6 +105,13 @@ export class Physics {
     return this.world.createCollider(desc);
   }
 
+  /** 고정 충돌체 제거 (로비 공간을 매치 시작 때 치울 때). 붙인 이름·쿼리 제외 표시도 함께 지움 */
+  removeCollider(collider: RAPIER.Collider): void {
+    this.labels.delete(collider.handle);
+    this.queryIgnored.delete(collider.handle);
+    this.world.removeCollider(collider, false);
+  }
+
   /** @param hitboxOnly true면 이동 충돌에는 쓰지 않는 판정 전용 콜라이더 */
   registerHitbox(collider: RAPIER.Collider, hitbox: Hitbox, hitboxOnly = false): void {
     this.hitboxes.set(collider.handle, hitbox);

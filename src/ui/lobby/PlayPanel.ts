@@ -1,32 +1,51 @@
-// PLAY: 게임 모드 고르기 → 기존 기능으로 연결 (연습전 = 봇 개인전, 멀티 = 기존 Multiplayer 메뉴의 방 만들기·코드 입장)
+// PLAY: 바로 시작할 수 있는 연습전과 멀티플레이 창 바로가기를 모은다.
 import { displayCode } from '../../net/NetSession';
-import { NET_MODE_RULES } from '../../net/shared/protocol';
-import { button, comingSoon, el, type LobbyHost, type LobbyPanel } from './lobbyDom';
+import { button, comingSoon, el, ICON, type LobbyHost, type LobbyPanel } from './lobbyDom';
 
 export class PlayPanel implements LobbyPanel {
   readonly id = 'play';
   readonly title = 'PLAY';
 
-  constructor(private readonly host: LobbyHost) {}
+  constructor(
+    private readonly host: LobbyHost,
+    private readonly openPanel: (id: string) => void,
+  ) {}
 
   render(body: HTMLElement): void {
+    body.append(el('p', 'lb-panel-lead', '원하는 방식으로 바로 시작해 보세요.'));
+    const grid = el('div', 'lb-play-grid');
+    grid.append(
+      button(
+        '',
+        'lb-mode lb-mode-practice lb-play-hero',
+        () => this.host.playPractice(),
+        `<span class="lb-mode-icon">${ICON.bot}</span><span class="lb-mode-copy"><small>PRACTICE</small><b>봇 연습전</b><span>봇 3명과 개인전 · 3분 · 15킬 먼저</span></span><i>바로 시작</i>`,
+      ),
+      button(
+        '',
+        'lb-mode lb-mode-join',
+        () => this.openPanel('rooms'),
+        `<span class="lb-mode-icon">${ICON.rooms}</span><span class="lb-mode-copy"><small>ROOM LIST</small><b>방 찾아보기</b><span>열려 있는 방을 보거나 코드로 참가</span></span><i>열기</i>`,
+      ),
+      button(
+        '',
+        'lb-mode lb-mode-tdm',
+        () => this.openPanel('create'),
+        `<span class="lb-mode-icon">${ICON.create}</span><span class="lb-mode-copy"><small>CREATE ROOM</small><b>새 방 만들기</b><span>TDM 또는 FFA 규칙을 선택</span></span><i>열기</i>`,
+      ),
+    );
     const last = this.host.lastRoomCode();
     if (last) {
-      body.appendChild(
-        button('', 'lb-mode lb-rejoin', () => this.host.rejoinLastRoom(), `<b>이전 방 다시 입장</b><span>방 코드 ${displayCode(last)} · 진행 중이던 매치로 복귀</span>`),
+      grid.append(
+        button(
+          '',
+          'lb-mode lb-rejoin',
+          () => this.host.rejoinLastRoom(),
+          `<span class="lb-mode-icon">${ICON.return}</span><span class="lb-mode-copy"><small>RECENT ROOM</small><b>이전 방 다시 입장</b><span>방 코드 ${displayCode(last)} · 진행 중인 매치로 복귀</span></span><i>입장</i>`,
+        ),
       );
     }
-    body.appendChild(el('div', 'lb-section', '멀티플레이 (최대 4인)'));
-    const grid = el('div', 'lb-mode-grid');
-    for (const mode of ['tdm', 'ffa'] as const) {
-      const r = NET_MODE_RULES[mode];
-      const desc = mode === 'tdm' ? `BLUE vs RED 2:2 · ${r.timeLimitMs / 60000}분 · 팀 ${r.scoreToWin}킬` : `4인 개인전 · ${r.timeLimitMs / 60000}분 · ${r.scoreToWin}킬`;
-      grid.appendChild(button('', `lb-mode lb-mode-${mode}`, () => this.host.openMultiplayer(mode), `<b>${r.short}</b><span>${desc}</span><i>방 만들기 · 코드로 입장</i>`));
-    }
+    grid.append(comingSoon('빠른 매칭', '자동으로 알맞은 방을 찾는 기능은 준비 중이에요.'));
     body.appendChild(grid);
-    body.appendChild(button('', 'lb-mode lb-mode-join', () => this.host.openMultiplayer(null), '<b>방 코드로 입장</b><span>친구가 알려 준 Room Code로 들어가기</span>'));
-    body.appendChild(el('div', 'lb-section', '혼자 하기'));
-    body.appendChild(button('', 'lb-mode lb-mode-practice', () => this.host.playPractice(), '<b>연습전</b><span>봇 3명과 개인전 · 3분 · 15킬 먼저</span>'));
-    body.appendChild(comingSoon('빠른 매칭', '자동으로 방을 찾아 들어가는 기능은 다음 단계에서 열려요.'));
   }
 }

@@ -42,6 +42,92 @@ export function isNetMode(m: unknown): m is NetMode {
 /** 테스트 룸 id 접두사 (빠른 매칭이 다른 룸을 건드리지 않게) */
 export const NET_ROOM_PREFIX = 'pb-';
 
+// ---------------- 온라인 로비 (허브) ----------------
+// 매치 룸(pb-)과 다른 룸(lb-1, lb-2 …). 로비 룸에서는 입장·퇴장·위치·캐릭터·닉네임만 다루고 매치 함수는 모두 거절한다.
+
+/** 로비 룸 id 접두사 (lb-<번호>) */
+export const HUB_ROOM_PREFIX = 'lb-';
+/** 로비 인스턴스 정원 (초기 목표값, 실제 다중 접속 측정 전 — 확정 아님) */
+export const HUB_MAX_PLAYERS = 8;
+
+export function isHubRoom(roomId: string | null | undefined): boolean {
+  return typeof roomId === 'string' && /^lb-\d{1,4}$/.test(roomId);
+}
+
+export const HUB_TIMING = {
+  /** 위치 전송 최소 간격 (ms) = 최대 8회/초. 움직이지 않으면 보내지 않음 */
+  sendIntervalMs: 125,
+  /** remoteFunction throttle 창 (ms) — 전송 간격보다 짧아야 버려지지 않음 */
+  throttleMs: 100,
+  /** 서버가 받는 최소 간격 (ms) — 이보다 잦은 패킷은 버림 */
+  minAcceptMs: 70,
+  /** 원격 보간 지연 (ms) */
+  interpDelayMs: 250,
+  /** 매칭 예약 유지 (ms): 자리를 잡고 이 시간 안에 실제로 들어와야 함 */
+  reserveMs: 20_000,
+} as const;
+
+/**
+ * 로비 공간 좌표 (world/LobbySpace.ts와 같은 값): 서버 좌표 검사·시작 지점.
+ * 놀이섬 중심 (0, 36, 0), 남쪽 작은 섬까지 반경 약 46m
+ */
+export const HUB_WORLD = { cx: 0, cy: 36, cz: 0, radius: 50, minY: -4, maxY: 62, spawn: [0, 36, 5] as const };
+
+/**
+ * 서버 이동 검사용 최대 수평 속도 (m/s): 달리기 5.8·공중 7.2·슬라이딩 최대 8.4 × 가장 빠른 캐릭터 1.15 ≈ 9.7 → 여유 포함.
+ * 낙하(수직)는 좌표 범위만 검사. 시작 지점 근처로의 순간이동(R 복귀·낙하 복귀)은 허용
+ */
+export const HUB_MAX_SPEED = 10.5;
+
+/**
+ * 로비 위치 패킷 (throttle 호출 'hubMove', 숫자 배열로 압축):
+ * [순번, 보낸 시각(ms), x, y, z, 몸 방향, vx, vy, vz, 이동 모드(NET_MODES 인덱스), 비트(1 grounded · 2 sprinting · 16 jumped · 32 landed)]
+ */
+export type NetHubPacket = [number, number, number, number, number, number, number, number, number, number, number];
+
+/** 로비 룸 사용자 상태 (서버가 저장, SDK가 같은 룸에 푸시) */
+export interface NetHubUserState {
+  /** 표시 닉네임 (서버 검사 통과한 값) */
+  n?: string;
+  /** 캐릭터 id (내부 식별, 화면에는 표시 이름으로) */
+  c?: string;
+  /** 마지막으로 받아들인 위치 패킷 */
+  p?: NetHubPacket;
+  /** 서버가 패킷을 받은 시각 (ms) */
+  t?: number;
+  /** 1 = 나감·끊김 (30초 유예 중에도 바로 숨김) */
+  x?: number;
+}
+
+/** 방 목록 한 줄 (서버 'listRooms'): 서버가 아는 값만 */
+export interface NetRoomSummary {
+  roomId: string;
+  mode: NetMode;
+  players: number;
+  max: number;
+  phase: NetMatchPhase;
+  /** 지금 이 계정이 들어갈 수 있는지 (findRoom과 같은 규칙) */
+  joinable: boolean;
+  /** 못 들어가는 이유: full | in_progress | left_match */
+  reason?: string;
+}
+
+/** 표시 닉네임 규칙: 글자 수(문자 단위) */
+export const NICK_LIMITS = { min: 2, max: 12 } as const;
+
+/**
+ * 닉네임 정리·검사 (클라이언트 입력·서버 저장 공용). 앞뒤 공백 제거, 연속 공백 하나로,
+ * 글자(모든 언어)·숫자·공백·_ - . 만 허용, 제어 문자·HTML 특수 문자·이모지 불가. 통과 못 하면 null
+ */
+export function sanitizeNick(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.normalize('NFC').replace(/\s+/g, ' ').trim();
+  const len = [...s].length;
+  if (len < NICK_LIMITS.min || len > NICK_LIMITS.max) return null;
+  if (!/^[\p{L}\p{N} _.\-]+$/u.test(s)) return null;
+  return s;
+}
+
 export const NET_TIMING = {
   /** 클라이언트 상태 전송 간격 (ms). throttle 창보다 길어야 leading-only throttle이 패킷을 버리지 않는다 */
   sendIntervalMs: 50,
@@ -204,6 +290,8 @@ export interface NetPlayerRecord {
   d: number;
   /** TDM 팀 (FFA·테스트는 null) */
   team?: NetTeam | null;
+  /** 표시 닉네임 (sanitizeNick 통과, 없으면 화면은 자리 번호) */
+  nick?: string;
   /** 연사 검증 토큰 (서버 내부) */
   rb?: { tokens: number; t: number };
 }
@@ -216,6 +304,8 @@ export interface NetStanding {
   slot: number;
   char: string;
   team: NetTeam | null;
+  /** 표시 닉네임 (있을 때만) */
+  nick?: string;
   k: number;
   d: number;
   left?: boolean;

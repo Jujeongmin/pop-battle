@@ -51,6 +51,7 @@ export class ArenaMap implements GameMap {
   readonly group = new THREE.Group();
   readonly sun: THREE.DirectionalLight;
   private readonly backdrop: ArenaBackdrop;
+  readonly lobbyKit: { models: KitModels; material: THREE.Material };
   private readonly disposables: Array<{ dispose(): void }> = [];
   /** 디버그: 그리기 호출 수·인스턴스 수·충돌체 수 */
   stats = { instancedMeshes: 0, instances: 0, colliders: 0, movementOnlyColliders: 0, triangles: 0, decorTriangles: 0, cityTriangles: 0, cloudTriangles: 0 };
@@ -97,6 +98,7 @@ export class ArenaMap implements GameMap {
     const decorMat = brickMat.clone();
     decorMat.vertexColors = true;
     this.disposables.push(brickMat, flatMat, decorMat);
+    this.lobbyKit = { models, material: decorMat };
 
     const allSpawns = [...ARENA_SPAWNS.teamA, ...ARENA_SPAWNS.teamB];
     const floor = buildArenaFloor(

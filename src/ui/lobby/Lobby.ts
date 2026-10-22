@@ -1,86 +1,131 @@
-// 메인 로비 (게임 시작 전 화면). 가운데는 게임 장면의 실제 플레이어 아바타(로비 카메라) — 3D 객체를 따로 만들지 않음.
-// 구성: 상단(로고·플레이어 정보·재화 자리) · 왼쪽 메뉴(CHARACTER·LOADOUT·SHOP·SETTINGS) · 오른쪽 아래 PLAY · 오른쪽 패널(메뉴별 컴포넌트)
-// 로비가 떠 있는 동안 게임 입력(캔버스 클릭·터치 조작)은 막힘: 로비가 화면을 덮고 이벤트를 받음.
+// 자유 이동 로비의 상단 메뉴 바와 창. 3D 월드와 캐릭터는 게임이 그리고, 여기서는 DOM UI만 맡는다.
 import './lobby.css';
 import { CharacterPanel } from './CharacterPanel';
+import { CreateRoomPanel } from './CreateRoomPanel';
 import { LoadoutPanel } from './LoadoutPanel';
-import { button, el, ICON, type LobbyHost, type LobbyPanel } from './lobbyDom';
+import { button, el, ICON, type LobbyCharacter, type LobbyHost, type LobbyPanel, type LobbyRoamState } from './lobbyDom';
 import { PlayPanel } from './PlayPanel';
+import { RoomListPanel } from './RoomListPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { ShopPanel } from './ShopPanel';
+import { nicknameEditor, type NicknameEditor } from './nicknameUi';
 
-const NAV: Array<{ id: string; label: string; icon: string }> = [
-  { id: 'character', label: 'CHARACTER', icon: ICON.character },
-  { id: 'loadout', label: 'LOADOUT', icon: ICON.loadout },
-  { id: 'shop', label: 'SHOP', icon: ICON.shop },
-  { id: 'settings', label: 'SETTINGS', icon: ICON.settings },
+const NAV: Array<{ id: string; label: string; korean: string; icon: string }> = [
+  { id: 'play', label: 'PLAY', korean: '게임 시작', icon: ICON.play },
+  { id: 'rooms', label: 'ROOM LIST', korean: '방 목록', icon: ICON.rooms },
+  { id: 'create', label: 'CREATE ROOM', korean: '방 만들기', icon: ICON.create },
+  { id: 'character', label: 'CHARACTER', korean: '캐릭터', icon: ICON.character },
+  { id: 'loadout', label: 'LOADOUT', korean: '장비', icon: ICON.loadout },
+  { id: 'shop', label: 'SHOP', korean: '상점', icon: ICON.shop },
+  { id: 'settings', label: 'SETTINGS', korean: '설정', icon: ICON.settings },
 ];
 
+type ManagedLobbyPanel = LobbyPanel & {
+  activate?(): void;
+  deactivate?(): void;
+  dispose?(): void;
+};
+
 export class Lobby {
-  readonly root = el('div', 'lobby hidden');
-  private readonly panels = new Map<string, LobbyPanel>();
+  readonly root = el('div', 'lb-lobby lb-hidden');
+  private readonly panels = new Map<string, ManagedLobbyPanel>();
+  private readonly characterPanel: CharacterPanel;
+  private readonly roomListPanel: RoomListPanel;
+  private readonly menuLayer = el('div', 'lb-menu-layer');
   private readonly panelBox = el('section', 'lb-panel');
   private readonly panelTitle = el('h2', 'lb-panel-title');
   private readonly panelBody = el('div', 'lb-panel-body');
   private readonly navButtons = new Map<string, HTMLButtonElement>();
   private readonly nav = el('nav', 'lb-nav');
-  private readonly avatarEl = el('div', 'lb-avatar');
-  private readonly charNameEl = el('span', 'lb-profile-char');
+  private readonly charStage = el('div', 'lb-char-stage');
+  private readonly stageName = el('b', 'lb-stage-name');
+  private readonly stageRole = el('span', 'lb-stage-role');
+  private readonly stageBadges = el('span', 'lb-stage-badges');
+  private readonly characterDot = el('i', 'lb-character-dot');
+  private readonly characterName = el('b', 'lb-character-name');
+  private readonly playerName = el('b', 'lb-player-name');
+  private readonly presence = el('span', 'lb-presence');
+  private readonly presenceLabel = el('span', 'lb-presence-label');
+  /** 연결이 끊겼을 때 바로 다시 연결 */
+  private readonly presenceRetry = button('다시 시도', 'lb-presence-retry', () => this.host.retryLobby());
+  private readonly controlHint = el('div', 'lb-control-hint');
+  private readonly menuButton: HTMLButtonElement;
+  private readonly returnButton: HTMLButtonElement;
+  private readonly nicknameModal = el('div', 'lb-nickname-modal');
+  private readonly nicknameEditor: NicknameEditor;
   private open: string | null = null;
+  private menu = false;
+  private nicknameOpen = false;
   private visible = false;
   private lastChar = '';
+  private lastPlayer = '';
+  private lastPresence = '';
+  private roamTouch = false;
+  private characterSuspended = false;
+  private dragPointer: number | null = null;
+  private dragX = 0;
   private readonly abort = new AbortController();
+  private readonly resizeObserver: ResizeObserver;
 
   constructor(
     container: HTMLElement,
     private readonly host: LobbyHost,
   ) {
-    for (const p of [new PlayPanel(host), new CharacterPanel(host), new LoadoutPanel(host), new ShopPanel(), new SettingsPanel(host)]) this.panels.set(p.id, p);
-
-    // 상단: 로고 / 플레이어 정보 (Verse8 SDK에 닉네임 API 없음 → "플레이어" + 선택 캐릭터) / 재화 자리 (재화 시스템 없음)
-    const top = el('header', 'lb-top');
-    const logo = el('div', 'lb-logo');
-    logo.innerHTML = '<b>POP!</b><span>BATTLE</span>';
-    const profile = el('div', 'lb-profile');
-    const who = el('div', 'lb-profile-text');
-    who.append(el('b', 'lb-profile-name', '플레이어'), this.charNameEl);
-    profile.append(this.avatarEl, who);
-    const coin = el('div', 'lb-coin');
-    coin.innerHTML = `${ICON.coin}<span>재화 · 준비 중</span>`;
-    coin.title = '재화 시스템은 다음 단계에서 열려요';
-    const right = el('div', 'lb-top-right');
-    right.append(coin, profile);
-    top.append(logo, right);
-
-    const nav = this.nav;
-    for (const n of NAV) {
-      const b = button('', 'lb-nav-btn', () => this.toggle(n.id), `<span class="lb-nav-icon">${n.icon}</span><span class="lb-nav-label">${n.label}</span>`);
-      this.navButtons.set(n.id, b);
-      nav.appendChild(b);
+    this.characterPanel = new CharacterPanel(host, (character) => {
+      this.updateStageNameplate(character);
+      this.refresh();
+    });
+    this.roomListPanel = new RoomListPanel(host, () => this.show('create'));
+    const openPanel = (id: string) => this.show(id);
+    for (const panel of [
+      new PlayPanel(host, openPanel),
+      this.roomListPanel,
+      new CreateRoomPanel(host),
+      this.characterPanel,
+      new LoadoutPanel(host),
+      new ShopPanel(),
+      new SettingsPanel(host),
+    ]) {
+      this.panels.set(panel.id, panel);
     }
 
-    const play = button('', 'lb-play', () => this.toggle('play'), `<span class="lb-play-icon">${ICON.play}</span><span class="lb-play-label">PLAY</span>`);
-    this.navButtons.set('play', play);
+    this.menuButton = button('', 'lb-menu-button', () => this.toggleMenu(), `<span>${ICON.menu}</span><b>MENU</b><kbd>TAB</kbd>`);
+    this.menuButton.setAttribute('aria-label', '메뉴 열기');
+    this.menuButton.setAttribute('aria-expanded', 'false');
+    this.returnButton = button('', 'lb-return-button', () => this.host.returnToStart(), `${ICON.return}<span>처음 위치로</span><kbd>R</kbd>`);
+    this.returnButton.setAttribute('aria-label', '처음 위치로 돌아가기');
 
-    const head = el('div', 'lb-panel-head');
-    const close = button('', 'lb-close', () => this.show(null), ICON.close);
-    close.setAttribute('aria-label', '닫기');
-    head.append(this.panelTitle, close);
-    this.panelBox.append(head, this.panelBody);
+    this.nicknameEditor = this.buildNicknameModal();
 
-    this.root.append(top, nav, play, this.panelBox);
-    // 로비 위 조작은 게임(캔버스·포인터 잠금·터치 시작)으로 넘기지 않음
-    for (const t of ['pointerdown', 'mousedown', 'touchstart', 'click', 'wheel'] as const) this.root.addEventListener(t, (e) => e.stopPropagation(), { signal: this.abort.signal });
+    this.buildBar();
+    this.buildWindow();
+    this.buildHint();
+    this.root.append(this.nav, this.returnButton, this.controlHint, this.menuLayer, this.nicknameModal);
+
     window.addEventListener(
       'keydown',
-      (e) => {
-        if (this.visible && e.key === 'Escape' && this.open) this.show(null);
+      (event) => {
+        if (this.visible && this.nicknameOpen && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          this.nicknameEditor.input.focus();
+          return;
+        }
+        if (!this.visible || !this.menu || event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.closeMenu();
       },
-      { signal: this.abort.signal },
+      { capture: true, signal: this.abort.signal },
     );
     window.addEventListener('resize', () => this.layout(), { signal: this.abort.signal });
+
     container.appendChild(this.root);
+    this.resizeObserver = new ResizeObserver(() => this.reportPanel());
+    this.resizeObserver.observe(this.nav);
+    this.resizeObserver.observe(this.panelBox);
     this.layout();
+    this.setRoam({ touch: false, active: true });
     this.refresh();
   }
 
@@ -88,72 +133,394 @@ export class Lobby {
     return this.visible;
   }
 
+  get menuOpen(): boolean {
+    return this.menu;
+  }
+
+  /** 창을 연다. null과 알 수 없는 패널은 PLAY로 연다. */
+  openMenu(panel: string | null = null): void {
+    if (this.nicknameOpen) {
+      this.nicknameEditor.input.focus();
+      return;
+    }
+    const next = panel && this.panels.has(panel) ? panel : 'play';
+    const changed = !this.menu || this.open !== next;
+    this.menu = true;
+    this.root.classList.add('lb-menu-open', 'lb-panel-open');
+    this.menuLayer.inert = false;
+    this.menuLayer.setAttribute('aria-hidden', 'false');
+    this.menuButton.setAttribute('aria-label', '메뉴 닫기');
+    this.menuButton.setAttribute('aria-expanded', 'true');
+    if (changed) this.applyPanel(next);
+    this.host.menuChanged(true, next);
+  }
+
+  /** 창을 닫고 로비 이동을 즉시 다시 켠다. */
+  closeMenu(): void {
+    if (this.nicknameOpen) return;
+    if (!this.menu) return;
+    const previous = this.open;
+    if (previous === 'character') this.leaveCharacterWorkshop();
+    if (previous) this.panels.get(previous)?.deactivate?.();
+    this.open = null;
+    this.menu = false;
+    this.characterSuspended = false;
+    this.root.classList.remove('lb-menu-open', 'lb-panel-open', 'lb-character-open');
+    this.panelBox.classList.remove('lb-panel-in');
+    this.menuLayer.inert = true;
+    this.menuLayer.setAttribute('aria-hidden', 'true');
+    this.menuButton.setAttribute('aria-label', '메뉴 열기');
+    this.menuButton.setAttribute('aria-expanded', 'false');
+    this.markNavigation();
+    this.host.panelChanged(null);
+    this.host.menuChanged(false, null);
+  }
+
+  toggleMenu(): void {
+    if (this.menu) this.closeMenu();
+    else this.openMenu('play');
+  }
+
+  /** 터치 여부만 UI에 반영한다. 로비에는 이동 시작 안내나 포인터 잠금 안내가 없다. */
+  setRoam(state: LobbyRoamState): void {
+    if (state.touch === this.roamTouch && this.root.dataset.roamReady === 'true') return;
+    this.roamTouch = state.touch;
+    this.root.dataset.roamReady = 'true';
+    this.root.classList.toggle('lb-touch', state.touch);
+    if (!state.touch) this.replayHint();
+  }
+
   setVisible(on: boolean): void {
     if (on === this.visible) return;
+    if (!on) {
+      this.open && this.panels.get(this.open)?.deactivate?.();
+      if (this.open === 'character') {
+        this.leaveCharacterWorkshop();
+        this.characterSuspended = true;
+      }
+    }
     this.visible = on;
-    this.root.classList.toggle('hidden', !on);
+    this.root.classList.toggle('lb-hidden', !on);
+    this.menuLayer.inert = !on || !this.menu;
     if (on) {
-      this.root.classList.remove('enter');
-      void this.root.offsetWidth;
-      this.root.classList.add('enter');
+      this.syncRequiredNickname();
+      if (this.menu && this.open) {
+        if (this.open === 'character' && this.characterSuspended) {
+          this.characterSuspended = false;
+          this.renderPanel(this.characterPanel);
+        }
+        this.panels.get(this.open)?.activate?.();
+      }
       this.refresh();
+      this.replayHint();
     }
     this.reportPanel();
   }
 
-  /** 선택 캐릭터가 바뀌었으면 상단 정보 갱신 (주기적으로 호출, 바뀐 게 없으면 DOM 그대로) */
+  /** 매 프레임 호출되어도 실제 값이 달라진 요소만 갱신한다. */
   refresh(): void {
-    const cur = this.host.currentCharacter();
-    if (cur === this.lastChar) return;
-    this.lastChar = cur;
-    const c = this.host.characters().find((x) => x.id === cur);
-    this.charNameEl.textContent = c ? c.name : cur;
-    this.avatarEl.style.setProperty('--c', c?.color ?? '#5b8cff');
-    this.avatarEl.textContent = (c?.name ?? cur).slice(0, 1);
-  }
-
-  private toggle(id: string): void {
-    this.show(this.open === id ? null : id);
-  }
-
-  /** 패널 열기 (null = 닫기). 열 때마다 최신 상태로 다시 그림 */
-  show(id: string | null): void {
-    this.open = id;
-    for (const [k, b] of this.navButtons) b.classList.toggle('active', k === id);
-    const p = id ? this.panels.get(id) : undefined;
-    this.root.classList.toggle('panel-open', !!p);
-    if (p) {
-      this.panelTitle.textContent = p.title;
-      this.panelBody.textContent = '';
-      this.panelBody.scrollTop = 0;
-      p.render(this.panelBody);
-      this.panelBox.classList.remove('in');
-      void this.panelBox.offsetWidth;
-      this.panelBox.classList.add('in');
+    const player = this.host.playerName();
+    if (player !== this.lastPlayer) {
+      this.lastPlayer = player;
+      this.playerName.textContent = player;
+      this.playerName.title = player;
+      this.playerName.setAttribute('aria-label', `플레이어: ${player}`);
     }
+    const p = this.host.presence();
+    const presenceKey = `${p.status}:${p.count ?? ''}:${p.max ?? ''}`;
+    if (presenceKey !== this.lastPresence) {
+      this.lastPresence = presenceKey;
+      this.presence.className = `lb-presence lb-presence-${p.status}`;
+      // 인원은 실제 접속 완료(online)일 때만. 같은 로비 인원이지 전체 접속자 수가 아님
+      const [label, title] =
+        p.status === 'online'
+          ? [`LOBBY ${p.count ?? '-'}/${p.max ?? '-'}`, `같은 로비에 있는 인원 ${p.count ?? '-'}/${p.max ?? '-'} (전체 접속자 아님)`]
+          : p.status === 'connecting'
+            ? ['CONNECTING…', '로비 서버에 연결 중']
+            : p.status === 'reconnecting'
+              ? ['RECONNECTING…', '로비 서버에 다시 연결 중']
+              : p.status === 'disconnected'
+                ? ['DISCONNECTED', '로비 서버 연결이 끊겼어요 · 잠시 뒤 자동으로 다시 시도해요']
+                : ['오프라인', '이 빌드에는 멀티플레이 서버가 없어요'];
+      this.presenceLabel.textContent = label;
+      this.presence.title = title;
+      this.presence.setAttribute('aria-label', title);
+      this.presenceRetry.hidden = p.status !== 'disconnected';
+    }
+    const current = this.host.currentCharacter();
+    if (current !== this.lastChar) {
+      this.lastChar = current;
+      const character = this.host.characters().find((item) => item.id === current);
+      this.characterName.textContent = character?.name ?? '캐릭터';
+      this.characterDot.style.setProperty('--c', character?.color ?? '#5b8cff');
+    }
+    this.syncRequiredNickname();
+  }
+
+  show(id: string | null): void {
+    this.openMenu(id);
+  }
+
+  private buildBar(): void {
+    const brand = el('div', 'lb-nav-brand');
+    brand.setAttribute('aria-label', 'POP! BATTLE');
+    brand.innerHTML = '<b>POP!</b><span>BATTLE</span>';
+    const identity = el('div', 'lb-identity');
+    const player = el('span', 'lb-player-chip');
+    player.append(el('small', '', 'PLAYER'), this.playerName);
+    const character = el('span', 'lb-character-chip');
+    character.append(this.characterDot, this.characterName);
+    this.presence.append(this.presenceLabel, this.presenceRetry);
+    this.presenceRetry.hidden = true;
+    identity.append(player, character, this.presence);
+    this.nav.append(brand, identity);
+    for (const item of NAV) {
+      const navButton = button(
+        '',
+        `lb-nav-btn lb-nav-${item.id}`,
+        () => this.show(item.id),
+        `<span class="lb-nav-icon">${item.icon}</span><span class="lb-nav-label"><b>${item.label}</b><small>${item.korean}</small></span>${item.id === 'shop' ? '<i>SOON</i>' : ''}`,
+      );
+      navButton.setAttribute('aria-label', item.korean);
+      navButton.setAttribute('aria-pressed', 'false');
+      this.navButtons.set(item.id, navButton);
+      this.nav.append(navButton);
+    }
+    this.nav.append(this.menuButton);
+  }
+
+  private buildWindow(): void {
+    this.menuLayer.setAttribute('aria-hidden', 'true');
+    this.menuLayer.inert = true;
+    this.menuLayer.addEventListener(
+      'click',
+      (event) => {
+        event.stopPropagation();
+        if (event.target === this.menuLayer) this.closeMenu();
+      },
+      { signal: this.abort.signal },
+    );
+    for (const type of ['pointerdown', 'mousedown', 'touchstart', 'wheel'] as const) {
+      this.menuLayer.addEventListener(type, (event) => event.stopPropagation(), { signal: this.abort.signal });
+    }
+
+    const stagePlate = el('div', 'lb-stage-plate');
+    const stageCopy = el('span', 'lb-stage-copy');
+    stageCopy.append(this.stageName, this.stageRole);
+    stagePlate.append(stageCopy, this.stageBadges);
+    const stageTools = el('div', 'lb-stage-tools');
+    const reset = button('정면', 'lb-stage-reset', () => this.host.resetPreviewRotation());
+    stageTools.append(el('span', 'lb-stage-hint', '드래그해서 돌려 보기'), reset);
+    this.charStage.setAttribute('aria-label', '캐릭터 3D 미리보기 회전 영역');
+    this.charStage.append(stageTools, stagePlate);
+    this.bindStageDrag();
+
+    const close = button('', 'lb-panel-close', () => this.closeMenu(), `${ICON.close}<span>닫기</span>`);
+    close.setAttribute('aria-label', '창 닫기');
+    const panelHead = el('div', 'lb-panel-head');
+    panelHead.append(this.panelTitle, close);
+    this.panelBox.append(panelHead, this.panelBody);
+    this.panelBox.setAttribute('aria-live', 'polite');
+    this.menuLayer.append(this.charStage, this.panelBox);
+  }
+
+  private buildHint(): void {
+    this.controlHint.textContent = 'WASD 이동 · W 두 번 달리기 · Space 점프 · Shift 슬라이딩 · R 처음 위치로 · TAB 메뉴';
+    this.controlHint.addEventListener('mouseenter', () => this.replayHint(), { signal: this.abort.signal });
+  }
+
+  private buildNicknameModal(): NicknameEditor {
+    const titleId = 'lb-nickname-title';
+    this.nicknameModal.setAttribute('role', 'dialog');
+    this.nicknameModal.setAttribute('aria-modal', 'true');
+    this.nicknameModal.setAttribute('aria-labelledby', titleId);
+    this.nicknameModal.setAttribute('aria-hidden', 'true');
+    this.nicknameModal.inert = true;
+
+    // 입력 중인 키가 로비 이동·메뉴 단축키까지 전달되지 않게 모달 경계에서 막는다.
+    for (const eventName of ['keydown', 'keyup'] as const) {
+      this.nicknameModal.addEventListener(eventName, (event) => {
+        event.stopPropagation();
+        if (event.key === 'Escape') event.preventDefault();
+      }, { signal: this.abort.signal });
+    }
+    for (const eventName of ['pointerdown', 'mousedown', 'touchstart', 'wheel'] as const) {
+      this.nicknameModal.addEventListener(eventName, (event) => event.stopPropagation(), { signal: this.abort.signal });
+    }
+
+    const card = el('section', 'lb-nickname-card');
+    const eyebrow = el('span', 'lb-nickname-eyebrow', 'WELCOME TO POP! BATTLE');
+    const title = el('h2', 'lb-nickname-title', '닉네임을 정해 주세요');
+    title.id = titleId;
+    const copy = el('p', 'lb-nickname-copy', '다른 플레이어에게 보일 이름이에요. 나중에 SETTINGS에서 바꿀 수 있어요.');
+    const editor = nicknameEditor(this.host, {
+      buttonLabel: '확인',
+      onSuccess: () => {
+        this.closeRequiredNickname();
+        this.refresh();
+      },
+    });
+    card.append(eyebrow, title, copy, editor.root);
+    this.nicknameModal.appendChild(card);
+    return editor;
+  }
+
+  /** 저장된 이름이 없으면 필수 입력 창을 열고 게임 이동을 멈춘다. */
+  private syncRequiredNickname(): void {
+    if (!this.visible) return;
+    if (this.host.nickname() !== null) {
+      if (this.nicknameOpen) this.closeRequiredNickname();
+      return;
+    }
+    if (this.nicknameOpen) return;
+    if (this.menu) this.closeMenu();
+    this.nicknameOpen = true;
+    this.root.classList.add('lb-nickname-open');
+    this.nicknameModal.inert = false;
+    this.nicknameModal.setAttribute('aria-hidden', 'false');
+    this.host.menuChanged(true, 'nickname');
+    requestAnimationFrame(() => {
+      if (this.visible && this.nicknameOpen) this.nicknameEditor.input.focus();
+    });
+  }
+
+  private closeRequiredNickname(): void {
+    if (!this.nicknameOpen) return;
+    this.nicknameOpen = false;
+    this.root.classList.remove('lb-nickname-open');
+    this.nicknameModal.inert = true;
+    this.nicknameModal.setAttribute('aria-hidden', 'true');
+    this.host.menuChanged(false, null);
+  }
+
+  private replayHint(): void {
+    if (this.roamTouch) return;
+    this.controlHint.classList.remove('lb-control-hint-fade');
+    void this.controlHint.offsetWidth;
+    this.controlHint.classList.add('lb-control-hint-fade');
+  }
+
+  private applyPanel(next: string): void {
+    const previous = this.open;
+    if (previous && previous !== next) this.panels.get(previous)?.deactivate?.();
+    if (previous === 'character' && next !== 'character') this.leaveCharacterWorkshop();
+    this.open = next;
+    this.characterSuspended = false;
+    this.root.classList.toggle('lb-character-open', next === 'character');
+    this.markNavigation();
+    const panel = this.panels.get(next)!;
+    this.renderPanel(panel);
+    if (this.visible) panel.activate?.();
     this.reportPanel();
   }
 
-  /** 화면 크기 → 로비 배율 (높이 720px 기준 0.62~1.15) + 패널 폭 다시 알림 */
+  private renderPanel(panel: LobbyPanel): void {
+    if (panel.id === 'character') this.host.resetPreviewRotation();
+    this.panelTitle.textContent = panel.title;
+    this.panelBody.textContent = '';
+    this.panelBody.scrollTop = 0;
+    panel.render(this.panelBody);
+    this.panelBox.classList.remove('lb-panel-in');
+    void this.panelBox.offsetWidth;
+    this.panelBox.classList.add('lb-panel-in');
+    this.reportPanel();
+  }
+
+  private markNavigation(): void {
+    for (const [id, navButton] of this.navButtons) {
+      const active = this.menu && id === this.open;
+      navButton.classList.toggle('lb-active', active);
+      navButton.setAttribute('aria-pressed', String(active));
+    }
+    this.menuButton.classList.toggle('lb-active', this.menu);
+  }
+
   private layout(): void {
-    const lu = Math.min(1.15, Math.max(0.62, innerHeight / 720));
-    this.root.style.setProperty('--lu', lu.toFixed(3));
+    const scale = Math.min(1.08, Math.max(0.72, innerHeight / 720));
+    this.root.style.setProperty('--lu', scale.toFixed(3));
     this.reportPanel();
   }
 
-  /** 패널이 열리면 왼쪽 메뉴와 패널 사이 빈 공간 가운데 → 게임이 3D 캐릭터를 그곳으로 (닫히면 화면 가운데) */
+  /** CHARACTER에서만 시트 왼쪽 빈 영역의 가운데를 게임에 알린다. */
   private reportPanel(): void {
-    if (!this.visible || !this.open) {
+    this.layoutCharacterStage();
+    if (!this.visible || !this.menu || this.open !== 'character') {
       this.host.panelChanged(null);
       return;
     }
-    const left = this.nav.offsetLeft + this.nav.offsetWidth;
+    const scale = Number.parseFloat(getComputedStyle(this.root).getPropertyValue('--lu')) || 1;
+    const left = Math.max(8, 18 * scale);
     const right = this.panelBox.offsetLeft;
     this.host.panelChanged(right > left ? (left + right) / 2 : null);
   }
 
+  private layoutCharacterStage(): void {
+    if (!this.visible || !this.menu || this.open !== 'character') return;
+    const scale = Number.parseFloat(getComputedStyle(this.root).getPropertyValue('--lu')) || 1;
+    const gap = Math.max(6, 12 * scale);
+    const left = Math.max(8, 18 * scale);
+    const right = this.panelBox.offsetLeft - gap;
+    const top = this.nav.offsetTop + this.nav.offsetHeight + gap;
+    this.charStage.style.left = `${left}px`;
+    this.charStage.style.top = `${top}px`;
+    this.charStage.style.width = `${Math.max(0, right - left)}px`;
+    this.charStage.style.height = `${Math.max(0, this.root.clientHeight - top - gap)}px`;
+  }
+
+  private updateStageNameplate(character: LobbyCharacter): void {
+    this.stageName.textContent = character.name;
+    this.stageName.style.setProperty('--c', character.color);
+    this.stageRole.textContent = character.role;
+    this.stageBadges.textContent = '';
+    if (character.locked) {
+      const locked = el('span', 'lb-stage-badge lb-stage-locked');
+      locked.innerHTML = `${ICON.lock}<span>잠김</span>`;
+      this.stageBadges.appendChild(locked);
+    }
+    const equipped = character.id === this.host.currentCharacter();
+    this.stageBadges.appendChild(el('span', equipped ? 'lb-stage-badge lb-stage-equipped' : 'lb-stage-badge', equipped ? '장착 중' : '미리보기'));
+  }
+
+  private bindStageDrag(): void {
+    this.charStage.addEventListener('pointerdown', (event) => {
+      if (this.open !== 'character' || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      this.dragPointer = event.pointerId;
+      this.dragX = event.clientX;
+      this.charStage.classList.add('lb-dragging');
+      try { this.charStage.setPointerCapture(event.pointerId); } catch { /* 포인터 캡처 미지원 */ }
+      event.preventDefault();
+      event.stopPropagation();
+    }, { signal: this.abort.signal });
+    this.charStage.addEventListener('pointermove', (event) => {
+      if (event.pointerId !== this.dragPointer) return;
+      const dx = event.clientX - this.dragX;
+      this.dragX = event.clientX;
+      if (dx) this.host.rotatePreview(dx);
+      event.preventDefault();
+    }, { signal: this.abort.signal });
+    const finish = (event: PointerEvent) => {
+      if (event.pointerId !== this.dragPointer) return;
+      try { this.charStage.releasePointerCapture(event.pointerId); } catch { /* 이미 해제됨 */ }
+      this.dragPointer = null;
+      this.charStage.classList.remove('lb-dragging');
+    };
+    this.charStage.addEventListener('pointerup', finish, { signal: this.abort.signal });
+    this.charStage.addEventListener('pointercancel', finish, { signal: this.abort.signal });
+  }
+
+  private leaveCharacterWorkshop(): void {
+    this.characterPanel.close();
+    this.dragPointer = null;
+    this.charStage.classList.remove('lb-dragging');
+    this.host.previewCharacter(this.host.currentCharacter());
+    this.host.resetPreviewRotation();
+  }
+
   dispose(): void {
+    if (this.open === 'character') this.leaveCharacterWorkshop();
+    for (const panel of this.panels.values()) panel.dispose?.();
     this.abort.abort();
+    this.resizeObserver.disconnect();
     this.root.remove();
   }
 }

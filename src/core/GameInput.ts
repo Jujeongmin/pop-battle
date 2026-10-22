@@ -60,6 +60,16 @@ export class GameInput {
     }
   }
 
+  /**
+   * 메인 로비 조작 (커서 보이는 자유 이동): 키보드는 포인터 잠금 없이 이동 키만, 터치 기기는 조이스틱·점프·슬라이딩 레이어를 바로 켬.
+   * 끄면 키 모드만 끔 (매치 시작 쪽이 포인터 잠금·터치 조작을 새로 요청)
+   */
+  setLobbyControls(on: boolean): void {
+    this.kbm.setCursorKeys(on);
+    if (on && this.touchMode && !this.touch.active) this.touch.start();
+    if (on && !this.touchMode && this.touch.active) this.touch.stop();
+  }
+
   /** 프레임 시작: 두 입력을 합침. 터치 조이스틱이 움직이면 이동은 조이스틱(자동 달리기), 아니면 키보드 */
   beginFrame(): void {
     const k = this.kbm.state;

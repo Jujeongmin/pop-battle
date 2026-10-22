@@ -91,6 +91,8 @@ export class TouchInput {
   private readonly lastFire = { x: 0, y: 0 };
   private readonly abort = new AbortController();
   private settingsPanel: HTMLDivElement | null = null;
+  /** 메인 로비: 고정 카메라라 드래그 시점 회전 없음 */
+  private lobby = false;
 
   constructor(container: HTMLElement) {
     const opts = { signal: this.abort.signal };
@@ -228,6 +230,17 @@ export class TouchInput {
     this.buttons.get('ads')?.classList.toggle('on', on);
   }
 
+  /** 메인 로비 자유 이동: 사격·ADS·재장전·일시정지 버튼 숨김, 드래그 시점 회전 없음 (이동·점프·슬라이딩만, 메뉴는 로비 버튼) */
+  setLobbyMode(on: boolean): void {
+    this.lobby = on;
+    this.lookPointer = -1;
+    this.root.classList.toggle('lobby', on);
+    if (on) {
+      this.firePointer = -1;
+      this.state.fireHeld = false;
+    }
+  }
+
   /** 근접무기: 재장전·ADS 버튼 흐리게 */
   setMelee(on: boolean): void {
     this.root.classList.toggle('melee', on);
@@ -296,7 +309,7 @@ export class TouchInput {
       this.stick.style.left = `${x}px`;
       this.stick.style.top = `${y}px`;
       this.updateStick(e.clientX, e.clientY);
-    } else if (!leftZone && this.lookPointer < 0) {
+    } else if (!leftZone && this.lookPointer < 0 && !this.lobby) {
       this.lookPointer = e.pointerId;
       this.lastLook.x = e.clientX;
       this.lastLook.y = e.clientY;

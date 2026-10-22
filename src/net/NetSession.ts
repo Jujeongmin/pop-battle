@@ -84,8 +84,9 @@ export interface NetSessionEvents {
 export type LocalState = Omit<NetStatePacket, 'q' | 't' | 's' | 'h'>;
 
 export class NetSession {
-  readonly client = new NetClient();
   phase: RoomPhase = 'lobby';
+  /** 표시 닉네임 (방 입장 hello 때 서버에 보냄, 서버가 다시 검사) */
+  nick: string | null = null;
   slot = -1;
   /** 원격 계정별 보간 버퍼 */
   readonly remotes = new Map<string, SnapshotBuffer>();
@@ -133,7 +134,11 @@ export class NetSession {
   private respawnPending = false;
   private characterId = 'blue';
 
-  constructor(private readonly events: NetSessionEvents) {
+  /** client: 온라인 로비와 공유하는 연결 (같은 계정은 SDK 연결이 하나) */
+  constructor(
+    private readonly events: NetSessionEvents,
+    readonly client: NetClient = new NetClient(),
+  ) {
     this.client.onDisconnect = (r) => this.handleLeft(`게임 서버 연결 끊김${r ? ` (${r})` : ''}`);
     this.client.onRoomDisconnect = (r) => this.handleLeft(`룸 서버 연결 끊김${r ? ` (${r})` : ''}`);
     this.client.onStatus = () => this.events.onRoomInfo();
@@ -159,13 +164,24 @@ export class NetSession {
   }
 
   /**
-   * 화면 표시 이름 (킬로그·이름표·알림·결과). Verse8 SDK·문서에 닉네임 API가 없어(2026-10 확인) 자리+캐릭터로 만든 임시 이름.
-   * 계정(account)은 식별에만 쓰고 화면에 보이지 않음
+   * 화면 표시 이름 (킬로그·이름표·알림·결과): 서버가 검사해 저장한 표시 닉네임, 없으면 자리 번호.
+   * 계정(account)·캐릭터 id는 식별에만 쓰고 화면에 보이지 않음. 닉네임이 겹쳐도 서버·게임은 계정으로 구분
    */
   displayName(account: string): string {
     if (account === this.me) return '나';
+    return this.nickOf(account) ?? this.slotName(account);
+  }
+
+  /** 서버에 저장된 표시 닉네임 (없으면 null) */
+  nickOf(account: string): string | null {
     const p = this.players[account] ?? this.gone[account] ?? this.result?.standings.find((s) => s.account === account);
-    return p ? `P${p.slot + 1} ${p.char.toUpperCase()}` : '플레이어';
+    return p?.nick || null;
+  }
+
+  /** 닉네임이 없을 때 쓰는 자리 이름 (P1~P4) */
+  slotName(account: string): string {
+    const p = this.players[account] ?? this.gone[account] ?? this.result?.standings.find((s) => s.account === account);
+    return p ? `P${p.slot + 1}` : '플레이어';
   }
 
   /** 서버 시각 추정 (ms) */
@@ -341,7 +357,7 @@ export class NetSession {
       await this.client.joinRoom(roomId);
       this.subscribe();
       const t0 = Date.now();
-      const hello = await this.client.call<NetRoomState & { slot: number; now: number; reason?: string }>('hello', [characterId]);
+      const hello = await this.client.call<NetRoomState & { slot: number; now: number; reason?: string }>('hello', [characterId, this.nick ?? undefined]);
       this.serverClockOffset = hello.now - (t0 + Date.now()) / 2;
       if (hello.slot < 0) {
         const why = hello.reason && JOIN_ERRORS[hello.reason] ? hello.reason : 'full';

@@ -12,7 +12,7 @@ import type { Damageable, HitInfo, Physics } from '../physics/Physics';
 import type { PlayerAvatar } from '../player/PlayerAvatar';
 import { CONTROLLER_OFFSET } from '../player/PlayerController';
 import type { Sampled } from './SnapshotBuffer';
-import { NET_MODES } from './shared/protocol';
+import { poseRemoteAvatar } from './remotePose';
 
 const LABEL_MAX_DIST = 45;
 const _head = new THREE.Vector3();
@@ -122,36 +122,12 @@ export class RemotePlayer implements Damageable {
     if (this.hidden) return;
     const n = s.near;
     this.extrapolating = s.extrapolating;
-    this.renderFeet.set(s.p[0], s.p[1], s.p[2]);
-    this.velocity.set(s.v[0], s.v[1], s.v[2]);
-    this.aimDir.set(s.aim[0], s.aim[1], s.aim[2]);
     this.body.setTranslation({ x: s.p[0], y: s.p[1] + this.centerAboveFeet, z: s.p[2] }, true);
     if (n.w !== this.weaponId && WEAPONS[n.w]) this.equip(n.w);
     // 한 번만 일어나는 동작(점프·착지)은 그 패킷을 처음 그릴 때만
     const fresh = n.q !== this.lastFlagsSeq;
     this.lastFlagsSeq = n.q;
-    this.avatar.update({
-      dt,
-      feet: this.renderFeet,
-      bodyYaw: s.yaw,
-      aimDir: this.aimDir,
-      pitch: s.pitch,
-      mode: NET_MODES[n.m] ?? 'ground',
-      grounded: (n.f & 1) !== 0,
-      sprinting: (n.f & 2) !== 0,
-      velocity: this.velocity,
-      justJumped: fresh && (n.f & 16) !== 0,
-      justLanded: fresh && (n.f & 32) !== 0,
-      landedAirTime: 0.4,
-      dead: this.dead,
-      strafing: (n.f & 4) !== 0,
-      weaponKick: n.k,
-      weaponRaise: 1,
-      reloadProgress: n.rl,
-      adsBlend: n.ads,
-      meleeSwing: n.ms,
-      boltProgress: n.bp,
-    });
+    poseRemoteAvatar(this.avatar, s, dt, fresh, { feet: this.renderFeet, velocity: this.velocity, aimDir: this.aimDir }, this.dead);
     this.avatar.getMuzzle(this.muzzle, this.muzzleDir);
     if (!this.dead) this.hitboxes.update(this.avatar, this.renderFeet, this.centerAboveFeet);
     this.updateLabel(dt, camera);

@@ -7,7 +7,7 @@ export class ShopPanel implements LobbyPanel {
 
   render(body: HTMLElement): void {
     body.append(
-      comingSoon('캐릭터', 'WHITE·BLACK 같은 상위 캐릭터 해금'),
+      comingSoon('캐릭터', '새 캐릭터 해금 기능'),
       comingSoon('스킨', '캐릭터·무기 꾸미기'),
       comingSoon('재화', '게임 재화와 보상 (지금은 보유 재화 없음)'),
     );

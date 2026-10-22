@@ -58,6 +58,11 @@ export class KeyboardMouseInput {
   private wheelAccum = 0;
   private readonly abort = new AbortController();
   onLockChange: ((locked: boolean) => void) | null = null;
+  /**
+   * 로비 자유 이동 (커서 보이는 상태): 포인터 잠금 없이 이동·점프·슬라이딩 키를 받음. 마우스 시점·사격·포인터 잠금 요청은 없음.
+   * 글자 입력 칸에 포커스가 있으면 키를 받지 않음 (방 코드 입력 중 캐릭터가 움직이지 않게)
+   */
+  private cursorKeys = false;
 
   constructor(private readonly element: HTMLElement) {
     const opts = { signal: this.abort.signal };
@@ -75,6 +80,13 @@ export class KeyboardMouseInput {
 
   get isLocked(): boolean {
     return this.locked;
+  }
+
+  /** 로비 자유 이동 키 모드 켜기/끄기 (바뀌면 눌려 있던 키를 비워 키가 남지 않게) */
+  setCursorKeys(on: boolean): void {
+    if (on === this.cursorKeys) return;
+    this.cursorKeys = on;
+    this.onBlur();
   }
 
   requestLock(): void {
@@ -123,8 +135,9 @@ export class KeyboardMouseInput {
       e.preventDefault();
       return;
     }
-    if (!this.locked) return;
-    if (BLOCKED_KEYS.has(e.code)) e.preventDefault();
+    if (!this.locked && !(this.cursorKeys && !isTyping(e.target))) return;
+    // 로비(커서 모드)에서 TAB은 게임이 메뉴 단축키로 처리 (여기서 막지 않음)
+    if (BLOCKED_KEYS.has(e.code) && (this.locked || e.code !== 'Tab')) e.preventDefault();
     // 키 반복(길게 누름)은 새 입력이 아님 → 더블 탭으로 잘못 인식되지 않음
     if (e.repeat) return;
     this.keys.add(e.code);
@@ -146,6 +159,8 @@ export class KeyboardMouseInput {
   };
 
   private readonly onKeyUp = (e: KeyboardEvent): void => {
+    // 커서 모드: 포커스된 버튼이 Space 떼기로 눌리지 않게
+    if (this.cursorKeys && !this.locked && e.code === 'Space' && !isTyping(e.target)) e.preventDefault();
     if (e.code === 'KeyW' && this.keys.has('KeyW')) {
       // W를 떼면 달리기 즉시 해제, 이 시각부터 더블 탭 대기
       this.sprintLatched = false;
@@ -165,6 +180,8 @@ export class KeyboardMouseInput {
   };
 
   private readonly onMouseDown = (e: MouseEvent): void => {
+    // 로비: 화면 클릭으로 포인터 잠금·사격하지 않음 (커서로 UI 조작)
+    if (this.cursorKeys && !this.locked) return;
     if (!this.locked) {
       // 첫 클릭은 포인터 잠금만 하고 사격/조준하지 않는다
       this.requestLock();
@@ -210,4 +227,12 @@ export class KeyboardMouseInput {
     this.state.fireHeld = this.locked && this.mouseLeft;
     this.onLockChange?.(this.locked);
   };
+}
+
+/** 글자 입력 중인 요소 (방 코드 입력 칸 등) — 게임 키로 쓰지 않음 */
+function isTyping(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  return el.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button'].includes((el as HTMLInputElement).type);
 }

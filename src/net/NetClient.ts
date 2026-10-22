@@ -124,6 +124,11 @@ export class NetClient {
   /** 연결이 끊김 (서버·네트워크) */
   onDisconnect: ((reason: string) => void) | null = null;
   onRoomDisconnect: ((reason: string) => void) | null = null;
+  /**
+   * 추가 구독자 (온라인 로비): 같은 계정은 SDK 연결이 하나뿐이라 로비·매치가 이 클라이언트를 함께 씀.
+   * 의도적인 퇴장(leaveRoom·다른 룸 joinRoom)은 SDK가 끊김 알림을 보내지 않음 → 실제 끊김에만 불림
+   */
+  readonly listeners = new Set<{ onDisconnect?(reason: string): void; onRoomDisconnect?(reason: string): void }>();
 
   constructor() {
     if (!this.configured) {
@@ -172,6 +177,15 @@ export class NetClient {
 
   /** 게임 서버 연결 (verse가 없으면 시도하지 않음 — 공용 'default' verse에 붙지 않게) */
   async connect(): Promise<boolean> {
+    // 로비·매치가 동시에 연결을 요청해도 연결은 하나 (진행 중이면 같은 결과를 기다림)
+    if (this.connecting) return this.connecting;
+    this.connecting = this.connectOnce().finally(() => (this.connecting = null));
+    return this.connecting;
+  }
+
+  private connecting: Promise<boolean> | null = null;
+
+  private async connectOnce(): Promise<boolean> {
     if (!this.configured) {
       this.setStatus('no-verse', 'VITE_AGENT8_VERSE 없음 — 배포 후 생성되는 .env 필요 (docs/MULTIPLAYER_TEST.md)');
       return false;
@@ -192,11 +206,13 @@ export class NetClient {
         onDisconnect: (code, reason) => {
           this.setStatus('disconnected', `code ${code ?? '-'} ${reason ?? ''}`.trim());
           this.onDisconnect?.(reason ?? String(code ?? ''));
+          for (const l of this.listeners) l.onDisconnect?.(reason ?? String(code ?? ''));
         },
         onError: (e) => this.addLog('error', `GS 오류: ${errText(e)}`),
         onRsDisconnect: (code, reason) => {
           this.addLog('warn', `룸 서버 연결 끊김 code ${code ?? '-'} ${reason ?? ''}`);
           this.onRoomDisconnect?.(reason ?? String(code ?? ''));
+          for (const l of this.listeners) l.onRoomDisconnect?.(reason ?? String(code ?? ''));
         },
         onRsError: (e) => this.addLog('error', `RS 오류: ${errText(e)}`),
       });
@@ -223,6 +239,8 @@ export class NetClient {
 
   async joinRoom(roomId: string): Promise<void> {
     const s = this.requireServer();
+    // 다른 룸(로비 ↔ 매치)의 구독이 남아 있으면 먼저 해제 (같은 콜백이 두 번 걸리거나 새 구독이 풀리지 않게)
+    for (const off of this.offs.splice(0)) off();
     await s.joinRoom(roomId);
     this.roomId = roomId;
     this.addLog('info', `룸 입장 ${roomId}`);

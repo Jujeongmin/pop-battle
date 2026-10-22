@@ -627,3 +627,202 @@ describe('match timer and reconnection', () => {
     expect(slots).toEqual([0, 1, 2, 3]);
   });
 });
+
+// ---------------- 온라인 로비 (lb- 룸) · 방 목록 · 닉네임 ----------------
+
+const HUB = 'lb-1';
+
+/** 로비 위치 패킷: [순번, 시각, x, y, z, 방향, vx, vy, vz, 모드, 비트] */
+function hubPkt(q: number, x: number, y: number, z: number): number[] {
+  return [q, q * 125, x, y, z, 0, 0, 0, 0, 0, 1];
+}
+
+async function hubUser(server: any, account: string): Promise<any> {
+  server.connect({ account, roomId: HUB });
+  const st = await server.hubState();
+  return st.users.find((u: any) => u.account === account);
+}
+
+describe('online lobby (hub)', () => {
+  test('hubFind: same lobby for the same account, 8 per lobby, 9th goes to lb-2', async (server) => {
+    const accs = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7', 'h8'];
+    for (const a of accs) {
+      server.connect({ account: a, roomId: '__no_room__' });
+      expect((await server.hubFind()).roomId).toBe('lb-1');
+    }
+    // 같은 계정이 다시 찾으면 같은 로비 (중복 입장·재접속)
+    server.connect({ account: 'h3', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-1');
+    server.connect({ account: 'h9', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-2');
+  });
+
+  test('hubFind counts real users already in the lobby', async (server) => {
+    for (const a of ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8']) await server.simulateJoin(HUB, a);
+    server.connect({ account: 'r9', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-2');
+    // 이미 lb-1에 있는 계정은 그대로 lb-1
+    server.connect({ account: 'r2', roomId: '__no_room__' });
+    expect((await server.hubFind()).roomId).toBe('lb-1');
+  });
+
+  test('hubHello: character id checked, nickname sanitized, spawn state stored', async (server) => {
+    await server.simulateJoin(HUB, 'alice');
+    server.connect({ account: 'alice', roomId: HUB });
+    expect((await server.hubHello({ c: 'nope', n: 'Alice' })).reason).toBe('bad_char');
+    const ok = await server.hubHello({ c: 'pink', n: '  앨리스  짱 ' });
+    expect(ok.ok).toBe(true);
+    const u = await hubUser(server, 'alice');
+    expect(u.c).toBe('pink');
+    expect(u.n).toBe('앨리스 짱');
+    expect(u.p[2]).toBe(0);
+    expect(u.p[3]).toBe(36);
+    // HTML·제어 문자·너무 긴 이름은 저장하지 않음
+    server.connect({ account: 'alice', roomId: HUB });
+    expect((await server.hubInfo({ n: '<b>x</b>' })).reason).toBe('bad_nick');
+    expect((await server.hubInfo({ n: 'abc' + String.fromCharCode(7) + 'def' })).reason).toBe('bad_nick');
+    expect((await server.hubInfo({ n: 'a'.repeat(13) })).reason).toBe('bad_nick');
+    expect((await server.hubInfo({ c: 'black' })).ok).toBe(true);
+    expect((await hubUser(server, 'alice')).c).toBe('black');
+  });
+
+  test('hubHello rejects the 9th user in one lobby', async (server) => {
+    for (const a of ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9']) await server.simulateJoin(HUB, a);
+    server.connect({ account: 'a9', roomId: HUB });
+    expect((await server.hubHello({ c: 'blue', n: 'nine' })).reason).toBe('full');
+  });
+
+  test('hubMove: normal moves accepted; too fast, too frequent, out of bounds rejected; return to spawn allowed', async (server) => {
+    await server.simulateJoin(HUB, 'bob');
+    server.connect({ account: 'bob', roomId: HUB });
+    await server.hubHello({ c: 'blue', n: 'Bob' });
+    spin(80);
+    await server.hubMove(hubPkt(1, 0, 36, 4));
+    expect((await hubUser(server, 'bob')).p[4]).toBe(4);
+    // 바로 다시 보내면(최소 간격 안) 버림
+    server.connect({ account: 'bob', roomId: HUB });
+    await server.hubMove(hubPkt(2, 0, 36, 3.9));
+    expect((await hubUser(server, 'bob')).p[4]).toBe(4);
+    // 0.1초에 20m = 순간이동 → 버림
+    spin(100);
+    server.connect({ account: 'bob', roomId: HUB });
+    await server.hubMove(hubPkt(3, 0, 36, -16));
+    expect((await hubUser(server, 'bob')).p[4]).toBe(4);
+    // 정상 속도 (0.1초에 0.8m, 점프 높이)
+    spin(100);
+    server.connect({ account: 'bob', roomId: HUB });
+    await server.hubMove(hubPkt(4, 0, 37, 3.2));
+    expect((await hubUser(server, 'bob')).p[4]).toBe(3.2);
+    // 로비 밖 좌표 → 버림
+    spin(100);
+    server.connect({ account: 'bob', roomId: HUB });
+    await server.hubMove(hubPkt(5, 80, 36, 0));
+    expect((await hubUser(server, 'bob')).p[2]).toBe(0);
+    // 높은 곳에서 시작 지점으로 복귀 (R·낙하) → 허용
+    spin(100);
+    server.connect({ account: 'bob', roomId: HUB });
+    await server.hubMove(hubPkt(6, 0, 36, 5));
+    expect((await hubUser(server, 'bob')).p[4]).toBe(5);
+    // 잘못된 형식
+    spin(100);
+    server.connect({ account: 'bob', roomId: HUB });
+    await server.hubMove([1, 2, 3]);
+    await server.hubMove(['a', 1, 0, 36, 0, 0, 0, 0, 0, 0, 1]);
+    expect((await hubUser(server, 'bob')).p[4]).toBe(5);
+  });
+
+  test('match functions are rejected inside a lobby room', async (server) => {
+    await server.simulateJoin(HUB, 'carol');
+    server.connect({ account: 'carol', roomId: HUB });
+    let threw = false;
+    try {
+      await server.hello('blue');
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(true);
+    expect((await server.startMatch()).reason).toBe('not_in_room');
+    expect((await server.setMode('tdm')).reason).toBe('not_in_room');
+    expect((await server.selfDeath('fall')).ok).toBe(false);
+    expect((await server.respawn()).ok).toBe(false);
+    expect((await server.bye()).ok).toBe(false);
+  });
+
+  test('lobby functions are rejected inside a match room', async (server) => {
+    await server.simulateJoin(ROOM, 'dave');
+    server.connect({ account: 'dave', roomId: ROOM });
+    expect((await server.hubHello({ c: 'blue' })).reason).toBe('not_in_hub');
+    expect((await server.hubState()).ok).toBe(false);
+  });
+
+  test('disconnect hides the user (x = 1); next move shows again; hubBye hides at once', async (server) => {
+    await server.simulateJoin(HUB, 'erin');
+    await server.simulateJoin(HUB, 'finn');
+    server.connect({ account: 'erin', roomId: HUB });
+    await server.hubHello({ c: 'yellow', n: 'Erin' });
+    await server.simulateDisconnect(HUB, 'erin');
+    expect((await hubUser(server, 'erin')).x).toBe(1);
+    spin(80);
+    server.connect({ account: 'erin', roomId: HUB });
+    await server.hubMove(hubPkt(1, 0, 36, 4.5));
+    expect((await hubUser(server, 'erin')).x).toBe(0);
+    server.connect({ account: 'erin', roomId: HUB });
+    expect((await server.hubBye()).ok).toBe(true);
+    expect((await hubUser(server, 'erin')).x).toBe(1);
+  });
+});
+
+describe('room list and nicknames', () => {
+  test('listRooms shows match rooms with players, mode, phase and joinability; lobby rooms are not listed', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    await server.simulateJoin(ROOM, 'bob');
+    for (const a of ['c1', 'c2', 'c3', 'c4']) await server.simulateJoin('pb-full01', a);
+    await server.simulateJoin(HUB, 'lobbyguy');
+    server.connect({ account: 'zed', roomId: '__no_room__' });
+    const r = await server.listRooms();
+    expect(r.ok).toBe(true);
+    const ids = r.rooms.map((x: any) => x.roomId);
+    expect(ids.includes(ROOM)).toBe(true);
+    expect(ids.includes('pb-full01')).toBe(true);
+    expect(ids.some((id: string) => id.startsWith('lb-'))).toBe(false);
+    const open = r.rooms.find((x: any) => x.roomId === ROOM);
+    expect(open.players).toBe(2);
+    expect(open.max).toBe(4);
+    expect(open.phase).toBe('lobby');
+    expect(open.joinable).toBe(true);
+    const full = r.rooms.find((x: any) => x.roomId === 'pb-full01');
+    expect(full.joinable).toBe(false);
+    expect(full.reason).toBe('full');
+    // 들어갈 수 있는 방이 먼저
+    expect(r.rooms[0].roomId).toBe(ROOM);
+  });
+
+  test('room list works from inside a lobby room (no need to leave the lobby to browse)', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    await server.simulateJoin(HUB, 'walker');
+    server.connect({ account: 'walker', roomId: HUB });
+    const r = await server.listRooms();
+    expect(r.ok).toBe(true);
+    expect(r.rooms.length).toBe(1);
+    expect(r.rooms[0].roomId).toBe(ROOM);
+    expect(r.rooms[0].joinable).toBe(true);
+    // 코드 확인(findRoom)도 로비 룸 안에서 가능
+    expect((await server.findRoom(ROOM)).ok).toBe(true);
+  });
+
+  test('empty server lists no rooms', async (server) => {
+    server.connect({ account: 'zed', roomId: '__no_room__' });
+    expect((await server.listRooms()).rooms.length).toBe(0);
+  });
+
+  test('hello stores a sanitized nickname; invalid nickname is ignored', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.hello('blue', ' 뽀삐  ');
+    server.connect({ account: 'bob', roomId: ROOM });
+    const h = await server.hello('pink', '<script>');
+    expect(h.players.alice.nick).toBe('뽀삐');
+    expect(h.players.bob.nick).toBe(undefined);
+  });
+});
