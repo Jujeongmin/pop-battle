@@ -171,6 +171,8 @@
   /* 트랙 내용 높이 8px의 가운데: (8 - 32) / 2 */
   margin-top: -12px;
   border: 0;
+  /* 예전 동그란 핸들 규칙(border-radius 50%)이 이미지 아래 모서리를 타원으로 잘라 내던 것 초기화 */
+  border-radius: 0;
   background: url('./kenney/slide_handle.png') center / 24px 32px no-repeat;
   box-shadow: none;
 }
