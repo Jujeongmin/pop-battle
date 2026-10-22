@@ -76,6 +76,8 @@ export interface LobbyHost {
   settings(): { sound: LobbySlider[]; controls: LobbySlider[]; touch: LobbySlider[] };
   /** 패널·메뉴를 피한 빈 공간의 가로 가운데 (px, null = 화면 가운데) → 3D 캐릭터를 그곳에 */
   panelChanged(centerX: number | null): void;
+  /** 로비 위쪽 UI(방 목록 칸)의 아래 끝 (px, null = 없음) → 3D 캐릭터가 그 아래에 보이게 화면을 내림 (카메라·조작은 그대로) */
+  uiBottomChanged(bottom: number | null): void;
   /**
    * TAB 메뉴가 열리거나 닫히거나 패널이 바뀔 때마다 (open = 메뉴 열림, panel = 열린 패널 id, 메뉴 첫 화면이면 null).
    * 사용자 동작(클릭·키) 처리 안에서 바로 불러야 함: 닫힐 때 게임이 포인터 잠금·터치 조작을 다시 켬 (브라우저는 사용자 동작 안에서만 허용).
@@ -106,6 +108,8 @@ export interface LobbyHost {
   createRoom(mode: NetMode): void;
   /** 코드로 참가 → 기존 멀티 흐름(대기실 화면)으로 */
   joinRoom(code: string): void;
+  /** 빠른 시작 (기존 서버 자동 참가 quickMatch) → 기존 멀티 흐름으로 */
+  quickMatch(): void;
 }
 
 /** 닉네임 저장 결과. rate일 때 retryMs = 서버(또는 이 기기 저장)가 알려 준 남은 시간 (모르면 없음) */

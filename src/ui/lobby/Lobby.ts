@@ -122,6 +122,7 @@ export class Lobby {
     this.resizeObserver = new ResizeObserver(() => this.reportPanel());
     this.resizeObserver.observe(this.nav);
     this.resizeObserver.observe(this.panelBox);
+    this.resizeObserver.observe(this.roomDock);
     this.layout();
     this.setRoam({ touch: false, active: true });
     this.refresh();
@@ -267,27 +268,25 @@ export class Lobby {
     this.presence.hidden = true;
     identity.append(this.playerName, this.presence);
     status.append(brand, identity);
-    // 상단 고정 메뉴 2줄: [로고 · 캐릭터 · 장비 · 상점 · 설정] / [게임 시작 · 방 목록 · 방 만들기] (화면 가로 전체)
-    // 예전 MENU 버튼·메뉴 창은 없앰. 누르면 해당 창이 열리고, 다른 메뉴를 누르면 그 창으로 바뀜
+    // 상단: [로고 · 캐릭터 · 장비 · 상점 · 설정]. 게임 시작·방 만들기는 그 아래 방 목록 칸 머리에 (예전 큰 버튼 줄·MENU 창 없음)
     const icons = el('div', 'lb-top-icons');
-    const main = el('div', 'lb-top-main');
     for (const item of NAV) {
-      const isMain = item.id === 'play' || item.id === 'rooms' || item.id === 'create';
+      if (item.id === 'play' || item.id === 'create') continue;
       const navButton = button(
         '',
-        `lb-top-btn ${isMain ? 'lb-top-main-btn' : 'lb-top-icon-btn'} lb-top-${item.id}`,
+        `lb-top-btn lb-top-icon-btn lb-top-${item.id}`,
         () => (this.menu && this.open === item.id ? this.closeMenu() : this.show(item.id)),
         `<span class="lb-top-icon">${item.icon}</span><b>${item.korean}</b>`,
       );
       navButton.setAttribute('aria-label', item.korean);
       navButton.setAttribute('aria-pressed', 'false');
       this.navButtons.set(item.id, navButton);
-      (isMain ? main : icons).append(navButton);
+      icons.append(navButton);
     }
     const row = el('div', 'lb-top-row');
     row.append(status, icons);
     this.nav.classList.add('lb-topbar');
-    this.nav.append(row, main);
+    this.nav.append(row);
   }
 
   private buildWindow(): void {
@@ -342,6 +341,7 @@ export class Lobby {
     this.roomDock.hidden = !on;
     if (on) this.roomListPanel.activate();
     else this.roomListPanel.deactivate();
+    this.reportPanel();
   }
 
   private buildHint(): void {
@@ -477,6 +477,8 @@ export class Lobby {
     this.root.style.setProperty('--lb-nav-bottom', `${this.nav.offsetTop + this.nav.offsetHeight}px`);
     this.root.style.setProperty('--lb-nav-right', `${Math.max(0, this.root.clientWidth - this.nav.offsetLeft - this.nav.offsetWidth)}px`);
     this.layoutCharacterStage();
+    // 방 목록 칸 아래 끝 → 게임이 캐릭터를 그 아래에 보이게
+    this.host.uiBottomChanged(this.visible && this.dockOn ? this.roomDock.offsetTop + this.roomDock.offsetHeight : null);
     if (!this.visible || !this.menu || this.open !== 'character') {
       this.host.panelChanged(null);
       return;

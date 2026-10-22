@@ -273,6 +273,9 @@ export class Game {
   private lobbyTime = 0;
   /** 로비 3D 캐릭터를 둘 화면 가로 위치 (px, 패널·메뉴를 피한 빈 공간 가운데, null = 화면 가운데) / 지금 적용된 화면 이동량 */
   private lobbyCenterX: number | null = null;
+  /** 로비 방 목록 칸 아래 끝 (px) / 그만큼 화면을 내린 양 (view offset, 부드럽게) */
+  private lobbyUiBottom: number | null = null;
+  private lobbyLift = 0;
   private lobbyShift = 0;
   /** 사용자 설정 (소리·마우스 감도, 이 기기 저장) */
   private readonly userSettings = loadUserSettings();
@@ -1675,6 +1678,7 @@ export class Game {
       },
       settings: () => this.settingSliders(),
       panelChanged: (centerX) => (this.lobbyCenterX = centerX),
+      uiBottomChanged: (bottom) => (this.lobbyUiBottom = bottom),
       menuChanged: (open, panel) => this.onLobbyMenu(open, panel),
       // 표시용 닉네임: 서버(계정별 글로벌 사용자 상태)가 최종 검사·저장, 이 기기에도 사본 (서버 식별은 계정)
       playerName: () => this.nick ?? '플레이어',
@@ -1686,6 +1690,7 @@ export class Game {
       listRooms: () => this.listRooms(),
       createRoom: (mode) => this.mpMenu?.createNow(mode),
       joinRoom: (code) => this.mpMenu?.joinNow(code),
+      quickMatch: () => this.mpMenu?.quickMatchNow(),
     };
   }
 
@@ -1989,11 +1994,35 @@ export class Game {
     this.showcaseBlend = THREE.MathUtils.clamp(this.showcaseBlend + (want ? dt : -dt) / 0.4, 0, 1);
     if (this.showcaseBlend > 0) {
       this.updateLobbyCamera(cam, dt, THREE.MathUtils.smootherstep(this.showcaseBlend, 0, 1));
-    } else if (this.preview || this.previewBuilding || cam.view?.enabled) {
-      this.disposePreview();
-      cam.clearViewOffset();
+    } else {
+      if (this.preview || this.previewBuilding) this.disposePreview();
       this.lobbyShift = 0;
+      this.applyLobbyLift(cam, dt);
     }
+  }
+
+  /**
+   * 로비 자유 이동: 위쪽 방 목록 칸이 캐릭터를 가리지 않게 화면(view offset)만 아래로 내림.
+   * 카메라 위치·방향·이동·조작은 그대로 (화면에 그리는 위치만). 서 있는 캐릭터 머리가 칸 아래 + 여유에 오도록, 발은 화면 안
+   */
+  private applyLobbyLift(cam: THREE.PerspectiveCamera, dt: number): void {
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    let want = 0;
+    if (this.lobbyShown && !this.lobbyMenuOpen && this.lobbyUiBottom !== null && h > 0) {
+      const f = this.renderFeet;
+      // 지금 화면의 y(px)에서 지금 내린 양을 빼면 내리기 전 위치
+      const headY = (1 - (_v1.set(f.x, f.y + LOBBY_FRAME_HEIGHT, f.z).project(cam).y + 1) / 2) * h - this.lobbyLift;
+      const feetY = (1 - (_v1.set(f.x, f.y, f.z).project(cam).y + 1) / 2) * h - this.lobbyLift;
+      want = THREE.MathUtils.clamp(this.lobbyUiBottom + 14 - headY, 0, Math.max(0, h - 18 - feetY));
+    }
+    this.lobbyLift += (want - this.lobbyLift) * (1 - Math.exp(-6 * dt));
+    if (want === 0 && Math.abs(this.lobbyLift) < 0.5) {
+      this.lobbyLift = 0;
+      if (cam.view?.enabled) cam.clearViewOffset();
+      return;
+    }
+    cam.setViewOffset(w, h, 0, -this.lobbyLift, w, h);
   }
 
   /**
@@ -2365,6 +2394,13 @@ export class Game {
           net.session.cancelReconnect();
           this.netLeftByUser = false;
           if (await net.session.joinByCode(this.avatar.character.id, code)) this.enterNetGame();
+        }),
+      quickMatch: () =>
+        this.withHubPaused(async () => {
+          const net = this.ensureNet();
+          net.session.cancelReconnect();
+          this.netLeftByUser = false;
+          if (await net.session.quickMatch(this.avatar.character.id)) this.enterNetGame();
         }),
       rejoin: () =>
         this.withHubPaused(async () => {

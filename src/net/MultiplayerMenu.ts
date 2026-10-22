@@ -28,6 +28,8 @@ export interface MultiplayerMenuHost {
   localTeam(): NetTeam | null;
   create(mode: NetMode): Promise<void>;
   join(code: string): Promise<void>;
+  /** 빠른 시작: 서버 quickMatch가 고른 방(사람이 있는 대기 방, 없으면 새 방)으로 */
+  quickMatch(): Promise<void>;
   setMode(mode: NetMode): Promise<void>;
   switchTeam(): Promise<void>;
   /** timeLimitSec: 개발 빌드 테스트용 제한 시간 (없으면 모드 규칙) */
@@ -121,6 +123,12 @@ export class MultiplayerMenu {
   joinNow(code: string): void {
     this.open();
     void this.run(() => this.host.join(code));
+  }
+
+  /** 로비 빠른 시작: 바로 자동 참가 */
+  quickMatchNow(): void {
+    this.open();
+    void this.run(() => this.host.quickMatch());
   }
 
   /** 로비 "이전 방 다시 입장" */
