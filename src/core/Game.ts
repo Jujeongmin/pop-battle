@@ -2002,8 +2002,9 @@ export class Game {
   }
 
   /**
-   * 로비 자유 이동: 위쪽 방 목록 칸이 캐릭터를 가리지 않게 화면(view offset)만 아래로 내림.
-   * 카메라 위치·방향·이동·조작은 그대로 (화면에 그리는 위치만). 서 있는 캐릭터 머리가 칸 아래 + 여유에 오도록, 발은 화면 안
+   * 로비 자유 이동: 위쪽 방 목록 칸 아래에 남는 3D 영역의 가운데에 내 캐릭터가 오도록 화면(view offset)만 아래로 내림.
+   * 카메라 위치·방향은 그대로라 이동 방향·조작·월드 좌표는 바뀌지 않음 (그리는 위치만). 칸 높이·화면 크기가 바뀌면 매 프레임 다시 계산.
+   * 머리는 칸 아래, 발은 화면 안을 넘지 않게 제한
    */
   private applyLobbyLift(cam: THREE.PerspectiveCamera, dt: number): void {
     const w = this.container.clientWidth;
@@ -2012,9 +2013,16 @@ export class Game {
     if (this.lobbyShown && !this.lobbyMenuOpen && this.lobbyUiBottom !== null && h > 0) {
       const f = this.renderFeet;
       // 지금 화면의 y(px)에서 지금 내린 양을 빼면 내리기 전 위치
-      const headY = (1 - (_v1.set(f.x, f.y + LOBBY_FRAME_HEIGHT, f.z).project(cam).y + 1) / 2) * h - this.lobbyLift;
+      // 캐릭터마다 실제 키 (머리 끝)
+      const top = Math.max(f.y + 0.6, this.avatar.headCenter.y + this.avatar.headRadius);
+      const headY = (1 - (_v1.set(f.x, top, f.z).project(cam).y + 1) / 2) * h - this.lobbyLift;
       const feetY = (1 - (_v1.set(f.x, f.y, f.z).project(cam).y + 1) / 2) * h - this.lobbyLift;
-      want = THREE.MathUtils.clamp(this.lobbyUiBottom + 14 - headY, 0, Math.max(0, h - 18 - feetY));
+      // 남은 영역 가운데 = (칸 아래 끝 + 화면 아래 끝) / 2 에 캐릭터 몸 가운데
+      const areaMid = (this.lobbyUiBottom + h) / 2;
+      const center = areaMid - (headY + feetY) / 2;
+      const min = this.lobbyUiBottom + 10 - headY;
+      const max = h - 12 - feetY;
+      want = Math.max(0, max >= min ? THREE.MathUtils.clamp(center, min, max) : min);
     }
     this.lobbyLift += (want - this.lobbyLift) * (1 - Math.exp(-6 * dt));
     if (want === 0 && Math.abs(this.lobbyLift) < 0.5) {

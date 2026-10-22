@@ -19,7 +19,9 @@
   border-color: transparent;
   border-width: 8px 8px 11px;
   border-image: var(--k-white) var(--k-slice) / 8px 8px 11px 8px stretch;
-  background: none;
+  /* 불투명 바탕 (테두리 이미지 안쪽까지 꽉 채워 뒤 3D 장면이 비치지 않게) */
+  background: #fffdf7;
+  background-clip: padding-box;
   pointer-events: auto;
   transform: translateX(-50%);
 }
