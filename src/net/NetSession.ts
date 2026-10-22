@@ -93,6 +93,8 @@ export class NetSession {
   players: NetPlayers = {};
   rejected = 0;
   lastRejectReason = '';
+  /** 디버그: 서버가 거부한 명중 사유별 수 */
+  readonly rejectCounts: Record<string, number> = {};
   /** 서버 시각 - 로컬 Date.now (hello·ping 때 갱신, 카운트다운·남은 시간 계산용) */
   serverClockOffset = 0;
   /** 서버 룸: 방장·게임 모드·매치 단계·GO 시각·종료 시각·팀 점수·결과·나간 사람 기록 */
@@ -451,6 +453,7 @@ export class NetSession {
     });
     c.onRoomMessage<{ r: NetRejected[] }>('rej', (m) => {
       this.rejected += m.r.length;
+      for (const x of m.r) this.rejectCounts[x.reason] = (this.rejectCounts[x.reason] ?? 0) + 1;
       this.lastRejectReason = m.r.map((x) => `${x.w}→${x.reason}`).join(', ');
       c.addLog('warn', `서버가 명중 거부: ${this.lastRejectReason}`);
     });

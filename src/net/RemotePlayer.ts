@@ -38,6 +38,13 @@ export class RemotePlayer implements Damageable {
   /** 디버그: 이번 프레임 외삽 중 / 받은 상태가 아직 없음 */
   extrapolating = false;
   hasState = false;
+  /**
+   * 디버그: 화면에 그린 발 위치와 가장 최근에 받은 상태의 발 위치 차이 (m).
+   * 서버 명중 검사는 서버가 가진 최신 위치를 쓰므로, 이 값이 "보이는 상대 위치 ↔ 서버 기준 위치" 차이의 하한
+   */
+  displayGapM = 0;
+  /** 디버그: 보간 여유 (ms, 최신 스냅샷 - 화면 시점). 음수면 외삽 */
+  bufferLeadMs = 0;
   private weaponId = '';
   private readonly weaponClones = new Map<string, THREE.Object3D>();
   private lastFlagsSeq = -1;

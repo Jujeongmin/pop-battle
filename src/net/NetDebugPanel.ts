@@ -78,6 +78,7 @@ export class NetDebugPanel {
     btn('통계 초기화', () => {
       c.counters.reset();
       s.rejected = 0;
+      for (const k of Object.keys(s.rejectCounts)) delete s.rejectCounts[k];
       mode.confirmedHits = mode.confirmedKills = mode.remoteShotsShown = 0;
     });
 
@@ -137,14 +138,17 @@ export class NetDebugPanel {
       `받음: 상태 ${k.recvStates} · 메시지 ${k.recvMessages} · ${kb(k.recvBytes)}`,
       `(바이트 = JSON 길이 추정, SDK 실제 전송량과 다를 수 있음)`,
       `서버 판정: 확정 명중 ${this.mode.confirmedHits} · 확정 처치 ${this.mode.confirmedKills} · 거부 ${s.rejected}${s.lastRejectReason ? ` (${s.lastRejectReason})` : ''}`,
+      `거부 사유별 ${Object.entries(s.rejectCounts).map(([r, n]) => `${r} ${n}`).join(' · ') || '없음'}`,
       `원격 탄 연출 ${this.mode.remoteShotsShown}`,
+      `보간 지연 ${this.mode.interpDelayMs}ms (화면 = 최신 수신 시각 기준 이만큼 과거)`,
       `오류 ${k.errors}${k.lastError ? ` — ${k.lastError}` : ''}`,
     ];
     for (const [acc, buf] of s.remotes) {
       const r = this.mode.remotes.get(acc);
       const rec = s.players[acc];
       lines.push(
-        `원격 ${acc.slice(0, 14)}: 버퍼 ${buf.size}개 ${buf.spanMs.toFixed(0)}ms · 도착 간격 ${buf.lastArrivalGap.toFixed(0)}ms · 역순/중복 ${buf.dropped}${r?.extrapolating ? ' · 외삽 중' : ''}` +
+        `원격 ${acc.slice(0, 14)}: 버퍼 ${buf.size}개 ${buf.spanMs.toFixed(0)}ms · 도착 간격 최근 ${buf.lastArrivalGap.toFixed(0)} 평균 ${buf.gapAvg.toFixed(0)} 최대 ${buf.gapMax.toFixed(0)}ms · 역순/중복 ${buf.dropped}${r?.extrapolating ? ' · 외삽 중' : ''}` +
+          `${r ? ` · 보간 여유 ${r.bufferLeadMs.toFixed(0)}ms · 표시↔최신 위치 ${r.displayGapM.toFixed(2)}m` : ''}` +
           `${rec ? ` · HP ${rec.hp}/${rec.max}${rec.dead ? ' 사망' : ''} K${rec.k}/D${rec.d}` : ''}`,
       );
     }

@@ -23,6 +23,9 @@ export interface Sampled {
   snapped: boolean;
 }
 
+/** 도착 간격 통계에 쓰는 최근 패킷 수 (전송 20Hz 기준 약 2초) */
+const GAP_WINDOW = 40;
+
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
@@ -44,6 +47,10 @@ export class SnapshotBuffer {
   /** 디버그: 순번 역전·중복으로 버린 수, 도착 간격 */
   dropped = 0;
   lastArrivalGap = 0;
+  /** 디버그: 최근 도착 간격 평균·최대 (ms, 최근 GAP_WINDOW개) */
+  gapAvg = 0;
+  gapMax = 0;
+  private readonly gaps: number[] = [];
   private lastArrival = 0;
 
   get size(): number {
@@ -67,7 +74,19 @@ export class SnapshotBuffer {
     // 보낸 쪽이 새로고침 등으로 순번을 처음부터 시작하면 버퍼 초기화
     if (this.lastSeq >= 0 && pkt.q < this.lastSeq - 1000) this.clear();
     this.lastSeq = pkt.q;
-    if (this.lastArrival) this.lastArrivalGap = now - this.lastArrival;
+    if (this.lastArrival) {
+      this.lastArrivalGap = now - this.lastArrival;
+      this.gaps.push(this.lastArrivalGap);
+      if (this.gaps.length > GAP_WINDOW) this.gaps.shift();
+      let sum = 0;
+      let max = 0;
+      for (const g of this.gaps) {
+        sum += g;
+        if (g > max) max = g;
+      }
+      this.gapAvg = sum / this.gaps.length;
+      this.gapMax = max;
+    }
     this.lastArrival = now;
     const off = now - pkt.t;
     // 오프셋 = 관측된 최소 지연. 시계 드리프트·경로 변화에 따라가게 1초마다 0.5ms씩 늦춤
@@ -80,8 +99,14 @@ export class SnapshotBuffer {
     while (this.snaps.length > 2 && this.snaps[0]!.time < now - 1500) this.snaps.shift();
   }
 
+  /** 디버그: 최신 스냅샷이 화면 시점보다 앞선 양 (ms). 음수 = 최신보다 앞서 외삽 중 */
+  leadMs(renderTime: number): number {
+    return this.snaps.length ? this.snaps[this.snaps.length - 1]!.time - renderTime : 0;
+  }
+
   clear(): void {
     this.snaps.length = 0;
+    this.gaps.length = 0;
     this.offset = null;
     this.lastSeq = -1;
   }

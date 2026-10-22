@@ -126,7 +126,14 @@ export class NetGameMode {
       // 보호 방울도 같은 서버 기록으로 (보이기만)
       r.avatar.setProtected(r.label.protected);
       const buf = this.session.remotes.get(acc);
-      r.update(dt, buf ? buf.sample(renderTime) : null, cam);
+      const s = buf ? buf.sample(renderTime) : null;
+      r.update(dt, s, cam);
+      // 디버그 측정 (F9): 표시 위치 ↔ 최신 수신 위치, 보간 여유
+      const latest = buf?.latest;
+      if (s && latest) {
+        r.displayGapM = Math.hypot(s.p[0] - latest.p[0], s.p[1] - latest.p[1], s.p[2] - latest.p[2]);
+        r.bufferLeadMs = buf.leadMs(renderTime);
+      }
     }
   }
 
