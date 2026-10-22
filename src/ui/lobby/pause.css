@@ -190,3 +190,19 @@
 @media (max-height: 520px) {
   .lb-pause-card { border-width: 2px; border-radius: 15px; box-shadow: 0 5px 0 #27325c; }
 }
+
+/* 가독성: Jua는 한 굵기뿐이라 작은 크기·외곽선에서 획이 뭉개짐 → 글자를 키우고 제목은 외곽선 없는 진한 단색 */
+.lb-pause-title { color: #27325c; -webkit-text-stroke: 0; font-size: 28px; }
+.lb-pause-label { font-size: 12px; }
+.lb-pause-resume { font-size: 22px; }
+.lb-pause-item,
+.lb-pause-cancel,
+.lb-pause-confirm-leave { font-size: 18px; }
+.lb-pause-confirm-text b { font-size: 22px; }
+@media (max-height: 520px) {
+  .lb-pause-title { font-size: 22px; }
+  .lb-pause-resume { font-size: 19px; }
+  .lb-pause-item,
+  .lb-pause-cancel,
+  .lb-pause-confirm-leave { font-size: 16px; }
+}
