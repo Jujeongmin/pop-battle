@@ -438,6 +438,9 @@ export class Lobby {
 
   /** CHARACTER에서만 시트 왼쪽 빈 영역의 가운데를 게임에 알린다. */
   private reportPanel(): void {
+    // MENU 창은 상단 바 바로 아래·오른쪽 끝 맞춤 (바 높이는 화면 크기에 따라 달라짐 → 실제 위치로)
+    this.root.style.setProperty('--lb-nav-bottom', `${this.nav.offsetTop + this.nav.offsetHeight}px`);
+    this.root.style.setProperty('--lb-nav-right', `${Math.max(0, this.root.clientWidth - this.nav.offsetLeft - this.nav.offsetWidth)}px`);
     this.layoutCharacterStage();
     if (!this.visible || !this.menu || this.open !== 'character') {
       this.host.panelChanged(null);

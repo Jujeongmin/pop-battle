@@ -955,3 +955,11 @@
 /* 방 코드 참가: 입력칸이 줄 전체를 쓰게 */
 .lb-lobby .lb-code-join label { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lb-lobby .lb-code-join input { flex: 1 1 auto; width: auto; min-width: 0; }
+
+/* MENU 창: 상단 바(게임 시작·MENU) 아래에 간격을 두고, 오른쪽 끝은 상단 바와 같은 여백. 창 안에 닫기가 있으니 MENU 버튼은 숨김 */
+.lb-lobby.lb-gamemenu-open .lb-panel {
+  top: calc(var(--lb-nav-bottom, 60px) + 16px);
+  right: var(--lb-nav-right, 12px);
+  max-height: calc(100% - var(--lb-nav-bottom, 60px) - 28px);
+}
+.lb-lobby.lb-gamemenu-open .lb-menu-button { visibility: hidden; }

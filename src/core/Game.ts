@@ -505,7 +505,7 @@ export class Game {
     onProgress('캐릭터 외형…');
     {
       const [mask, deadEyes] = await Promise.all([loadTeamMask(CHARACTERS[PLAYER_CHARACTER]), this.loadDeadEyesSafe(PLAYER_CHARACTER)]);
-      this.appearances.set(this.combatant.id, new CharacterAppearance(this.avatar.bodyMeshes, PLAYER_CHARACTER, mask, deadEyes));
+      this.appearances.set(this.combatant.id, this.createAppearance(this.avatar.bodyMeshes, PLAYER_CHARACTER, mask, deadEyes));
     }
     await this.setupBotAppearances();
     this.setTeamPreview(TEAM_PREVIEW);
@@ -1424,13 +1424,30 @@ export class Game {
       avatar = a;
     }
     const prevExpr = this.appearances.get(who)?.expressionOverride ?? null;
-    const appearance = new CharacterAppearance(avatar.bodyMeshes, id, mask, deadEyes);
+    const appearance = this.createAppearance(avatar.bodyMeshes, id, mask, deadEyes);
     // 교체해도 지금 생사·디버그 표정 고정은 이어감
     appearance.setDead(who === this.combatant.id ? this.dead : !(this.bots.bots.find((b) => b.id === who)?.alive ?? true));
     appearance.setExpressionOverride(prevExpr);
     this.appearances.set(who, appearance);
     this.applyAppearance(who);
     return true;
+  }
+
+  /**
+   * 캐릭터 외형 생성. 그 캐릭터의 첫 외형이면 공유 지오메트리(GLB 캐시 원본·모든 복제가 같이 씀)에 눈동자 평탄화 모프가 이때 붙는다.
+   * 그 전에 만든 같은 캐릭터 복제(로비 다른 플레이어·봇·쇼케이스 미리보기)는 모프 영향도 배열이 없어
+   * 렌더러가 그림자 패스에서 매 프레임 오류를 내고 화면이 멈춤 → 장면·봇의 그런 메시에 영향도 배열을 만들어 둠 (값 0 = 평소 눈)
+   */
+  private createAppearance(meshes: readonly THREE.Mesh[], id: CharacterId, mask: THREE.Texture, deadEyes?: DeadEyes): CharacterAppearance {
+    const appearance = new CharacterAppearance(meshes, id, mask, deadEyes);
+    const fix = (o: THREE.Object3D) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && !mesh.morphTargetInfluences && mesh.geometry?.morphAttributes.position?.length) mesh.updateMorphTargets();
+    };
+    this.scene.traverse(fix);
+    // 장면 밖에 잠시 빠져 있는 봇 아바타도 (다시 장면에 들어오면 같은 오류)
+    for (const b of this.bots?.bots ?? []) b.avatar.root.traverse(fix);
+    return appearance;
   }
 
   /** 사망 눈 데이터 (없거나 실패하면 표정 변경 없이 진행, 경고만) */
@@ -2815,7 +2832,7 @@ export class Game {
         const [mask, deadEyes] = await Promise.all([loadTeamMask(CHARACTERS[cid]), this.loadDeadEyesSafe(cid)]);
         // 그사이 다시 지워졌으면 버림
         if (!this.bots.bots.includes(b)) return;
-        this.appearances.set(b.id, new CharacterAppearance(b.avatar.bodyMeshes, cid, mask, deadEyes));
+        this.appearances.set(b.id, this.createAppearance(b.avatar.bodyMeshes, cid, mask, deadEyes));
         this.applyAppearance(b.id);
       }),
     );
@@ -2836,7 +2853,7 @@ export class Game {
   private async createRemoteAvatar(id: string, character: CharacterId): Promise<PlayerAvatar> {
     // 아바타는 로비 원격 캐릭터와 같은 생성 경로 + 매치만 외형(팀 색·사망 눈) 등록
     const [avatar, mask, deadEyes] = await Promise.all([this.createLobbyAvatar(character), loadTeamMask(CHARACTERS[character]), this.loadDeadEyesSafe(character)]);
-    this.appearances.set(id, new CharacterAppearance(avatar.bodyMeshes, character, mask, deadEyes));
+    this.appearances.set(id, this.createAppearance(avatar.bodyMeshes, character, mask, deadEyes));
     this.applyAppearance(id);
     return avatar;
   }
