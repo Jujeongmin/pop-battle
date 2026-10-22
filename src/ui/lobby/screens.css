@@ -318,3 +318,18 @@
   padding-bottom: 0;
   line-height: 1;
 }
+
+/* 방 목록 칸: 화면 양옆까지 (상단 메뉴와 같은 여백) */
+.lb-lobby .lb-room-dock { right: 8px; left: 8px; width: auto; transform: none; }
+/* 참가 버튼을 줄 가운데에: 줄 위아래 안쪽 여백을 없애고 버튼 높이를 줄 안쪽보다 작게 (예전엔 버튼이 커서 아래로 넘침) */
+.lb-lobby .lb-room-dock .lb-room-card { padding-top: 0; padding-bottom: 0; }
+.lb-lobby .lb-room-dock .lb-room-join { align-self: center; height: 34px; min-height: 0; margin: 0; }
+@media (max-height: 520px) {
+  .lb-lobby .lb-room-dock { right: 6px; left: 6px; }
+  .lb-lobby .lb-room-dock .lb-room-join { height: 26px; }
+}
+/* 모드 배지도 줄 가운데, 줄 안쪽 높이를 넘지 않게 */
+.lb-lobby .lb-room-dock .lb-room-mode { display: inline-flex; align-self: center; align-items: center; height: 24px; min-height: 0; padding: 0 7px; line-height: 1; }
+@media (max-height: 520px) {
+  .lb-lobby .lb-room-dock .lb-room-mode { height: 20px; padding: 0 5px; }
+}
