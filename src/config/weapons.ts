@@ -222,6 +222,11 @@ export interface WeaponMount {
     magazineGrip: [number, number, number];
     magazineFingerDir: [number, number, number];
     magazinePalmDir: [number, number, number];
+    /**
+     * 재장전 중 그립 위치 이동 (holdOffset과 같은 기준, 몸 크기 비례). 평소엔 총을 오른쪽 옆구리에 들지만
+     * 탄창을 갈 때는 왼손이 닿게 몸 가운데·위로 가져옴. 없으면 0
+     */
+    holdShift?: [number, number, number];
   };
   /** 팔 IK 사용 여부 (끄면 애니메이션 팔 + 손에 붙은 총만 표시) */
   ikEnabled: boolean;
@@ -304,15 +309,17 @@ export const RIFLE_MOUNT: WeaponMount = {
   scale: 0.62,
   // 권총 손잡이 뒤쪽(손목) — 실측: 손잡이 중심 ≈ (0, -0.09, -0.15)
   rightGrip: [-0.05, -0.06, -0.2],
-  // 2등신 팔 길이(0.19m) 한계로 총열 아래는 닿지 않아 탄창 앞 하부를 받친다
-  supportGrip: [0.07, -0.08, 0.03],
+  // 2등신 팔 길이(0.19m) 한계로 총열 아래는 닿지 않아 탄창 앞을 받친다 (총을 오른쪽 옆구리에 들어 왼손이 멀어진 만큼 탄창 쪽으로)
+  supportGrip: [0.07, -0.08, -0.08],
   // 총구 = 앞 끝 주황 원통 단면 중심 (2026-10-20 장면 실측: 원통 지름 약 0.126, 중심 x −0.055·y 0.039. 이전 [0, 0.02]은 단면 가장자리로 약 4cm 어긋남)
   muzzle: [-0.055, 0.039, 0.5],
   rightFingerDir: [0, -0.45, 0.9],
   rightPalmDir: [1, 0, 0.2],
   leftFingerDir: [-0.5, 0.3, 0.8],
   leftPalmDir: [-0.3, 1, 0],
-  holdOffset: [0.08, -0.05, 0.15],
+  // 오른쪽 옆구리 높이에 든다 (2026-10-22). 예전 [0.08, -0.05, 0.15]는 총이 가슴 한가운데라 개머리판(손 뒤 약 23cm)이 몸통을 뚫고
+  // 뒤 카메라에서 총이 거의 안 보였음 (6종 측정: 무기 정점 9~31%가 몸통 안, TPS 화면 가시 0~23%) — 2등신 몸통이 개머리판보다 두꺼움
+  holdOffset: [0.2, -0.12, 0.17],
   // 탄창 실측: 중심 z ≈ 0.1, 아래끝 y ≈ -0.21 (정렬 공간).
   // 팔이 짧아 탄창 아래끝까지는 닿지 않아(오차 17cm) 탄창 윗부분(삽입구)을 잡는다 (오차 약 8cm)
   reload: {
@@ -323,6 +330,8 @@ export const RIFLE_MOUNT: WeaponMount = {
     magazineGrip: [0.07, -0.11, 0.05],
     magazineFingerDir: [-0.2, -0.4, 0.9],
     magazinePalmDir: [-1, 0, 0],
+    // 옆구리 자세 → 예전 가슴 앞 자세 쪽으로 (왼손이 탄창에 닿게)
+    holdShift: [-0.12, 0.07, -0.02],
   },
   ikEnabled: true,
   leftHandIk: true,
@@ -405,17 +414,18 @@ export const SHOTGUN_MOUNT: WeaponMount = {
   modelFixDeg: [0, 180, 0],
   scale: 0.56,
   rightGrip: [-0.05, -0.048, -0.239],
-  // 펌프(파란 손잡이) 아래 뒤쪽. 팔이 짧아 몸 가운데 쪽으로 당겨 들어야 닿음 (왼손 오차 약 6.7cm, 라이플 7.6cm)
-  supportGrip: [0.07, -0.07, 0.1],
+  // 펌프(파란 손잡이) 뒤 끝. 팔이 짧아 총을 오른쪽 옆구리에 들면 펌프 가운데까지는 안 닿음
+  supportGrip: [0.07, -0.07, -0.01],
   // 위 총열 중심
   muzzle: [-0.01, 0.06, 0.5],
   rightFingerDir: [0, -0.45, 0.9],
   rightPalmDir: [1, 0, 0.2],
   leftFingerDir: [-0.5, 0.3, 0.8],
   leftPalmDir: [-0.3, 1, 0],
-  holdOffset: [0.04, -0.04, 0.1],
+  // 라이플과 같은 오른쪽 옆구리 자세 (개머리판이 몸통을 덜 뚫고 뒤 카메라에서 보이게)
+  holdOffset: [0.2, -0.12, 0.12],
   // 탄창관 아래 장전구 쪽
-  reload: { ...PLACEHOLDER_RELOAD, magazineGrip: [0.06, -0.1, -0.02] },
+  reload: { ...PLACEHOLDER_RELOAD, magazineGrip: [0.06, -0.1, -0.02], holdShift: [-0.16, 0.08, -0.02] },
   ikEnabled: true,
   leftHandIk: true,
   shoulderAssist: 0.5,
@@ -430,15 +440,16 @@ export const SNIPER_MOUNT: WeaponMount = {
   modelFixDeg: [0, 180, 0],
   scale: 0.72,
   rightGrip: [-0.05, -0.046, -0.256],
-  // 몸통 앞 아래 (왼손 오차 약 4.7cm)
-  supportGrip: [0.06, -0.08, -0.02],
+  // 손잡이 앞 아래 (옆구리 자세에서 왼손이 닿는 곳)
+  supportGrip: [0.06, -0.08, -0.12],
   muzzle: [-0.005, 0.001, 0.5],
   rightFingerDir: [0, -0.45, 0.9],
   rightPalmDir: [1, 0, 0.2],
   leftFingerDir: [-0.5, 0.3, 0.8],
   leftPalmDir: [-0.3, 1, 0],
-  holdOffset: [0.04, -0.04, 0.1],
-  reload: { ...PLACEHOLDER_RELOAD, magazineGrip: [0.06, -0.12, -0.1] },
+  // 라이플과 같은 오른쪽 옆구리 자세 (개머리판이 몸통을 덜 뚫고 뒤 카메라에서 보이게)
+  holdOffset: [0.2, -0.12, 0.12],
+  reload: { ...PLACEHOLDER_RELOAD, magazineGrip: [0.06, -0.12, -0.1], holdShift: [-0.16, 0.08, -0.02] },
   bolt: { rollDeg: 14, pitchDownDeg: 8, pull: 0.03 },
   ikEnabled: true,
   leftHandIk: true,
@@ -462,13 +473,14 @@ export const PISTOL_MOUNT: WeaponMount = {
   rightPalmDir: [1, 0, 0.1],
   leftFingerDir: [-0.6, 0.2, 0.8],
   leftPalmDir: [-0.4, 1, 0],
-  holdOffset: [0.06, -0.02, 0.2],
+  // 몸 오른쪽 앞 (예전 [0.06, -0.02, 0.2]는 몸 가운데라 뒤 카메라에서 가려짐)
+  holdOffset: [0.14, -0.06, 0.2],
   // ADS(오버숄더): 한 손으로 오른팔을 오른쪽·앞으로 뻗어 권총이 큰 머리 오른쪽 아래에 보이게
   // (양손이면 팔이 짧아 이 위치까지 못 닿음: 왼손 IK 오차 12cm+)
   adsHoldOffset: [0.3, 0.06, 0.18],
   adsOneHanded: true,
   // 탄창은 손잡이 아래
-  reload: { ...PLACEHOLDER_RELOAD, rollDeg: 18, pitchDownDeg: 20, magazineGrip: [0.1, -0.33, -0.36] },
+  reload: { ...PLACEHOLDER_RELOAD, rollDeg: 18, pitchDownDeg: 20, magazineGrip: [0.1, -0.33, -0.36], holdShift: [-0.08, 0.04, 0] },
   ikEnabled: true,
   leftHandIk: true,
   shoulderAssist: 0.5,

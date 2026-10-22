@@ -64,6 +64,11 @@ export interface WeaponFit {
   weaponScale?: number;
   /** 왼손 IK 목표 보정 */
   leftHandIKOffset?: [number, number, number];
+  /**
+   * 왼손 지지점 보정 (무기 정렬 공간, GLB 단위, +Z = 총구 방향). 총과 함께 돌아서 몸을 비틀어도 손이 총 위에 있음.
+   * 팔이 짧은 캐릭터는 -Z(탄창 쪽)로 당겨 잡음 (leftHandIKOffset은 몸 기준이라 전투 자세에서 손이 총에서 떨어짐)
+   */
+  supportGripOffset?: [number, number, number];
   /** 오른손 IK 목표 보정 (무기는 그대로, 손만) */
   rightHandIKOffset?: [number, number, number];
   /** 총구 위치 보정 (발사 위치·총구 화염) */
@@ -124,40 +129,46 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
   blue: def('blue', 'BUBU', 'character_blue_beanie.glb', [0.22343, 0.14033],
     { maxHp: 100, speed: 1.1, hitSize: 0.85 },
     { height: 0.834, shape: '초소형 스피드형: 가장 작은 키·좁은 어깨·작은 몸통·가는 팔다리' },
-    // 장착 보정은 런타임 실측으로 정함: 몸통 관통(무기 정점이 몸통 단면 안·등 뒤) 최소 + 양손 IK 미도달 1cm 이하 (2026-10-21, docs/ASSET_AUDIT.md)
-    // 키를 0.834배로 줄이며 팔이 무기(같은 크기)보다 짧아졌던 것은 모델에서 팔 1.55배로 해결 (art-src/characters/shape/blue.json)
-    // → 예전 "무기를 몸 쪽으로 10cm 당김" 보정(개머리판이 등을 뚫고 나온 원인)은 제거하고 총을 앞으로:
-    //   대기·발사(몸 40° 비틂)·ADS에서 무기 정점이 등 뒤로 나오지 않는 가장 작은 앞쪽 이동
+    // 장착 보정은 런타임 실측으로 정함 (2026-10-22, docs/ASSET_AUDIT.md "무기 옆구리 자세"): 공통 옆구리 자세 위에서
+    // 무기 정점의 몸통 안 개수 최소 + 왼손 미도달 1cm 이하 + 뒤 카메라에서 보이는 비율, 대기·전투(몸 40° 비틂) 둘 다
+    // 팔은 모델에서 1.55배 (art-src/characters/shape/blue.json)
     {
-      rifle: { weaponPositionOffset: [0, 0, 0.06] },
-      shotgun: { weaponPositionOffset: [0.02, 0.02, 0.07] },
+      rifle: { weaponPositionOffset: [0.04, 0, -0.04] },
+      shotgun: { weaponPositionOffset: [0.03, 0, -0.04] },
       // 스나이퍼는 개머리판이 길어 볼트 당김·반동 밀림 때 등 뒤로 나옴 → 시각용 밀림만 0.6배 (실제 반동·명중률 무관)
-      sniper: { weaponPositionOffset: [0, 0.02, 0.1], recoilPullScale: 0.6 },
+      sniper: { weaponPositionOffset: [0.03, 0, -0.04], supportGripOffset: [0, 0, -0.06], recoilPullScale: 0.6 },
       // 뿅망치: 기준 자세 그대로 (팔꿈치 약 118°, 손목 약 11°)
     }),
   white: def('white', 'LUMI', 'character_white.glb', [0.69066, 0.7466],
     { maxHp: 120, speed: 1.15, hitSize: 0.9 },
     { height: 0.885, shape: '최상위 기동형: 날씬한 몸통·긴 팔다리' },
     {
-      rifle: { weaponPositionOffset: [0, 0, -0.04], reloadPositionOffset: [0, 0.04, -0.06] },
-      shotgun: { weaponPositionOffset: [0, 0, -0.04] },
-      sniper: { reloadPositionOffset: [0, 0.04, 0] },
+      rifle: { weaponPositionOffset: [0, 0, -0.04], supportGripOffset: [0, 0, -0.06], reloadPositionOffset: [0, 0.04, -0.06] },
+      shotgun: { weaponPositionOffset: [0, 0, -0.04], supportGripOffset: [0, 0, -0.06] },
+      sniper: { weaponPositionOffset: [0, 0, -0.04], reloadPositionOffset: [0, 0.04, 0] },
       pistol: { reloadPositionOffset: [0, 0.04, 0] },
       // 뿅망치: 보정 없음. 긴 팔·좁은 어깨라 손이 허리 옆에서 팔이 거의 펴진 채(약 156°) 들고 있음 — 위치를 올려도 팔 각도가 거의 안 바뀜 (2026-10-21 화면 확인, 자연스러운 편)
     }),
   yellow: def('yellow', 'MOCHI', 'character-yellow-adjusted.glb', [0.63869, 0.49443],
     { maxHp: 110, speed: 1.0, hitSize: 1.0 },
     { height: 1.0, shape: '밸런스형: 표준 키·체형 (기준)' },
-    // 뿅망치: 손 3cm 위 (팔꿈치 약 119°)
-    { melee: { weaponPositionOffset: [0, 0.03, 0] } }),
+    {
+      rifle: { weaponPositionOffset: [0.04, 0, 0] },
+      shotgun: { weaponPositionOffset: [0.03, 0, -0.04] },
+      sniper: { weaponPositionOffset: [0.03, 0, 0] },
+      // 뿅망치: 손 3cm 위 (팔꿈치 약 119°)
+      melee: { weaponPositionOffset: [0, 0.03, 0] },
+    }),
   red: def('red', 'ROKO', 'character_6.glb', [0.1994, 0.16424],
     { maxHp: 120, speed: 1.05, hitSize: 1.0 },
     { height: 0.98, shape: '전투형: 넓은 어깨·탄탄한 상체·두꺼운 팔·좁은 허리' },
     {
-      rifle: { weaponPositionOffset: [0, 0, -0.04], reloadPositionOffset: [0, 0.04, -0.06] },
-      shotgun: { reloadPositionOffset: [-0.04, 0.04, 0] },
-      sniper: { reloadPositionOffset: [0, 0.04, 0] },
-      pistol: { reloadPositionOffset: [0, 0.04, 0] },
+      // 넓은 어깨·짧은 팔: 총을 몸 쪽으로 (라이플 6cm, 샷건·스나이퍼 3cm — 더 오른쪽이면 왼손이 안 닿음)
+      // 왼손은 총 축을 따라 탄창 쪽을 잡음 (supportGripOffset)
+      rifle: { weaponPositionOffset: [-0.06, 0, 0], supportGripOffset: [0, 0, -0.12], reloadPositionOffset: [0, 0.04, -0.06] },
+      shotgun: { weaponPositionOffset: [-0.03, 0, -0.04], supportGripOffset: [0, 0, -0.18], reloadPositionOffset: [-0.04, 0.04, 0] },
+      sniper: { weaponPositionOffset: [-0.03, 0, -0.04], supportGripOffset: [0, 0, -0.18], reloadPositionOffset: [0, 0.04, 0] },
+      pistol: { supportGripOffset: [0, 0, -0.06], reloadPositionOffset: [0, 0.04, 0] },
       // 뿅망치: 짧은 팔(위팔+아래팔 약 0.19m)·넓은 어깨 → 손 6cm 위·4cm 뒤 (팔꿈치 155° → 114°)
       melee: { weaponPositionOffset: [0, 0.06, -0.04] },
     }),
@@ -165,19 +176,22 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
     { maxHp: 115, speed: 0.95, hitSize: 1.05 },
     { height: 1.015, shape: '생존형: 둥근 몸통·통통한 배, 짧고 두꺼운 팔다리' },
     {
-      rifle: { reloadPositionOffset: [-0.04, 0.04, -0.06] },
+      rifle: { weaponPositionOffset: [0.04, 0, -0.04], supportGripOffset: [0, 0, -0.06], reloadPositionOffset: [-0.04, 0.04, -0.06] },
+      shotgun: { weaponPositionOffset: [0.03, 0, -0.04], supportGripOffset: [0, 0, -0.12] },
+      sniper: { weaponPositionOffset: [0.03, 0, 0], supportGripOffset: [0, 0, -0.06] },
       // 뿅망치: 짧고 두꺼운 팔 → 손 9cm 위·2cm 안쪽·4cm 뒤 (팔꿈치 157° → 130°)
       melee: { weaponPositionOffset: [-0.02, 0.09, -0.04] },
     }),
   black: def('black', 'BAM', 'character_black.glb', [0.03574, 0.03084],
     { maxHp: 130, speed: 1.0, hitSize: 1.1 },
     { height: 1.1, shape: '최상위 탱커형: 가장 큰 체형·넓은 몸통·큰 배·두꺼운 팔다리' },
-    // 넓은 몸통 때문에 왼손이 앞으로 덜 나감 (라이플 4.3cm, 샷건 2.5cm, 재장전 최대 7cm 미도달) → 무기를 조금 뒤로·가운데로
+    // 넓은 몸통·짧은 팔: 왼손이 앞으로 덜 나감 → 총을 몸 쪽으로 6cm. 샷건·스나이퍼는 이래도 개머리판 일부가 몸통 안
+    // (더 오른쪽이면 왼손이 3~4cm 뜸 — 모델 비율 한계, docs/ASSET_AUDIT.md)
     {
-      rifle: { weaponPositionOffset: [-0.03, 0, -0.04], reloadPositionOffset: [-0.04, 0.04, -0.06] },
-      shotgun: { weaponPositionOffset: [0, 0, -0.04], reloadPositionOffset: [-0.04, 0.04, 0] },
-      sniper: { reloadPositionOffset: [-0.04, 0.04, 0] },
-      pistol: { reloadPositionOffset: [-0.04, 0.08, 0] },
+      rifle: { weaponPositionOffset: [-0.06, 0, 0], supportGripOffset: [0, 0, -0.18], reloadPositionOffset: [-0.04, 0.04, -0.06] },
+      shotgun: { weaponPositionOffset: [-0.06, 0, -0.04], supportGripOffset: [0, 0, -0.18], reloadPositionOffset: [-0.04, 0.04, 0] },
+      sniper: { weaponPositionOffset: [-0.06, 0, -0.04], supportGripOffset: [0, 0, -0.12], reloadPositionOffset: [-0.04, 0.04, 0] },
+      pistol: { weaponPositionOffset: [-0.06, 0, 0], supportGripOffset: [0, 0, -0.12], reloadPositionOffset: [-0.04, 0.08, 0] },
       // 뿅망치: 큰 몸통·짧은 팔 → 손 9cm 위·5cm 안쪽·4cm 뒤 (팔꿈치 175°(팔이 늘어남) → 약 130°)
       melee: { weaponPositionOffset: [-0.05, 0.09, -0.04] },
     }),
@@ -266,6 +280,7 @@ export const DEFAULT_WEAPON_FIT: Required<WeaponFit> = {
   weaponRotationOffset: [0, 0, 0],
   weaponScale: 1,
   leftHandIKOffset: [0, 0, 0],
+  supportGripOffset: [0, 0, 0],
   rightHandIKOffset: [0, 0, 0],
   muzzleOffset: [0, 0, 0],
 };
@@ -285,6 +300,7 @@ export function weaponFitFor(id: CharacterId, weaponId: string | undefined): Req
     weaponRotationOffset: addV(d.weaponRotationOffset),
     weaponScale: d.weaponScale,
     leftHandIKOffset: addV(d.leftHandIKOffset),
+    supportGripOffset: addV(d.supportGripOffset),
     rightHandIKOffset: addV(d.rightHandIKOffset),
     muzzleOffset: addV(d.muzzleOffset),
   };
@@ -297,6 +313,7 @@ export function weaponFitFor(id: CharacterId, weaponId: string | undefined): Req
       weaponRotationOffset: addV(r.weaponRotationOffset, f.weaponRotationOffset),
       weaponScale: r.weaponScale * (f.weaponScale ?? 1),
       leftHandIKOffset: addV(r.leftHandIKOffset, f.leftHandIKOffset),
+      supportGripOffset: addV(r.supportGripOffset, f.supportGripOffset),
       rightHandIKOffset: addV(r.rightHandIKOffset, f.rightHandIKOffset),
       muzzleOffset: addV(r.muzzleOffset, f.muzzleOffset),
     };

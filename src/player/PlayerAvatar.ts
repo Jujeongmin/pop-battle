@@ -11,6 +11,8 @@ type AnimState = ClipKey;
 type BoneKey = keyof typeof CHARACTER.bones;
 type MarkerKey = 'rightGrip' | 'supportGrip' | 'muzzle';
 
+const ZERO3 = [0, 0, 0] as const;
+
 /** 스폰 보호 방울 공용 구 (모든 캐릭터가 같이 씀) */
 const SHIELD_GEOMETRY = new THREE.SphereGeometry(1, 28, 18);
 
@@ -970,11 +972,13 @@ export class PlayerAvatar {
     const k = this.sizeRatio;
     const po = fit.weaponPositionOffset;
     const ro = fit.reloadPositionOffset;
+    // 재장전 중에는 몸 가운데·위로 (왼손이 탄창에 닿게)
+    const rs = rl.holdShift ?? ZERO3;
     const offset = _v1
       .set(
-        -(THREE.MathUtils.lerp(ho[0], ah[0], ads) * k + po[0] + ro[0] * reload),
-        THREE.MathUtils.lerp(ho[1], ah[1], ads) * k + po[1] + ro[1] * reload - (1 - raise) * 0.25 - rl.drop * reload,
-        THREE.MathUtils.lerp(ho[2], ah[2], ads) * k + po[2] + ro[2] * reload - rl.pull * reload - (m.bolt?.pull ?? 0) * bolt * fit.recoilPullScale,
+        -(THREE.MathUtils.lerp(ho[0], ah[0], ads) * k + po[0] + (ro[0] + rs[0] * k) * reload),
+        THREE.MathUtils.lerp(ho[1], ah[1], ads) * k + po[1] + (ro[1] + rs[1] * k) * reload - (1 - raise) * 0.25 - rl.drop * reload,
+        THREE.MathUtils.lerp(ho[2], ah[2], ads) * k + po[2] + (ro[2] + rs[2] * k) * reload - rl.pull * reload - (m.bolt?.pull ?? 0) * bolt * fit.recoilPullScale,
       )
       .applyQuaternion(bodyQ);
     hold.add(offset).addScaledVector(f.aimDir, -f.weaponKick * fit.recoilPullScale);
@@ -1032,7 +1036,7 @@ export class PlayerAvatar {
       const leftBones = [b.shoulderL, b.upperArmL, b.lowerArmL, b.handL];
       const animQ = oneHand > 0 ? leftBones.map((bone) => bone.quaternion.clone()) : null;
       const animP = oneHand > 0 ? leftBones.map((bone) => bone.position.clone()) : null;
-      const support = new THREE.Vector3().fromArray(m.supportGrip).applyMatrix4(this.alignedTarget);
+      const support = new THREE.Vector3().fromArray(m.supportGrip).add(_v3.fromArray(fit.supportGripOffset)).applyMatrix4(this.alignedTarget);
       const leftRot = aimQ.clone().multiply(this.leftHandInRifle);
       if (magHand > 0) {
         support.lerp(new THREE.Vector3().fromArray(rl.magazineGrip).applyMatrix4(this.alignedTarget), magHand);
