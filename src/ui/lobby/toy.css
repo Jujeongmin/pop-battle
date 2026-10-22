@@ -831,3 +831,44 @@
   .lb-lobby .lb-section { font-size: 12px; gap: 6px; }
   .lb-lobby .lb-section::before { width: 7px; height: 7px; }
 }
+
+/* ================= 제목·버튼용 둥근 한글 게임 폰트 (Jua, SIL OFL 1.1 — fonts/OFL.txt) =================
+   KS X 1001 한글 2350자 + 영문·기호만 담은 WOFF2 (약 350KB). 없는 글자는 본문 폰트로 자연스럽게 대체.
+   본문·설명·입력칸은 기존 폰트(var(--font)) 그대로 */
+@font-face {
+  font-family: 'POP Jua';
+  src: url('./fonts/Jua-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+:root { --lb-display-font: 'POP Jua', var(--font, system-ui), sans-serif; }
+
+/* 한 굵기뿐인 폰트라 가짜 굵게(synthesis) 없이 원래 두께로 */
+.lb-lobby .lb-btn,
+.lb-lobby .lb-panel-title,
+.lb-lobby .lb-section,
+.lb-lobby .lb-nav-label b,
+.lb-lobby .lb-nav-brand,
+.lb-lobby .lb-logo,
+.lb-lobby .lb-char-name,
+.lb-lobby .lb-stage-name,
+.lb-lobby .lb-mode-copy b,
+.lb-lobby .lb-room-name b,
+.lb-lobby .lb-weapon b,
+.lb-lobby .lb-weapon-preview-name,
+.lb-lobby .lb-nickname-title,
+.lb-lobby .lb-soon-copy b,
+.lb-lobby .lb-shop-weapon-card b,
+.lb-pause .lb-btn,
+.lb-pause .lb-pause-title,
+.lb-pause .lb-pause-confirm-text b,
+.lb-mp-overlay .lb-btn,
+.lb-mp-overlay .lb-mp-title {
+  font-family: var(--lb-display-font);
+  font-weight: 400;
+  font-synthesis: none;
+  letter-spacing: .2px;
+}
+/* 대기실 제목도 패널 제목처럼 꽉 찬 글자 */
+.lb-mp-overlay .lb-mp-title { -webkit-text-stroke: 0; text-shadow: 0 2px 0 #27325c; }
