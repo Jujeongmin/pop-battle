@@ -301,11 +301,9 @@ export class Lobby {
     const stageCopy = el('span', 'lb-stage-copy');
     stageCopy.append(this.stageName, this.stageRole);
     stagePlate.append(stageCopy, this.stageBadges);
-    const stageTools = el('div', 'lb-stage-tools');
-    const reset = button('정면', 'lb-stage-reset', () => this.host.resetPreviewRotation());
-    stageTools.append(el('span', 'lb-stage-hint', '드래그해서 돌려 보기'), reset);
+    // 드래그 회전은 그대로, 안내 문구·정면 버튼은 두지 않음 (화면을 가림)
     this.charStage.setAttribute('aria-label', '캐릭터 3D 미리보기 회전 영역');
-    this.charStage.append(stageTools, stagePlate);
+    this.charStage.append(stagePlate);
     this.bindStageDrag();
 
     const close = button('', 'lb-panel-close', () => this.closeMenu(), `${ICON.close}<span>닫기</span>`);
