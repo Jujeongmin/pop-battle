@@ -1,7 +1,6 @@
 // 공개 방 목록 (로비 화면 위쪽 가운데에 늘 보이는 칸): 서버가 준 값만 표시, 보이는 동안 5초마다 갱신.
-// 머리: 방 만들기(크게) · 빠른 시작 · 연습전 · 새로고침. 줄마다 참가 버튼 (줄을 누르면 선택 강조, 두 번 누르면 참가).
+// 머리: 방 만들기(크게) · 빠른 시작 · 연습전 · 새로고침. 한 줄에 방 두 개, 방마다 참가 버튼 (누르면 선택 강조, 두 번 누르면 참가).
 // 갱신해도 선택·입력 중인 방 코드는 그대로.
-import { NET_MODE_RULES } from '../../net/shared/protocol';
 import { button, el, ICON, type LobbyHost, type LobbyPanel, type LobbyRoomInfo } from './lobbyDom';
 
 /** 방 제목 (서버에 방 이름이 없음 → 모드 이름) */
@@ -151,7 +150,7 @@ export class RoomListPanel implements LobbyPanel {
     for (const room of rooms) list.append(this.roomRow(room));
   }
 
-  /** 방 한 줄: 모드 · 제목 · 코드 · 인원 · 진행 상태 · 참가 */
+  /** 방 하나: 방 코드 · 제목(모드 이름) · 인원 · 진행 상태 · 참가 */
   private roomRow(room: LobbyRoomInfo): HTMLElement {
     const on = room.code === this.selected;
     const row = el('div', `lb-room-card${on ? ' lb-selected' : ''}${room.joinable ? '' : ' lb-room-closed'}`);
@@ -164,9 +163,9 @@ export class RoomListPanel implements LobbyPanel {
     row.setAttribute('role', 'option');
     row.setAttribute('aria-selected', String(on));
     row.dataset.code = room.code;
-    const badge = el('span', `lb-room-mode lb-room-mode-${room.mode}`, NET_MODE_RULES[room.mode].short);
     const name = el('span', 'lb-room-name');
-    name.append(el('b', '', MODE_TITLE[room.mode]), el('small', '', `코드 ${room.code}`));
+    // 방 번호 = 방 코드 (갱신해도 그대로, 아래 '방 코드로 참가'에 치는 값과 같음) + 모드 이름
+    name.append(el('span', 'lb-room-no', room.code), el('b', '', MODE_TITLE[room.mode]));
     const slots = el('span', 'lb-room-slots');
     const dots = el('i', 'lb-room-dots');
     for (let i = 0; i < room.maxPlayers; i++) dots.append(el('i', i < room.players ? 'lb-filled' : ''));
@@ -174,7 +173,7 @@ export class RoomListPanel implements LobbyPanel {
     const status = el('span', `lb-room-status lb-room-phase-${room.phase}`, room.joinable ? this.phaseLabel(room.phase) : this.reasonLabel(room.reason));
     const join = button(room.joinable ? '참가' : '입장 불가', 'lb-room-join', () => this.host.joinRoom(room.code));
     join.disabled = !room.joinable;
-    row.append(badge, name, slots, status, join);
+    row.append(name, slots, status, join);
     row.addEventListener('dblclick', () => {
       if (room.joinable) this.host.joinRoom(room.code);
     });
