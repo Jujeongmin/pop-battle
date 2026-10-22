@@ -1009,12 +1009,12 @@ describe('nickname filter (shared client/server check)', () => {
   });
 
   test('Korean profanity incl. evasion (spaces, digits, elongation, jamo split, initials)', async () => {
-    for (const n of ['씨발', '시발놈', '씨 발', '씨1발', '씨이발', '시ㅂ알', 'ㅅㅂ', 'ㅅ ㅂ', 'ㅂㅅ아', '병신', '병 신 아', '븅신', '개새끼', '개 새 끼', '존나', '지랄', '좆밥', '니애미', '느금마', '섹스', '한남충', '김치녀', '틀딱'])
+    for (const n of ['씨발', '시발놈', '씨 발', '씨1발', '씨이발', '시ㅂ알', 'ㅅㅂ', 'ㅅ ㅂ', 'ㅂㅅ아', '병신', '병 신 아', '븅신', '개새끼', '개 새 끼', '존나', '지랄', '좆밥', '니애미', '느금마', '섹스', '한남충', '김치녀', '틀딱', 'ㅅ1발놈', 'ㅅ발', 'ㅆ발', '시ㅂ', 'ㅂ신', 'ㅄ아', 'ㅈ랄'])
       bad(n, 'blocked');
   });
 
   test('English profanity incl. case, spaces, repeats, leetspeak', async () => {
-    for (const n of ['fuck', 'FUCK', 'Fuck You', 'f u c k', 'fuuuuck', 'fvck', 'sh1t', 'B1TCH', 'b i t c h', 'a55hole', 'n1gger', 'p0rn', 'ass', 'ASS', 'dick', 'Big Dick', 'sexy', 'wtf', 'nazi', 'h1tler'])
+    for (const n of ['fuck', 'FUCK', 'Fuck You', 'f u c k', 'fuuuuck', 'fvck', 'sh1t', 'B1TCH', 'b i t c h', 'a55hole', 'n1gger', 'p0rn', 'ass', 'ASS', 'dick', 'Big Dick', 'sexy', 'wtf', 'nazi', 'h1tler', 'sibal', 'SSIBAL', 'tlqkf', 'qudtls', 'rotoRl'])
       bad(n, 'blocked');
   });
 
@@ -1024,5 +1024,7 @@ describe('nickname filter (shared client/server check)', () => {
     for (const n of ['시발점', '시바견', '새끼손가락', '자지러지다', '보지마', '조지', '곳바', '시바이누', '지하철'])
       ok(n);
     for (const n of ['스시바', '미친듯이', '병아리', '신발', '시계', '새우깡', '개구리', '닥터', '꺼벙이', '조심해']) ok(n);
+    // 홀로 쓴 자음이 섞여도 줄임말 구간에 걸치지 않으면 허용 (사방 → ㅅㅂ 뼈대지만 홀로 쓴 자음 없음)
+    for (const n of ['사방', 'ㅋㅋ사방', 'ㅎㅎ신발', '바보ㅋ', '수박ㅋㅋ', 'ㅇㅇ지수']) ok(n);
   });
 });

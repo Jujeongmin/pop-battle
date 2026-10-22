@@ -84,6 +84,28 @@ function jamoForm(s: string): string {
   return out;
 }
 
+/** 초성 뼈대(음절 → 초성, 홀로 쓴 자음 그대로, 모음·그 밖은 버림)에 KO_JAMO가 있고 그 구간에 홀로 쓴 자음이 있으면 true */
+function looseInitials(s: string): boolean {
+  let skeleton = '';
+  const loose: boolean[] = [];
+  for (const c of koForm(s)) {
+    const sy = syllable(c);
+    if (sy) {
+      skeleton += CHO[sy.cho];
+      loose.push(false);
+    } else if (/[ㄱ-ㅎ]/.test(c)) {
+      skeleton += c;
+      loose.push(true);
+    }
+  }
+  return KO_JAMO.some((j) => {
+    for (let p = skeleton.indexOf(j); p >= 0; p = skeleton.indexOf(j, p + 1)) {
+      if (loose.slice(p, p + j.length).some(Boolean)) return true;
+    }
+    return false;
+  });
+}
+
 // 목록도 같은 규칙으로 한 번만 정규화
 const EN_CONTAINS_N = EN_CONTAINS.map((w) => enForm(w));
 const EN_CONTAINS_FULL = EN_CONTAINS.map((w) => enForm(w, true));
@@ -99,6 +121,8 @@ export function isBlockedNick(s: string): boolean {
   // 초성 줄임말: 입력에 자모 그대로
   const looseJamo = compact.replace(/[^ㄱ-ㅎㅏ-ㅣ]/g, '');
   if (looseJamo && KO_JAMO.some((j) => compact.includes(j))) return true;
+  // 홀로 쓴 자음 + 완성 음절 섞기 (ㅅ발·ㅂ신·시ㅂ): 초성 뼈대에서 줄임말을 찾되, 홀로 쓴 자음이 걸친 경우만 (사방 → ㅅㅂ 오탐 방지)
+  if (looseJamo && looseInitials(compact)) return true;
   // 영어: 붙여 쓴 전체에서 찾기 + 단어 전체가 같은 짧은 말
   const en = enForm(compact);
   const enFull = enForm(compact, true);

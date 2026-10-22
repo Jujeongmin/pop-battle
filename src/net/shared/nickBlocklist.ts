@@ -24,6 +24,8 @@ export const KO_JAMO: readonly string[] = ['ㅅㅂ', 'ㅆㅂ', 'ㅄ', 'ㅂㅅ', 
 export const EN_CONTAINS: readonly string[] = [
   'fuck', 'fuk', 'fck', 'shit', 'bitch', 'cunt', 'whore', 'slut', 'bastard', 'asshole', 'dickhead', 'motherf', 'porn', 'pussy', 'blowjob', 'handjob', 'cumshot',
   'nigger', 'nigga', 'faggot', 'retard', 'kike', 'chink', 'tranny', 'hitler',
+  // 한국어 욕설의 로마자 표기·한/영 전환 없이 친 자판 그대로 (씨발 → tlqkf, 병신 → qudtls, 지랄 → wlfkf, 개새끼 → rotoRl)
+  'sibal', 'ssibal', 'shibal', 'tlqkf', 'qudtls', 'wlfkf', 'rotorl', 'byungsin', 'byeongsin',
 ];
 
 export const EN_WORD: readonly string[] = ['ass', 'asses', 'dick', 'dicks', 'cock', 'cocks', 'sex', 'sexy', 'cum', 'fag', 'fags', 'spic', 'nazi', 'nazis', 'rape', 'tits', 'boobs', 'damn', 'wtf', 'stfu', 'rapist', 'rapists'];
