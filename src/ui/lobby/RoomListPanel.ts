@@ -1,11 +1,23 @@
-// 공개 방 목록: 서버가 준 값만 표시하며, 열린 동안에만 5초마다 갱신한다.
+// 공개 방 목록 (로비에 늘 보이는 방 목록 칸): 서버가 준 값만 표시, 보이는 동안 5초마다 갱신.
+// 줄을 눌러 고르고 참가 (두 번 누르면 바로). 갱신해도 선택·입력 중인 방 코드는 그대로.
 import { NET_MODE_RULES } from '../../net/shared/protocol';
 import { button, el, ICON, type LobbyHost, type LobbyPanel, type LobbyRoomInfo } from './lobbyDom';
+
+/** 방 제목 (서버에 방 이름이 없음 → 모드 이름) */
+const MODE_TITLE: Record<LobbyRoomInfo['mode'], string> = { tdm: '팀 데스매치', ffa: '개인전', test: '자유 테스트' };
 
 export class RoomListPanel implements LobbyPanel {
   readonly id = 'rooms';
   readonly title = '방 목록';
   private body: HTMLElement | null = null;
+  /** 다시 그리는 곳은 목록·하단만 */
+  private list: HTMLElement | null = null;
+  private refreshButton: HTMLButtonElement | null = null;
+  private joinButton: HTMLButtonElement | null = null;
+  private selectedLabel: HTMLElement | null = null;
+  private rooms: LobbyRoomInfo[] = [];
+  /** 선택한 방 코드 (갱신 뒤에도 같은 방이 있으면 유지) */
+  private selected: string | null = null;
   private timer: number | null = null;
   private request = 0;
   private active = false;
@@ -19,7 +31,24 @@ export class RoomListPanel implements LobbyPanel {
 
   render(body: HTMLElement): void {
     this.body = body;
-    this.drawLoading();
+    body.textContent = '';
+    const tools = el('div', 'lb-room-tools');
+    const copy = el('div', 'lb-room-tools-copy');
+    copy.append(el('b', '', '방 목록'), el('span', '', '5초마다 자동 갱신'));
+    this.refreshButton = button('', 'lb-room-refresh', () => void this.load(), `${ICON.refresh}<span>새로고침</span>`);
+    this.refreshButton.setAttribute('aria-label', '방 목록 새로고침');
+    tools.append(copy, this.refreshButton);
+    this.list = el('div', 'lb-room-list');
+    this.list.setAttribute('role', 'listbox');
+    this.list.setAttribute('aria-label', '열려 있는 방');
+    const footer = el('div', 'lb-room-footer');
+    this.selectedLabel = el('span', 'lb-room-selected');
+    this.joinButton = button('참가', 'lb-room-join', () => this.joinSelected());
+    footer.append(this.selectedLabel, this.joinButton);
+    body.append(tools, this.list, footer, this.codeJoin());
+    if (this.loadedOnce && this.rooms.length) this.drawRooms(this.rooms);
+    else this.drawLoading();
+    this.updateFooter();
     if (this.active) void this.load();
   }
 
@@ -40,13 +69,16 @@ export class RoomListPanel implements LobbyPanel {
   dispose(): void {
     this.deactivate();
     this.body = null;
+    this.list = null;
   }
 
   private async load(): Promise<void> {
     if (!this.active || this.loading) return;
     this.loading = true;
+    if (this.refreshButton) this.refreshButton.disabled = true;
     const token = ++this.request;
-    this.drawLoading();
+    // 첫 조회만 불러오는 중 표시 (자동 갱신은 지금 목록을 둔 채 바꿈 → 깜빡임·선택 해제 없음)
+    if (!this.loadedOnce) this.drawLoading();
     try {
       const result = await this.host.listRooms();
       if (!this.active || token !== this.request || !this.body) return;
@@ -58,39 +90,34 @@ export class RoomListPanel implements LobbyPanel {
       if (this.active && token === this.request && this.body) this.drawError('error');
     } finally {
       if (token === this.request) this.loading = false;
+      if (this.refreshButton) this.refreshButton.disabled = false;
     }
   }
 
-  private shell(): { tools: HTMLElement; list: HTMLElement } | null {
-    if (!this.body) return null;
-    this.body.textContent = '';
-    const tools = el('div', 'lb-room-tools');
-    const copy = el('div', 'lb-room-tools-copy');
-    copy.append(el('b', '', '열려 있는 방'), el('span', '', '5초마다 자동 갱신'));
-    const refresh = button('', 'lb-room-refresh', () => void this.load(), `${ICON.refresh}<span>새로고침</span>`);
-    refresh.setAttribute('aria-label', '방 목록 새로고침');
-    refresh.disabled = this.loading;
-    tools.append(copy, refresh);
-    const list = el('div', 'lb-room-list');
-    this.body.append(tools, list, this.codeJoin());
-    return { tools, list };
+  private clearList(): HTMLElement | null {
+    if (!this.list) return null;
+    this.list.textContent = '';
+    return this.list;
   }
 
   private drawLoading(): void {
-    const shell = this.shell();
-    if (!shell) return;
+    const list = this.clearList();
+    if (!list) return;
     const state = el('div', 'lb-room-state lb-room-loading');
     // 첫 조회는 서버 연결부터 (이후 자동 새로고침은 목록 조회만)
     state.append(el('i', 'lb-room-spinner'), el('b', '', this.loadedOnce ? '방 목록을 불러오는 중…' : '서버에 연결하는 중…'));
-    shell.list.append(state);
+    list.append(state);
   }
 
   private drawEmpty(): void {
-    const shell = this.shell();
-    if (!shell) return;
+    this.rooms = [];
+    this.selected = null;
+    this.updateFooter();
+    const list = this.clearList();
+    if (!list) return;
     const state = el('div', 'lb-room-state');
     state.append(el('b', '', '지금은 열린 방이 없어요'), el('p', '', '첫 방을 만들고 친구를 초대해 보세요!'), button('방 만들기', 'lb-room-create', this.openCreate));
-    shell.list.append(state);
+    list.append(state);
   }
 
   /**
@@ -98,8 +125,11 @@ export class RoomListPanel implements LobbyPanel {
    * connect = 연결 실패, error = 조회 실패. 서버가 있는 경우만 다시 시도
    */
   private drawError(reason?: string): void {
-    const shell = this.shell();
-    if (!shell) return;
+    this.rooms = [];
+    this.selected = null;
+    this.updateFooter();
+    const list = this.clearList();
+    if (!list) return;
     const [title, desc] =
       reason === 'offline'
         ? ['이 빌드에는 멀티플레이 서버가 없어요', '· Verse8에 올린 게임에서 방 목록을 볼 수 있어요']
@@ -111,29 +141,64 @@ export class RoomListPanel implements LobbyPanel {
     const state = el('div', 'lb-room-state lb-room-error');
     state.append(el('b', '', title), el('p', '', desc));
     if (reason !== 'offline') state.append(button('다시 시도', 'lb-room-retry', () => void this.load()));
-    shell.list.append(state);
+    list.append(state);
   }
 
   private drawRooms(rooms: LobbyRoomInfo[]): void {
-    const shell = this.shell();
-    if (!shell) return;
-    for (const room of rooms) shell.list.append(this.roomCard(room));
+    this.rooms = rooms;
+    if (this.selected && !rooms.some((r) => r.code === this.selected)) this.selected = null;
+    const list = this.clearList();
+    if (!list) return;
+    for (const room of rooms) list.append(this.roomRow(room));
+    this.updateFooter();
   }
 
-  private roomCard(room: LobbyRoomInfo): HTMLElement {
-    const row = el('article', 'lb-room-card');
+  /** 방 한 줄: 모드 · 제목 · 코드 · 인원 · 진행 상태 */
+  private roomRow(room: LobbyRoomInfo): HTMLElement {
+    const on = room.code === this.selected;
+    const row = button('', `lb-room-card${on ? ' lb-selected' : ''}${room.joinable ? '' : ' lb-room-closed'}`, () => this.select(room.code));
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', String(on));
+    row.dataset.code = room.code;
     const badge = el('span', `lb-room-mode lb-room-mode-${room.mode}`, NET_MODE_RULES[room.mode].short);
     const name = el('span', 'lb-room-name');
-    name.append(el('b', '', `방 ${room.code}`), el('small', '', this.phaseLabel(room.phase)));
+    name.append(el('b', '', MODE_TITLE[room.mode]), el('small', '', `코드 ${room.code}`));
     const slots = el('span', 'lb-room-slots');
     const dots = el('i', 'lb-room-dots');
     for (let i = 0; i < room.maxPlayers; i++) dots.append(el('i', i < room.players ? 'lb-filled' : ''));
     slots.append(dots, el('b', '', `${room.players}/${room.maxPlayers}`));
-    const status = el('span', `lb-room-status lb-room-phase-${room.phase}`, this.phaseLabel(room.phase));
-    const action = button(room.joinable ? '참가' : this.reasonLabel(room.reason), 'lb-room-join', () => this.host.joinRoom(room.code));
-    action.disabled = !room.joinable;
-    row.append(badge, name, slots, status, action);
+    const status = el('span', `lb-room-status lb-room-phase-${room.phase}`, room.joinable ? this.phaseLabel(room.phase) : this.reasonLabel(room.reason));
+    row.append(badge, name, slots, status);
+    row.addEventListener('dblclick', () => {
+      if (room.joinable) this.host.joinRoom(room.code);
+    });
     return row;
+  }
+
+  private select(code: string): void {
+    this.selected = code;
+    for (const row of this.list?.querySelectorAll<HTMLElement>('.lb-room-card') ?? []) {
+      const on = row.dataset.code === code;
+      row.classList.toggle('lb-selected', on);
+      row.setAttribute('aria-selected', String(on));
+    }
+    this.updateFooter();
+  }
+
+  private joinSelected(): void {
+    const room = this.rooms.find((r) => r.code === this.selected);
+    if (room?.joinable) this.host.joinRoom(room.code);
+  }
+
+  private updateFooter(): void {
+    if (!this.joinButton || !this.selectedLabel) return;
+    const room = this.rooms.find((r) => r.code === this.selected);
+    this.joinButton.disabled = !room?.joinable;
+    this.selectedLabel.textContent = room
+      ? `${MODE_TITLE[room.mode]} · 코드 ${room.code}${room.joinable ? '' : ` · ${this.reasonLabel(room.reason)}`}`
+      : this.rooms.length
+        ? '방을 골라 주세요'
+        : '';
   }
 
   private codeJoin(): HTMLElement {

@@ -22,12 +22,6 @@ export class PlayPanel implements LobbyPanel {
       ),
       button(
         '',
-        'lb-mode lb-mode-join',
-        () => this.openPanel('rooms'),
-        `<span class="lb-mode-icon">${ICON.rooms}</span><span class="lb-mode-copy"><small>ROOM LIST</small><b>방 찾아보기</b><span>열려 있는 방을 보거나 코드로 참가</span></span><i>열기</i>`,
-      ),
-      button(
-        '',
         'lb-mode lb-mode-tdm',
         () => this.openPanel('create'),
         `<span class="lb-mode-icon">${ICON.create}</span><span class="lb-mode-copy"><small>CREATE ROOM</small><b>새 방 만들기</b><span>TDM 또는 FFA 규칙을 선택</span></span><i>열기</i>`,

@@ -28,16 +28,26 @@ export class CharacterArt {
 
   /** 얼굴·상반신 초상 (정사각 PNG data URL, 투명 배경, 정면에서 살짝 비스듬히) */
   portrait(id: string): Promise<string> {
-    let p = this.cache.get(id);
+    return this.cached(id, false);
+  }
+
+  /** 전신 (머리~발끝, 정사각 PNG data URL, 투명 배경) — 캐릭터 선택 카드용. 6종을 한 번씩만 그려 캐시 (3D 모델 동시 렌더 없음) */
+  fullBody(id: string): Promise<string> {
+    return this.cached(id, true);
+  }
+
+  private cached(id: string, full: boolean): Promise<string> {
+    const key = `${id}|${full ? 'full' : 'face'}`;
+    let p = this.cache.get(key);
     if (!p) {
-      p = this.load(id).then((model) => this.render(model));
-      p.catch(() => this.cache.delete(id));
-      this.cache.set(id, p);
+      p = this.load(id).then((model) => this.render(model, full));
+      p.catch(() => this.cache.delete(key));
+      this.cache.set(key, p);
     }
     return p;
   }
 
-  private render(model: LoadedModel): string {
+  private render(model: LoadedModel, full: boolean): string {
     const root = SkeletonUtils.clone(model.scene);
     root.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -57,9 +67,9 @@ export class CharacterArt {
     root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root, true);
     const size = box.getSize(new THREE.Vector3());
-    // 머리부터 몸 절반쯤까지 (2~2.5등신이라 얼굴이 크게)
-    const top = box.max.y + size.y * 0.1;
-    const bottom = box.max.y - size.y * 0.68;
+    // 초상: 머리부터 몸 절반쯤까지 (2~2.5등신이라 얼굴이 크게) / 전신: 발끝까지 + 위아래 여유
+    const top = box.max.y + size.y * (full ? 0.05 : 0.1);
+    const bottom = full ? box.min.y - size.y * 0.04 : box.max.y - size.y * 0.68;
     const cy = (top + bottom) / 2;
     const half = (top - bottom) / 2;
     const center = box.getCenter(new THREE.Vector3());

@@ -14,13 +14,15 @@ import { nicknameEditor, type NicknameEditor } from './nicknameUi';
 
 const NAV: Array<{ id: string; label: string; korean: string; icon: string }> = [
   { id: 'play', label: 'PLAY', korean: '게임 시작', icon: ICON.play },
-  { id: 'rooms', label: 'ROOM LIST', korean: '방 목록', icon: ICON.rooms },
   { id: 'create', label: 'CREATE ROOM', korean: '방 만들기', icon: ICON.create },
   { id: 'character', label: 'CHARACTER', korean: '캐릭터', icon: ICON.character },
   { id: 'loadout', label: 'LOADOUT', korean: '장비', icon: ICON.loadout },
   { id: 'shop', label: 'SHOP', korean: '상점', icon: ICON.shop },
   { id: 'settings', label: 'SETTINGS', korean: '설정', icon: ICON.settings },
 ];
+
+/** 전체 화면 메뉴 (로비를 가리고 독립 화면으로): 캐릭터·장비·상점·설정. 게임 시작·방 만들기는 로비 위 창 */
+const FULLSCREEN = new Set(['character', 'loadout', 'shop', 'settings']);
 
 type ManagedLobbyPanel = LobbyPanel & {
   activate?(): void;
@@ -37,6 +39,10 @@ export class Lobby {
   private readonly panelBox = el('section', 'lb-panel');
   private readonly panelTitle = el('h2', 'lb-panel-title');
   private readonly panelBody = el('div', 'lb-panel-body');
+  /** 로비에 늘 보이는 방 목록 칸 (창이 열리면 숨김, 서버 연결·방 목록 갱신은 보일 때만) */
+  private readonly roomDock = el('section', 'lb-room-dock');
+  private dockOn = false;
+  private readonly closeLabel = el('span', '', '닫기');
   private readonly navButtons = new Map<string, HTMLButtonElement>();
   private readonly nav = el('nav', 'lb-nav');
   private readonly charStage = el('div', 'lb-char-stage');
@@ -76,7 +82,6 @@ export class Lobby {
     const openPanel = (id: string) => this.show(id);
     for (const panel of [
       new PlayPanel(host, openPanel),
-      this.roomListPanel,
       new CreateRoomPanel(host),
       this.characterPanel,
       new LoadoutPanel(host),
@@ -91,8 +96,9 @@ export class Lobby {
 
     this.buildBar();
     this.buildWindow();
+    this.buildDock();
     this.buildHint();
-    this.root.append(this.nav, this.controlHint, this.menuLayer, this.nicknameModal);
+    this.root.append(this.nav, this.roomDock, this.controlHint, this.menuLayer, this.nicknameModal);
 
     window.addEventListener(
       'keydown',
@@ -142,6 +148,7 @@ export class Lobby {
     this.menuLayer.inert = false;
     this.menuLayer.setAttribute('aria-hidden', 'false');
     if (changed) this.applyPanel(next);
+    this.syncDock();
     this.host.menuChanged(true, next);
   }
 
@@ -155,11 +162,13 @@ export class Lobby {
     this.open = null;
     this.menu = false;
     this.characterSuspended = false;
-    this.root.classList.remove('lb-menu-open', 'lb-panel-open', 'lb-character-open');
+    this.root.classList.remove('lb-menu-open', 'lb-panel-open', 'lb-character-open', 'lb-fullscreen');
+    document.documentElement.classList.remove('pop-lobby-fullscreen');
     this.panelBox.classList.remove('lb-panel-in');
     this.menuLayer.inert = true;
     this.menuLayer.setAttribute('aria-hidden', 'true');
     this.markNavigation();
+    this.syncDock();
     this.host.panelChanged(null);
     this.host.menuChanged(false, null);
   }
@@ -181,6 +190,8 @@ export class Lobby {
 
   setVisible(on: boolean): void {
     if (on === this.visible) return;
+    // 매치 중에는 로비 전체 화면 표시가 터치 조작을 숨기지 않게
+    document.documentElement.classList.toggle('pop-lobby-fullscreen', on && this.root.classList.contains('lb-fullscreen'));
     if (!on) {
       this.open && this.panels.get(this.open)?.deactivate?.();
       if (this.open === 'character') {
@@ -203,6 +214,7 @@ export class Lobby {
       this.refresh();
       this.replayHint();
     }
+    this.syncDock();
     this.reportPanel();
   }
 
@@ -302,7 +314,8 @@ export class Lobby {
     this.charStage.append(stagePlate);
     this.bindStageDrag();
 
-    const close = button('', 'lb-panel-close', () => this.closeMenu(), `${ICON.close}<span>닫기</span>`);
+    const close = button('', 'lb-panel-close', () => this.closeMenu(), ICON.close);
+    close.append(this.closeLabel);
     close.setAttribute('aria-label', '창 닫기');
     const panelHead = el('div', 'lb-panel-head');
     panelHead.append(this.panelTitle, close);
@@ -311,8 +324,28 @@ export class Lobby {
     this.menuLayer.append(this.charStage, this.panelBox);
   }
 
+  /** 방 목록 칸: 로비 화면 오른쪽 (게임 조작·카메라로 입력이 새지 않게) */
+  private buildDock(): void {
+    this.roomDock.setAttribute('aria-label', '방 목록');
+    for (const type of ['pointerdown', 'mousedown', 'touchstart', 'wheel'] as const) {
+      this.roomDock.addEventListener(type, (event) => event.stopPropagation(), { signal: this.abort.signal });
+    }
+    this.roomListPanel.render(this.roomDock);
+    this.roomDock.hidden = true;
+  }
+
+  /** 방 목록 칸은 로비가 보이고 창·닉네임 입력이 없을 때만 보이고 갱신 */
+  private syncDock(): void {
+    const on = this.visible && !this.menu && !this.nicknameOpen;
+    if (on === this.dockOn) return;
+    this.dockOn = on;
+    this.roomDock.hidden = !on;
+    if (on) this.roomListPanel.activate();
+    else this.roomListPanel.deactivate();
+  }
+
   private buildHint(): void {
-    this.controlHint.textContent = 'WASD 이동 · W 두 번 달리기 · Space 점프 · Shift 슬라이딩 · TAB 메뉴';
+    this.controlHint.textContent = 'WASD 이동 · W 두 번 달리기 · Space 점프 · Shift 슬라이딩 · TAB 게임 시작';
     this.controlHint.addEventListener('mouseenter', () => this.replayHint(), { signal: this.abort.signal });
   }
 
@@ -368,6 +401,7 @@ export class Lobby {
     this.root.classList.add('lb-nickname-open');
     this.nicknameModal.inert = false;
     this.nicknameModal.setAttribute('aria-hidden', 'false');
+    this.syncDock();
     this.host.menuChanged(true, 'nickname');
     requestAnimationFrame(() => {
       if (this.visible && this.nicknameOpen) this.nicknameEditor.input.focus();
@@ -380,6 +414,7 @@ export class Lobby {
     this.root.classList.remove('lb-nickname-open');
     this.nicknameModal.inert = true;
     this.nicknameModal.setAttribute('aria-hidden', 'true');
+    this.syncDock();
     this.host.menuChanged(false, null);
   }
 
@@ -397,6 +432,12 @@ export class Lobby {
     this.open = next;
     this.characterSuspended = false;
     this.root.classList.toggle('lb-character-open', next === 'character');
+    // 캐릭터·장비·상점·설정 = 전체 화면 (로비를 가리고 '로비로' 버튼·ESC로 복귀)
+    const full = FULLSCREEN.has(next);
+    this.root.classList.toggle('lb-fullscreen', full);
+    // 전체 화면 메뉴 동안 게임 쪽 터치 조이스틱도 숨김 (screens.css)
+    document.documentElement.classList.toggle('pop-lobby-fullscreen', full);
+    this.closeLabel.textContent = full ? '로비로' : '닫기';
     this.markNavigation();
     const panel = this.panels.get(next)!;
     this.renderPanel(panel);
@@ -457,6 +498,12 @@ export class Lobby {
     this.charStage.style.top = `${top}px`;
     this.charStage.style.width = `${Math.max(0, right - left)}px`;
     this.charStage.style.height = `${Math.max(0, this.root.clientHeight - top - gap)}px`;
+    // 전체 화면 캐릭터: 무대 밖 바탕만 덮음 (screens.css 마스크)
+    const s = this.root.style;
+    s.setProperty('--lb-stage-top', `${top}px`);
+    s.setProperty('--lb-stage-left', `${left}px`);
+    s.setProperty('--lb-stage-right-gap', `${Math.max(0, this.root.clientWidth - right)}px`);
+    s.setProperty('--lb-stage-bottom-gap', `${gap}px`);
   }
 
   private updateStageNameplate(character: LobbyCharacter): void {
@@ -513,6 +560,7 @@ export class Lobby {
   dispose(): void {
     if (this.open === 'character') this.leaveCharacterWorkshop();
     for (const panel of this.panels.values()) panel.dispose?.();
+    this.roomListPanel.dispose();
     this.abort.abort();
     this.resizeObserver.disconnect();
     this.root.remove();

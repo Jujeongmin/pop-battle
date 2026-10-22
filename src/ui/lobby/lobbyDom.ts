@@ -48,6 +48,8 @@ export interface LobbyHost {
    * 처음 부를 때 모델을 불러와(이미 불러온 캐릭터는 캐시) 한 번 그림. 잠긴 캐릭터도 가능. 실패하면 reject
    */
   characterPortrait(id: string): Promise<string>;
+  /** 같은 방식의 전신 이미지 (머리~발끝, 정사각 PNG data URL, 투명 배경, 캐시) — 캐릭터 선택 카드 */
+  characterFullBody(id: string): Promise<string>;
   primaryWeapons(): LobbyWeapon[];
   /**
    * 실제 무기 모델의 옆모습 컬러 이미지 (PNG data URL, 가로:세로 = 12:5, 투명 배경). 무기 id는 primaryWeapons·fixedWeapons의 id.

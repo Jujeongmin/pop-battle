@@ -1623,7 +1623,7 @@ export class Game {
   /** 로비가 게임에 요청하는 동작 (실제로 있는 기능만 연결) */
   private lobbyHost(): LobbyHost {
     return {
-      // 카드 순서 = 표시 순서 (잠긴 LUMI·BAM 맨 뒤), 이름 = 표시 이름 (id는 그대로)
+      // 카드 순서 = 표시 순서 (잠긴 SHONI·BAM 맨 뒤), 이름 = 표시 이름 (id는 그대로)
       characters: () =>
         CHARACTER_DISPLAY_ORDER.map((id) => {
           const c = CHARACTERS[id];
@@ -1639,6 +1639,7 @@ export class Game {
       primaryWeapons: () => PRIMARY_WEAPONS.map((w) => ({ id: w.id, name: w.name })),
       weaponImage: (id) => this.weaponArt.image(id),
       characterPortrait: (id) => (id in CHARACTERS ? this.characterArt.portrait(id) : Promise.reject(new Error('unknown character'))),
+      characterFullBody: (id) => (id in CHARACTERS ? this.characterArt.fullBody(id) : Promise.reject(new Error('unknown character'))),
       weaponPreview: (canvas) => {
         const p = { canvas, id: '', yaw: 0, dirty: false };
         this.weaponPreviews.add(p);

@@ -4,6 +4,7 @@
 import './pause.css';
 // Kenney UI 스킨: 로비·방·일시정지 CSS 모두 뒤에 와야 함 (Game 모듈 import 순서상 이 파일이 마지막)
 import './kenney.css';
+import './screens.css';
 import { button, el, slider, type PauseHost } from './lobbyDom';
 
 type View = 'main' | 'settings' | 'controls';

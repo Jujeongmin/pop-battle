@@ -139,7 +139,7 @@ export const CHARACTERS: Record<CharacterId, CharacterDef> = {
       sniper: { weaponPositionOffset: [0.03, 0, -0.04], supportGripOffset: [0, 0, -0.06], recoilPullScale: 0.6 },
       // 뿅망치: 기준 자세 그대로 (팔꿈치 약 118°, 손목 약 11°)
     }),
-  white: def('white', 'LUMI', 'character_white.glb', [0.69066, 0.7466],
+  white: def('white', 'SHONI', 'character_white.glb', [0.69066, 0.7466],
     { maxHp: 120, speed: 1.15, hitSize: 0.9 },
     { height: 0.885, shape: '최상위 기동형: 날씬한 몸통·긴 팔다리' },
     {
@@ -213,8 +213,8 @@ export const RETIRED_CHARACTERS: Record<RetiredCharacterId, CharacterDef<Retired
 export const CHARACTER_IDS = Object.keys(CHARACTERS) as CharacterId[];
 
 /**
- * 캐릭터 선택 화면 카드 순서 (UI 표시 순서만, id·저장값·서버 검증과 무관). 잠긴 LUMI(white)·BAM(black)은 맨 뒤
- * 표시 이름은 CHARACTERS[id].name (BUBU·MOCHI·ROKO·POPI·LUMI·BAM), 내부 id는 그대로
+ * 캐릭터 선택 화면 카드 순서 (UI 표시 순서만, id·저장값·서버 검증과 무관). 잠긴 SHONI(white)·BAM(black)은 맨 뒤
+ * 표시 이름은 CHARACTERS[id].name (BUBU·MOCHI·ROKO·POPI·SHONI·BAM), 내부 id는 그대로
  */
 export const CHARACTER_DISPLAY_ORDER: readonly CharacterId[] = ['blue', 'yellow', 'red', 'pink', 'white', 'black'];
 
@@ -232,7 +232,7 @@ export interface CharacterSelectInfo {
 }
 
 export const CHARACTER_SELECT: Record<CharacterId, CharacterSelectInfo> = {
-  blue: { role: '초소형 스피드형', color: '#4f86ff', locked: false },
+  blue: { role: '민첩형', color: '#4f86ff', locked: false },
   white: { role: '최상위 기동형', color: '#d9d2c8', locked: true },
   yellow: { role: '밸런스형', color: '#f2c230', locked: false },
   red: { role: '전투형', color: '#e8442e', locked: false },
