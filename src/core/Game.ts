@@ -91,6 +91,11 @@ import { JoystickAutoSprint } from './JoystickAutoSprint';
 /** 닉네임 변경 간격 (서버 nickSet과 같은 10초, 서버 없는 빌드에서만 여기서 검사) */
 const NICK_CHANGE_MS = 10_000;
 
+/** 멀티플레이 원격 플레이어 (피해·처치는 서버 확정, id = net:<계정>) */
+function isRemoteTarget(t: { id?: string } | undefined): boolean {
+  return !!t?.id?.startsWith('net:');
+}
+
 function isNickReason(r: unknown): r is NickFailReason | 'rate' {
   return r === 'empty' || r === 'length' || r === 'chars' || r === 'blocked' || r === 'rate';
 }
@@ -1039,6 +1044,8 @@ export class Game {
     for (const r of shots) {
       const t = r.hit?.hitbox?.target;
       if (!t || r.damage <= 0) continue;
+      // 멀티 원격 플레이어: 피해는 서버가 확정 → 표시는 confirmedHit에서 (여기는 예측이라 건너뜀)
+      if (isRemoteTarget(t)) continue;
       any = true;
       head ||= r.headshot;
       killed ||= r.killed;
@@ -1052,24 +1059,35 @@ export class Game {
     }
     if (!any) return;
     for (const e of perTarget.values()) this.hud.damagePopup(e.point, e.total, e.head);
-    this.hud.showHit(head, killed);
-    this.audio.play('hit'); // 헤드샷도 같은 소리
-    if (killed) this.audio.play('kill');
+    this.hitFeedback(head, killed);
+  }
+
+  /**
+   * 확정된 명중 피드백 (히트마커 + 소리, 글자 없음): 일반 = 짧은 명중음, 헤드샷 = 높은 명중음, 처치 = 처치음만
+   * (명중음과 겹치지 않게). 로비에서는 없음
+   */
+  private hitFeedback(headshot: boolean, killed: boolean): void {
+    if (this.lobbyShown) return;
+    this.hud.showHit(headshot, killed);
+    if (killed) this.audio.play('kill', headshot ? { pitch: 1.12 } : undefined);
+    else if (headshot) this.audio.play('hit', { pitch: 1.4, gain: 1.15 });
+    else this.audio.play('hit');
   }
 
   /** 근접 판정 결과 연출 (헤드샷 표시 없음) */
   private presentMelee(r: MeleeResult): void {
     let killed = false;
+    let local = 0;
     for (const h of r.hits) {
       this.effects.enemyHit(h.point, h.normal, false, h.killed);
+      // 멀티 원격 플레이어는 서버 확정 때 표시 (confirmedHit)
+      if (isRemoteTarget(h.target)) continue;
+      local++;
       this.hud.damagePopup(h.point, h.damage, false);
       killed ||= h.killed;
     }
-    if (r.hits.length > 0) {
-      this.hud.showHit(false, killed);
-      this.audio.play('hit');
-      if (killed) this.audio.play('kill');
-    } else if (r.wall) {
+    if (local > 0) this.hitFeedback(false, killed);
+    else if (r.hits.length === 0 && r.wall) {
       this.effects.worldImpact(r.wall.point, r.wall.normal);
       this.audio.play('impact');
     }
@@ -2689,9 +2707,11 @@ export class Game {
         this.match.respawned(id);
         this.applyAppearance(id);
       },
-      confirmedKill: () => {
-        this.hud.showHit(false, true);
-        this.audio.play('kill');
+      // 멀티: 내 명중은 서버 확정 결과로만 히트마커·소리·피해 숫자 (예측 표시 없음, 결과 묶음당 한 번)
+      confirmedHit: (headshot, killed, hits) => {
+        if (this.lobbyShown) return;
+        for (const h of hits) this.hud.damagePopup(h.at, h.damage, h.headshot);
+        this.hitFeedback(headshot, killed);
       },
       roomInfo: () => this.refreshMultiplayerMenu(),
       leftRoom: (_reason, byUser) => {

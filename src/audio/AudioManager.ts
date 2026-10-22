@@ -21,9 +21,9 @@ export class AudioManager {
   private readonly last = new Map<string, number>();
   private readonly synths: Record<SoundId, Build> = {
     fire: (c, o, t, p) => this.synthFire(c, o, t, p),
-    hit: (c, o, t) => this.synthHit(c, o, t),
+    hit: (c, o, t, p) => this.synthHit(c, o, t, p),
     impact: (c, o, t) => this.synthImpact(c, o, t),
-    kill: (c, o, t) => this.synthKill(c, o, t),
+    kill: (c, o, t, p) => this.synthKill(c, o, t, p),
     reloadStart: (c, o, t) => this.synthClick(c, o, t, 700),
     reloadEnd: (c, o, t) => this.synthClick(c, o, t, 1100),
     swing: (c, o, t) => this.synthSwing(c, o, t),
@@ -63,7 +63,7 @@ export class AudioManager {
   }
 
   /**
-   * 효과음 재생. 헤드샷은 따로 없고 hit를 쓴다.
+   * 효과음 재생. 헤드샷은 따로 없고 hit를 높은 음(pitch)으로 쓴다.
    * @param opts.gain 추가 음량 배율 (거리 감쇠 등)
    * @param opts.channel 동시 재생 제한 채널 (기본 = id)
    * @param opts.pitch 음 높이 배율 (합성음은 주파수, 파일은 재생 속도)
@@ -139,11 +139,11 @@ export class AudioManager {
   }
 
   /** 적 명중 "톡": 맑은 높은 음 */
-  private synthHit(ctx: AudioContext, out: AudioNode, t: number): number {
+  private synthHit(ctx: AudioContext, out: AudioNode, t: number, pitch = 1): number {
     const o = ctx.createOscillator();
     o.type = 'triangle';
-    o.frequency.setValueAtTime(1400, t);
-    o.frequency.exponentialRampToValueAtTime(2200, t + 0.04);
+    o.frequency.setValueAtTime(1400 * pitch, t);
+    o.frequency.exponentialRampToValueAtTime(2200 * pitch, t + 0.04);
     o.connect(env(ctx, t, 0.001, 0.06, 0.8)).connect(out);
     o.start(t);
     o.stop(t + 0.07);
@@ -164,8 +164,8 @@ export class AudioManager {
   }
 
   /** 처치 "띠링": 올라가는 세 음 */
-  private synthKill(ctx: AudioContext, out: AudioNode, t: number): number {
-    [880, 1320, 1760].forEach((f, i) => {
+  private synthKill(ctx: AudioContext, out: AudioNode, t: number, pitch = 1): number {
+    [880 * pitch, 1320 * pitch, 1760 * pitch].forEach((f, i) => {
       const o = ctx.createOscillator();
       o.type = 'sine';
       const st = t + i * 0.07;

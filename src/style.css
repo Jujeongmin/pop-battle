@@ -23,19 +23,28 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 
 /* 크로스헤어: --gap 으로 탄퍼짐 표시 */
 
-.hitmarker { position: absolute; left: 50%; top: 50%; opacity: 0; }
-.hitmarker i { position: absolute; width: 12px; height: 3px; background: #fff; border-radius: 999px; box-shadow: 0 0 0 1px rgba(39,50,92,.5); }
-.hitmarker i:nth-child(1) { transform: translate(6px, 6px) rotate(45deg); }
-.hitmarker i:nth-child(2) { transform: translate(-18px, 6px) rotate(-45deg); }
-.hitmarker i:nth-child(3) { transform: translate(6px, -9px) rotate(-45deg); }
-.hitmarker i:nth-child(4) { transform: translate(-18px, -9px) rotate(45deg); }
-.hitmarker.head i { background: var(--yellow); }
-.hitmarker.kill i { background: #ff4d6d; width: 15px; }
-.kill-confirm {
-  position: absolute; left: 50%; top: calc(50% + 34px); transform: translate(-50%, 0); opacity: 0;
-  font-weight: 900; font-size: 22px; color: #ff4d6d; letter-spacing: 1px;
-  -webkit-text-stroke: 1.5px #fff; text-shadow: 0 2px 0 rgba(39, 50, 92, .35);
+.hitmarker { --hm-len: 12px; --hm-w: 3px; --hm-gap: 7px; --hm-color: #fff; position: absolute; left: 50%; top: 50%; width: 0; height: 0; opacity: 0; }
+/* 네 갈래 선: 가운데에서 대각선으로 (길이·두께·간격·색은 변수, 명중 종류·터치 화면이 바꿈) */
+.hitmarker i {
+  position: absolute; left: 0; top: 0; width: var(--hm-len); height: var(--hm-w); margin-top: calc(var(--hm-w) / -2);
+  background: var(--hm-color); border-radius: 999px; box-shadow: 0 0 0 1px rgba(39,50,92,.55); transform-origin: 0 50%;
 }
+.hitmarker i:nth-child(1) { transform: rotate(45deg) translateX(var(--hm-gap)); }
+.hitmarker i:nth-child(2) { transform: rotate(135deg) translateX(var(--hm-gap)); }
+.hitmarker i:nth-child(3) { transform: rotate(225deg) translateX(var(--hm-gap)); }
+.hitmarker i:nth-child(4) { transform: rotate(315deg) translateX(var(--hm-gap)); }
+/* 헤드샷: 노랑-주황, 조금 길고 두껍게 + 빛 */
+.hitmarker.head { --hm-len: 15px; --hm-w: 3.5px; --hm-color: #ffd45e; }
+.hitmarker.head i { box-shadow: 0 0 0 1px rgba(181,72,31,.75), 0 0 6px rgba(255,170,40,.75); }
+/* 처치: 빨강, 가장 크게 + 둥근 고리가 퍼짐 (글자 없음) */
+.hitmarker.kill { --hm-len: 17px; --hm-w: 4px; --hm-gap: 8px; --hm-color: #ff4d6d; }
+.hitmarker.kill i { box-shadow: 0 0 0 1px rgba(90,16,34,.6), 0 0 7px rgba(255,46,77,.7); }
+.hitmarker b { position: absolute; left: -15px; top: -15px; width: 30px; height: 30px; border: 3px solid #ff4d6d; border-radius: 50%; opacity: 0; box-shadow: 0 0 6px rgba(255,46,77,.6); }
+.hitmarker.kill.head b { border-color: #ffb43c; box-shadow: 0 0 6px rgba(255,170,40,.7); }
+/* 터치(작은 화면): 손가락·작은 화면에서도 보이게 한 단계 크게 */
+.hud.touch .hitmarker { --hm-len: 15px; --hm-w: 3.5px; --hm-gap: 8px; }
+.hud.touch .hitmarker.head { --hm-len: 18px; --hm-w: 4px; }
+.hud.touch .hitmarker.kill { --hm-len: 20px; --hm-w: 4.5px; --hm-gap: 9px; }
 
 
 
@@ -92,7 +101,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 }
 .blocked-marker::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: #ff4d6d; transform: rotate(45deg); }
 
-.hurt-flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 46, 77, .65) 100%); }
+.hurt-flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 58%, rgba(255, 46, 77, .55) 100%); }
 .damage-dirs { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .damage-dir { position: absolute; left: -60px; top: -170px; width: 120px; height: 170px; transform-origin: 50% 100%; }
 .damage-dir::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26px; border-radius: 50% 50% 0 0 / 100% 100% 0 0; border-top: 7px solid rgba(255, 46, 77, .9); filter: drop-shadow(0 0 4px rgba(255,46,77,.7)); }
@@ -489,7 +498,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 .reload .bar div { height: 100%; width: 0; background: var(--yellow); }
 .crosshair.ads .dot { background: var(--yellow); transform: scale(1.25); }
 .crosshair.ads.enemy .dot { background: #ff2e4d; }
-.kill-confirm.head { color: var(--yellow); -webkit-text-stroke-color: #b5481f; font-size: 18px; }
 .death {
   position: absolute; left: 50%; top: 36%; transform: translateX(-50%); display: grid; justify-items: center; gap: 2px;
   padding: calc(10px * var(--u)) calc(22px * var(--u)); border-radius: calc(20px * var(--u)); background: rgba(255, 143, 184, .94); border: 3px solid #fff;

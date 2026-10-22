@@ -46,7 +46,11 @@ export interface NetGameContext {
   remoteKilled(victimId: string, killer: AttackerInfo | null, hit: HitInfo | null, cause: DeathCause): void;
   remoteRespawned(id: string): void;
   /** 내가 쏜 탄이 서버에서 처치로 확정 */
-  confirmedKill(): void;
+  /**
+   * 내 공격이 서버에서 확정됨 (서버 결과 묶음 하나에 한 번: 샷건 펠릿 여러 발도 한 번).
+   * hits = 맞은 사람별 합계 피해·표시 위치(머리 위)
+   */
+  confirmedHit(headshot: boolean, killed: boolean, hits: ReadonlyArray<{ damage: number; at: THREE.Vector3; headshot: boolean }>): void;
   /** 룸 정보 변경 (방장·진행 상태·참가자·연결) */
   roomInfo(): void;
   /** 룸에서 나옴 (byUser = 직접 나감) */
@@ -282,6 +286,10 @@ export class NetGameMode {
 
   private applyHits(results: NetHitResult[]): void {
     const me = this.session.me;
+    // 내 명중 확정: 맞은 사람별로 모아 묶음당 한 번만 알림 (중복 재생 방지)
+    const mine = new Map<string, { damage: number; headshot: boolean }>();
+    let mineHead = false;
+    let mineKill = false;
     for (const res of results) {
       const killer = this.attackerInfo(res.a);
       const cause: DeathCause = res.cause === 'fall' ? 'fall' : res.cause === 'suicide' ? 'suicide' : 'weapon';
@@ -290,10 +298,14 @@ export class NetGameMode {
         : null;
       if (res.a === me && res.v !== me) {
         this.confirmedHits++;
-        if (res.kill) {
-          this.confirmedKills++;
-          this.ctx.confirmedKill();
-        }
+        if (res.kill) this.confirmedKills++;
+        const m = mine.get(res.v);
+        if (m) {
+          m.damage += res.dmg;
+          m.headshot ||= !!res.hd;
+        } else mine.set(res.v, { damage: res.dmg, headshot: !!res.hd });
+        mineHead ||= !!res.hd;
+        mineKill ||= !!res.kill;
       }
       if (res.v === me) {
         // 내 자멸·낙사는 이미 로컬에서 처리함
@@ -311,6 +323,14 @@ export class NetGameMode {
         this.ctx.setDeadLook(r.id, true);
         this.ctx.remoteKilled(r.id, killer, hit, cause);
       }
+    }
+    if (mine.size > 0) {
+      const hits = [...mine].map(([acc, m]) => {
+        const r = this.remotes.get(acc);
+        const at = r ? r.avatar.headCenter.clone().setY(r.avatar.headCenter.y + r.avatar.headRadius + 0.1) : new THREE.Vector3();
+        return { damage: m.damage, at, headshot: m.headshot };
+      });
+      this.ctx.confirmedHit(mineHead, mineKill, hits.filter((h) => h.at.lengthSq() > 0));
     }
   }
 

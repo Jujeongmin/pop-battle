@@ -172,7 +172,7 @@ export class Hud {
   private readonly popups: Popup[] = [];
   private readonly popupPool: HTMLDivElement[] = [];
   private popupSeq = 0;
-  private readonly killConfirm: HTMLDivElement;
+  private killRingAnim: Animation | null = null;
   private hitAnim: Animation | null = null;
   private crosshairWeapon = '';
   private crosshairKey = '';
@@ -230,8 +230,7 @@ export class Hud {
       <div class="scope"><div class="scope-lens"><i class="h"></i><i class="v"></i><i class="c"></i></div></div>
       <div class="crosshair" data-style="cross"><i class="ring"></i><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
       <div class="blocked-marker"></div>
-      <div class="hitmarker"><i></i><i></i><i></i><i></i></div>
-      <div class="kill-confirm">KO!</div>
+      <div class="hitmarker"><i></i><i></i><i></i><i></i><b></b></div>
       <div class="reload"><div class="bar"><div></div></div></div>
       <div class="fps">-- FPS</div>
       <pre class="debug-lines"></pre>
@@ -314,7 +313,6 @@ export class Hud {
     this.scope = q('.scope');
     this.blocked = q('.blocked-marker');
     this.hitmarker = q('.hitmarker');
-    this.killConfirm = q('.kill-confirm');
     for (let i = 0; i < POPUP_POOL; i++) {
       const el = document.createElement('div');
       el.className = 'dmg';
@@ -388,7 +386,8 @@ export class Hud {
 
   /** 플레이어 피격: 화면 가장자리 빨간 섬광 + 공격 방향 표시 + 체력 카드 흔들림 */
   showDamage(source: THREE.Vector3 | null, amount: number): void {
-    this.hurtFlash.animate([{ opacity: Math.min(0.85, 0.35 + amount / 40) }, { opacity: 0 }], { duration: 380, easing: 'ease-out' });
+    // 은은하게: 피해량에 따라 0.3~0.6 (큰 한 방도 화면을 덮지 않게)
+    this.hurtFlash.animate([{ opacity: Math.min(0.6, 0.3 + amount / 60) }, { opacity: 0 }], { duration: 420, easing: 'ease-out' });
     this.hpCard.animate(
       [{ transform: 'translateX(0)' }, { transform: 'translateX(-5px) rotate(-1.5deg)' }, { transform: 'translateX(4px) rotate(1deg)' }, { transform: 'translateX(-2px)' }, { transform: 'translateX(0)' }],
       { duration: 280, easing: 'ease-out' },
@@ -635,35 +634,31 @@ export class Hud {
   }
 
   /**
-   * 히트마커: 실제 피해가 들어갔을 때만 호출. 일반 흰색 / 헤드샷 노란색 + HEADSHOT / 처치 빨간색 + KO.
-   * 연속 명중마다 다시 시작
+   * 히트마커 (글자 없음, 색·크기로만 구분): 일반 = 짧은 흰색, 헤드샷 = 노랑-주황·조금 크게, 처치 = 빨강·가장 크게 + 고리.
+   * 확정된 명중만 (연습전 = 로컬 판정, 멀티 = 서버 결과). 연속 명중마다 다시 시작
    */
   showHit(headshot: boolean, killed: boolean): void {
     const hm = this.hitmarker;
-    hm.classList.toggle('head', headshot && !killed);
+    hm.classList.toggle('head', headshot);
     hm.classList.toggle('kill', killed);
     this.hitAnim?.cancel();
-    const s0 = killed ? 1.7 : headshot ? 1.5 : 1.3;
+    const s0 = killed ? 1.6 : headshot ? 1.45 : 1.25;
     this.hitAnim = hm.animate(
       [
         { opacity: 1, transform: `scale(${s0})` },
-        { opacity: 1, transform: 'scale(1)', offset: 0.35 },
-        { opacity: 0, transform: 'scale(0.9)' },
+        { opacity: 1, transform: 'scale(1)', offset: killed ? 0.3 : 0.4 },
+        { opacity: 0, transform: 'scale(0.92)' },
       ],
-      { duration: killed ? 380 : 240, easing: 'ease-out' },
+      { duration: killed ? 380 : headshot ? 240 : 170, easing: 'ease-out' },
     );
-    if (killed || headshot) {
-      const kc = this.killConfirm;
-      kc.textContent = killed ? 'KO!' : 'HEADSHOT';
-      kc.classList.toggle('head', !killed);
-      kc.animate(
+    if (killed) {
+      this.killRingAnim?.cancel();
+      this.killRingAnim = hm.querySelector('b')!.animate(
         [
-          { opacity: 0, transform: 'translate(-50%, 0) scale(0.6)' },
-          { opacity: 1, transform: 'translate(-50%, -6px) scale(1.15)', offset: 0.2 },
-          { opacity: 1, transform: 'translate(-50%, -10px) scale(1)', offset: 0.7 },
-          { opacity: 0, transform: 'translate(-50%, -16px) scale(1)' },
+          { opacity: 0.95, transform: 'scale(0.55)' },
+          { opacity: 0, transform: 'scale(1.6)' },
         ],
-        { duration: killed ? 700 : 520, easing: 'ease-out' },
+        { duration: 360, easing: 'ease-out' },
       );
     }
   }
