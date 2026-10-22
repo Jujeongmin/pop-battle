@@ -11,10 +11,8 @@ export class ShopPanel implements LobbyPanel {
     const fixed = this.host.fixedWeapons();
     const weapons = [...this.host.primaryWeapons(), fixed.secondary, fixed.melee];
     body.append(
-      comingSoon('캐릭터', '새 캐릭터 해금 기능'),
-      comingSoon('스킨', '캐릭터·무기 꾸미기'),
+      comingSoon('상점 준비 중', '캐릭터와 무기 스킨을 준비하고 있어요.'),
       this.weaponSkinPreview(weapons),
-      comingSoon('재화', '게임 재화와 보상 (지금은 보유 재화 없음)'),
     );
   }
 

@@ -211,6 +211,8 @@ export class Game {
   private killedBy: string | null = null;
   private weaponModels!: WeaponModelLibrary;
   private weaponArt!: WeaponArt;
+  /** 정비소 실시간 무기 미리보기 (캔버스·무기·각도, 바뀌었을 때만 그림) */
+  private readonly weaponPreviews = new Set<{ canvas: HTMLCanvasElement; id: string; yaw: number; dirty: boolean }>();
   /** 캐릭터 초상 (정비소·대기실 카드): 같은 캐릭터 GLB 캐시로 한 번 그림 */
   private characterArt!: CharacterArt;
   /** 로드아웃: 주무기는 게임 시작 전에만 고를 수 있고, 시작(startMatch) 후에는 고정 (리스폰해도 유지) */
@@ -603,8 +605,23 @@ export class Game {
     this.timer.update(time);
     const dt = Math.min(this.timer.getDelta(), 0.1);
     this.update(dt);
+    this.drawWeaponPreviews();
     this.renderer.render(this.scene, this.tpsCamera.camera);
   };
+
+  /** 정비소 실시간 무기 미리보기: 각도·무기가 바뀐 미리보기만 이번 프레임에 한 번 그림 (메인 장면 직전, 같은 렌더러) */
+  private drawWeaponPreviews(): void {
+    for (const p of this.weaponPreviews) {
+      if (!p.canvas.isConnected) {
+        this.weaponPreviews.delete(p);
+        continue;
+      }
+      if (!p.dirty || !p.id) continue;
+      p.dirty = false;
+      const bg = getComputedStyle(p.canvas).getPropertyValue('--lb-preview-bg').trim() || '#fff4e4';
+      this.weaponArt.drawLive(p.id, p.yaw, p.canvas, bg);
+    }
+  }
 
   private update(dt: number): void {
     this.input.beginFrame();
@@ -1587,7 +1604,20 @@ export class Game {
       primaryWeapons: () => PRIMARY_WEAPONS.map((w) => ({ id: w.id, name: w.name })),
       weaponImage: (id) => this.weaponArt.image(id),
       characterPortrait: (id) => (id in CHARACTERS ? this.characterArt.portrait(id) : Promise.reject(new Error('unknown character'))),
-      weaponTurntable: (id) => this.weaponArt.turntable(id),
+      weaponPreview: (canvas) => {
+        const p = { canvas, id: '', yaw: 0, dirty: false };
+        this.weaponPreviews.add(p);
+        return {
+          show: (id, yaw) => {
+            if (p.id === id && p.yaw === yaw) return;
+            p.id = id;
+            p.yaw = yaw;
+            p.dirty = true;
+          },
+          redraw: () => (p.dirty = true),
+          dispose: () => void this.weaponPreviews.delete(p),
+        };
+      },
       fixedWeapons: () => ({ secondary: { id: SECONDARY_WEAPON.id, name: SECONDARY_WEAPON.name }, melee: { id: MELEE_WEAPON.id, name: MELEE_WEAPON.name } }),
       currentPrimary: () => this.primary.id,
       selectPrimary: (id) => void this.selectPrimary(id),
@@ -1944,9 +1974,16 @@ export class Game {
     // (BLUE 1.07m는 작게, BLACK 1.35m는 크게). 전신 + 위아래 여유, 캐릭터는 화면 가운데보다 살짝 아래
     const h = Math.max(LOBBY_FRAME_HEIGHT, shown.headCenter.y + shown.headRadius - feet.y);
     const target = _v1.set(feet.x, feet.y + LOBBY_FRAME_HEIGHT * 0.56, feet.z);
-    const dist = (h * 0.5 * 1.9) / Math.tan(d(cam.fov) / 2);
+    // 세로(전신 + 여유)와 가로(패널을 뺀 빈 공간 폭) 둘 다 들어오는 거리 → 좁은 화면에서도 캐릭터가 버튼·패널 밑으로 넘치지 않음
+    const tanV = Math.tan(d(cam.fov) / 2);
+    const fullW = Math.max(1, this.container.clientWidth);
+    const freeW = this.lobbyCenterX === null ? fullW : Math.min(fullW, Math.max(fullW * 0.3, this.lobbyCenterX * 2));
+    const distV = (h * 0.5 * 1.9) / tanV;
+    const distH = (h * 0.42 * 1.6) / (tanV * cam.aspect * (freeW / fullW));
+    const dist = Math.max(distV, distH);
     const yaw = this.bodyYaw + d(28) + Math.sin(this.lobbyTime * 0.35) * d(5);
-    const pitch = d(7);
+    // 살짝 내려다봄 → 캐릭터 뒤가 복잡한 배경(기둥·풍선)보다 깨끗한 바닥
+    const pitch = d(13);
     // TPS 카메라 위치를 같은 중심 기준 각도·거리·높이로 보고 그 사이를 보간
     const off = _v2.subVectors(cam.position, target);
     const tpsDist = Math.max(0.5, Math.hypot(off.x, off.z));

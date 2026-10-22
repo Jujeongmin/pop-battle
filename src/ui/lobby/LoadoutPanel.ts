@@ -109,10 +109,12 @@ export class LoadoutPanel implements LobbyPanel {
     stage.append(canvas, el('span', 'lb-weapon-preview-hint', '좌우로 드래그해서 돌려 보기'));
     element.append(stage, name);
 
-    const context = canvas.getContext('2d');
+    // 실시간 3D: 게임 렌더러가 이 캔버스에 실제 무기 모델을 그림 (각도가 바뀐 프레임에만)
+    const preview = this.host.weaponPreview(canvas);
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let frames: HTMLCanvasElement[] = [];
-    let framePosition = 0;
+    /** 지금 무기 id (없으면 '') / 회전 각도 (rad, 0 = 옆모습) */
+    let weaponId = '';
+    let angle = 0;
     let animationFrame = 0;
     let lastTime: number | null = null;
     let resumeAt = 0;
@@ -133,15 +135,11 @@ export class LoadoutPanel implements LobbyPanel {
     };
 
     const draw = () => {
-      if (!context || frames.length === 0) return;
-      const size = resizeBackingStore();
-      const frame = frames[((Math.round(framePosition) % frames.length) + frames.length) % frames.length];
-      context.setTransform(size.ratio, 0, 0, size.ratio, 0, 0);
-      context.clearRect(0, 0, size.width, size.height);
-      const scale = Math.min(size.width / frame.width, size.height / frame.height);
-      const width = frame.width * scale;
-      const height = frame.height * scale;
-      context.drawImage(frame, (size.width - width) / 2, (size.height - height) / 2, width, height);
+      if (!weaponId) return;
+      const before = canvas.width * 100000 + canvas.height;
+      resizeBackingStore();
+      if (canvas.width * 100000 + canvas.height !== before) preview.redraw();
+      preview.show(weaponId, angle);
     };
 
     const tick = (time: number) => {
@@ -153,8 +151,9 @@ export class LoadoutPanel implements LobbyPanel {
       if (lastTime === null) lastTime = time;
       const elapsed = Math.min(time - lastTime, 100);
       lastTime = time;
-      if (pointerId === null && time >= resumeAt && !reducedMotion.matches && frames.length > 0) {
-        framePosition = (framePosition + elapsed * frames.length / 6000) % frames.length;
+      if (pointerId === null && time >= resumeAt && !reducedMotion.matches && weaponId) {
+        // 6초에 한 바퀴, 프레임 시간 기준 (끊김 없이 일정한 속도)
+        angle = (angle + (elapsed / 6000) * Math.PI * 2) % (Math.PI * 2);
         draw();
       }
       if (!reducedMotion.matches) animationFrame = requestAnimationFrame(tick);
@@ -168,8 +167,8 @@ export class LoadoutPanel implements LobbyPanel {
 
     const show = (weapon: LobbyWeapon) => {
       if (stopped) return;
-      frames = this.host.weaponTurntable(weapon.id);
-      framePosition = 0;
+      weaponId = weapon.id;
+      angle = 0;
       lastTime = null;
       name.textContent = weapon.name;
       canvas.setAttribute('aria-label', `${weapon.name} 3D 미리보기`);
@@ -187,10 +186,10 @@ export class LoadoutPanel implements LobbyPanel {
     };
     const onPointerMove = (event: PointerEvent) => {
       event.stopPropagation();
-      if (event.pointerId !== pointerId || frames.length === 0) return;
+      if (event.pointerId !== pointerId || !weaponId) return;
       const distance = event.clientX - pointerX;
       pointerX = event.clientX;
-      framePosition += distance * frames.length / Math.max(canvas.clientWidth, 280);
+      angle += (distance / Math.max(canvas.clientWidth, 280)) * Math.PI * 2;
       draw();
     };
     const releasePointer = (event: PointerEvent) => {
@@ -225,6 +224,7 @@ export class LoadoutPanel implements LobbyPanel {
     function stop() {
       if (stopped) return;
       stopped = true;
+      preview.dispose();
       if (animationFrame) cancelAnimationFrame(animationFrame);
       animationFrame = 0;
       observer.disconnect();

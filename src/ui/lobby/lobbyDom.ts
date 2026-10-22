@@ -55,10 +55,11 @@ export interface LobbyHost {
    */
   weaponImage(id: string): string | null;
   /**
-   * 실제 무기 모델을 한 바퀴 돌린 프레임 (캔버스 36장, 400×220, 투명 배경, 첫 장 = 옆모습 → 장마다 10°씩 회전).
-   * 정비소 3D 미리보기용: 캔버스를 그대로 붙이지 말고 표시용 캔버스에 drawImage로 그림 (같은 캔버스를 여러 곳에서 씀). 처음 부를 때 무기당 약 50ms
+   * 실시간 3D 무기 미리보기 (정비소): 게임 렌더러가 이 캔버스에 실제 무기 모델을 그림 (매 프레임 최대 한 번, 값이 바뀐 때만).
+   * show(무기 id, 회전 rad) — 0 = 옆모습(총구 오른쪽). 캔버스 픽셀 크기(width·height)는 부르는 쪽이 CSS 크기 × devicePixelRatio로 맞추고
+   * 크기가 바뀌면 redraw(). 바탕은 캔버스의 CSS 변수 --lb-preview-bg 색 (불투명). 패널을 닫으면 dispose()
    */
-  weaponTurntable(id: string): HTMLCanvasElement[];
+  weaponPreview(canvas: HTMLCanvasElement): { show(id: string, yaw: number): void; redraw(): void; dispose(): void };
   fixedWeapons(): { secondary: LobbyWeapon; melee: LobbyWeapon };
   currentPrimary(): string;
   selectPrimary(id: string): void;

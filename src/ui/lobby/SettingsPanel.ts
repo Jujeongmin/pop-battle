@@ -62,7 +62,8 @@ export class SettingsPanel implements LobbyPanel {
       ['RMB', '조준'],
       ['R', '재장전 (매치)'],
       ['1·2·3 / 휠', '무기 교체'],
-      ['ESC', '일시정지'],
+      ['ESC', '일시정지 (매치)'],
+      ['TAB', '메뉴 (로비)'],
     ] as const) {
       const item = el('span', 'lb-key-item');
       item.append(el('kbd', '', key), el('small', '', action));

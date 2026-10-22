@@ -42,8 +42,6 @@ export class Lobby {
   private readonly stageName = el('b', 'lb-stage-name');
   private readonly stageRole = el('span', 'lb-stage-role');
   private readonly stageBadges = el('span', 'lb-stage-badges');
-  private readonly characterDot = el('span', 'lb-character-dot');
-  private readonly characterName = el('b', 'lb-character-name');
   private readonly playerName = el('b', 'lb-player-name');
   private readonly presence = el('span', 'lb-presence');
   private readonly presenceLabel = el('span', 'lb-presence-label');
@@ -57,10 +55,8 @@ export class Lobby {
   private menu = false;
   private nicknameOpen = false;
   private visible = false;
-  private lastChar = '';
   private lastPlayer = '';
   private lastPresence = '';
-  private portraitRequest = 0;
   private roamTouch = false;
   private characterSuspended = false;
   private dragPointer: number | null = null;
@@ -226,33 +222,26 @@ export class Lobby {
       this.playerName.setAttribute('aria-label', `플레이어: ${player}`);
     }
     const p = this.host.presence();
-    const presenceKey = `${p.status}:${p.count ?? ''}:${p.max ?? ''}`;
+    const presenceKey = p.status;
     if (presenceKey !== this.lastPresence) {
       this.lastPresence = presenceKey;
       this.presence.className = `lb-presence lb-presence-${p.status}`;
-      // 인원은 실제 접속 완료(online)일 때만. 같은 로비 인원이지 전체 접속자 수가 아님
+      // 정상 연결 중에는 상태 칩을 숨기고, 문제가 있거나 연결 중일 때만 짧게 알린다.
       const [label, title] =
         p.status === 'online'
-          ? [`LOBBY ${p.count ?? '-'}/${p.max ?? '-'}`, `같은 로비에 있는 인원 ${p.count ?? '-'}/${p.max ?? '-'} (전체 접속자 아님)`]
+          ? ['', '로비 서버 연결됨']
           : p.status === 'connecting'
-            ? ['CONNECTING…', '로비 서버에 연결 중']
+            ? ['연결 중…', '로비 서버에 연결 중']
             : p.status === 'reconnecting'
-              ? ['RECONNECTING…', '로비 서버에 다시 연결 중']
+              ? ['재연결 중…', '로비 서버에 다시 연결 중']
               : p.status === 'disconnected'
-                ? ['DISCONNECTED', '로비 서버 연결이 끊겼어요 · 잠시 뒤 자동으로 다시 시도해요']
+                ? ['연결 끊김', '로비 서버 연결이 끊겼어요 · 잠시 뒤 자동으로 다시 시도해요']
                 : ['오프라인', '이 빌드에는 멀티플레이 서버가 없어요'];
       this.presenceLabel.textContent = label;
       this.presence.title = title;
       this.presence.setAttribute('aria-label', title);
+      this.presence.hidden = p.status === 'online';
       this.presenceRetry.hidden = p.status !== 'disconnected';
-    }
-    const current = this.host.currentCharacter();
-    if (current !== this.lastChar) {
-      this.lastChar = current;
-      const character = this.host.characters().find((item) => item.id === current);
-      this.characterName.textContent = character?.name ?? '캐릭터';
-      this.characterDot.style.setProperty('--c', character?.color ?? '#5b8cff');
-      this.loadHudPortrait(current, character?.name ?? '캐릭터');
     }
     this.syncRequiredNickname();
   }
@@ -261,37 +250,16 @@ export class Lobby {
     this.openMenu(id);
   }
 
-  /** HUD 캐릭터 칩도 실제 모델 초상을 쓰고, 실패하면 색상 실루엣을 그대로 남긴다. */
-  private loadHudPortrait(id: string, name: string): void {
-    const request = ++this.portraitRequest;
-    this.characterDot.classList.remove('lb-has-portrait');
-    this.characterDot.textContent = '';
-    void this.host.characterPortrait(id).then((source) => {
-      if (request !== this.portraitRequest || id !== this.lastChar) return;
-      const image = el('img');
-      image.src = source;
-      image.alt = name;
-      image.draggable = false;
-      this.characterDot.appendChild(image);
-      this.characterDot.classList.add('lb-has-portrait');
-    }).catch(() => {
-      // 초상 렌더 실패 시 --c 색상으로 그린 기본 실루엣을 유지한다.
-    });
-  }
-
   private buildBar(): void {
     const status = el('div', 'lb-nav-status');
     const brand = el('div', 'lb-nav-brand');
     brand.setAttribute('aria-label', 'POP! BATTLE');
     brand.innerHTML = '<b>POP!</b><span>BATTLE</span>';
     const identity = el('div', 'lb-identity');
-    const player = el('span', 'lb-player-chip');
-    player.append(el('small', '', 'PLAYER'), this.playerName);
-    const character = el('span', 'lb-character-chip');
-    character.append(this.characterDot, this.characterName);
     this.presence.append(this.presenceLabel, this.presenceRetry);
     this.presenceRetry.hidden = true;
-    identity.append(player, character, this.presence);
+    this.presence.hidden = true;
+    identity.append(this.playerName, this.presence);
     status.append(brand, identity);
     const actions = el('div', 'lb-nav-actions');
     for (const item of NAV) {

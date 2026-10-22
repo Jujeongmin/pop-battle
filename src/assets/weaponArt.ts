@@ -1,7 +1,7 @@
 // 무기 그림: 실제 무기 모델(WeaponModelLibrary의 GLB)을 게임 렌더러로 한 번 그려 이미지로 씀 (새 로더·모델 없음).
 // - silhouette: 옆모습 실루엣 (흰색 알파 마스크) → 킬로그 아이콘 (CSS mask + currentColor라 기존 색 규칙 그대로)
 // - image: 옆모습 컬러 이미지 → 상점 카드·정비소 카드
-// - turntable: 한 바퀴 돌린 컬러 프레임 → 정비소 3D 미리보기 (매 프레임 렌더 대신 처음 한 번만 그림)
+// - drawLive: 정비소 3D 미리보기 (게임 렌더러로 실시간, 각도가 바뀐 프레임에만)
 // 모델은 복제해서 그림 (원본은 플레이어 손에 붙어 있을 수 있음). 그림은 무기 id별로 캐시.
 import * as THREE from 'three';
 import type { WeaponDef } from '../config/weapons';
@@ -32,7 +32,6 @@ export class WeaponArt {
   private readonly clones = new Map<string, THREE.Object3D>();
   private readonly silhouettes = new Map<string, string>();
   private readonly images = new Map<string, string>();
-  private readonly turntables = new Map<string, HTMLCanvasElement[]>();
 
   constructor(
     private readonly renderer: THREE.WebGLRenderer,
@@ -71,18 +70,73 @@ export class WeaponArt {
     return url;
   }
 
-  /** 한 바퀴 돌린 프레임 (frames장, 첫 장 = 옆모습). 정비소 미리보기에서 돌려 보여 줌 */
-  turntable(id: string, frames = 36): HTMLCanvasElement[] {
-    if (!this.defs[id]) return [];
-    let list = this.turntables.get(id);
-    if (!list) {
-      list = [];
-      for (let i = 0; i < frames; i++) {
-        list.push(this.render(id, { w: 400, h: 220, yaw: -(i / frames) * Math.PI * 2, pitch: 0.22, silhouette: false, sphereFit: true, pad: 0.04 }));
-      }
-      this.turntables.set(id, list);
+  /**
+   * 실시간 미리보기 한 장 (정비소 3D 미리보기): 게임 렌더러의 화면 버퍼 한쪽에 무기를 그리고 바로 2D 캔버스로 옮김
+   * (같은 프레임의 메인 장면 렌더가 화면 전체를 다시 지움 → 화면에는 남지 않음). 렌더 대상·픽셀 읽기 없이 GPU 복사만.
+   * yaw = 회전(rad, 0 = 옆모습), bg = 미리보기 바탕색 (화면 버퍼는 불투명이라 바탕을 같은 색으로 칠함).
+   * 메인 장면을 그리기 직전에만 불러야 함 (Game.render)
+   */
+  drawLive(id: string, yaw: number, canvas: HTMLCanvasElement, bg: THREE.ColorRepresentation): void {
+    const def = this.defs[id];
+    const ctx = canvas.getContext('2d');
+    if (!def || !ctx || canvas.width < 2 || canvas.height < 2) return;
+    const model = this.model(id);
+    this.pivot.clear();
+    model.removeFromParent();
+    model.position.set(0, 0, 0);
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    model.position.sub(box.getCenter(new THREE.Vector3()));
+    const holder = new THREE.Group();
+    holder.add(model);
+    holder.rotation.y = (BASE_YAW[id] ?? 0) + yaw;
+    this.pivot.add(holder);
+    this.pivot.updateMatrixWorld(true);
+
+    // 구도: 옆모습일 때 무기 길이가 가로의 약 86% (돌아도 반지름 안이라 잘리지 않음), 세로는 높이 + 내려다보는 각도만큼
+    const pitch = 0.12;
+    const size = box.getSize(new THREE.Vector3());
+    const r = Math.hypot(size.x, size.z) / 2;
+    const aspect = canvas.width / canvas.height;
+    let halfW = r / 0.86;
+    let halfH = halfW / aspect;
+    const needH = (size.y / 2 + r * Math.sin(pitch)) * 1.12;
+    if (halfH < needH) {
+      halfH = needH;
+      halfW = halfH * aspect;
     }
-    return list;
+    const dist = 5;
+    this.camera.position.set(Math.cos(pitch) * dist, Math.sin(pitch) * dist, 0);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(0, 0, 0);
+    this.camera.left = -halfW;
+    this.camera.right = halfW;
+    this.camera.top = halfH;
+    this.camera.bottom = -halfH;
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld(true);
+
+    // 화면 버퍼 왼쪽 아래 구석에 캔버스 크기만큼 그림 (실제 픽셀 = CSS 크기 × 렌더러 픽셀 비율)
+    const r3 = this.renderer;
+    const pr = r3.getPixelRatio();
+    const dom = r3.domElement;
+    const w = Math.min(canvas.width / pr, dom.width / pr);
+    const h = Math.min(canvas.height / pr, dom.height / pr);
+    const prevColor = r3.getClearColor(new THREE.Color());
+    const prevAlpha = r3.getClearAlpha();
+    r3.setRenderTarget(null);
+    r3.setViewport(0, 0, w, h);
+    r3.setScissor(0, 0, w, h);
+    r3.setScissorTest(true);
+    r3.setClearColor(bg, 1);
+    r3.clear();
+    r3.render(this.scene, this.camera);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(dom, 0, dom.height - h * pr, w * pr, h * pr, 0, 0, canvas.width, canvas.height);
+    r3.setScissorTest(false);
+    r3.setViewport(0, 0, dom.width / pr, dom.height / pr);
+    r3.setClearColor(prevColor, prevAlpha);
+    this.pivot.clear();
   }
 
   dispose(): void {
@@ -90,7 +144,6 @@ export class WeaponArt {
     this.clones.clear();
     this.silhouettes.clear();
     this.images.clear();
-    this.turntables.clear();
   }
 
   // ---------------- 렌더 ----------------
