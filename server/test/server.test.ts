@@ -941,6 +941,26 @@ describe('room list and nicknames', () => {
     expect((await server.findRoom(ROOM)).ok).toBe(true);
   });
 
+  test('room title id is picked once (1..20), kept on later saves and shown in the room list', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'alice', roomId: ROOM });
+    await server.hello('blue');
+    server.connect({ account: 'zed', roomId: '__no_room__' });
+    const t1 = (await server.listRooms()).rooms.find((x: any) => x.roomId === ROOM).title;
+    expect(Number.isInteger(t1)).toBe(true);
+    expect(t1 >= 1 && t1 <= 20).toBe(true);
+    // 다른 저장(입장·모드 변경)이 있어도 그대로
+    server.connect({ account: 'bob', roomId: ROOM });
+    await server.hello('blue');
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.setMode('ffa')).ok).toBe(true);
+    server.connect({ account: 'zed', roomId: '__no_room__' });
+    const again = (await server.listRooms()).rooms.find((x: any) => x.roomId === ROOM);
+    expect(again.title).toBe(t1);
+    expect(again.mode).toBe('ffa');
+  });
+
   test('empty server lists no rooms', async (server) => {
     server.connect({ account: 'zed', roomId: '__no_room__' });
     expect((await server.listRooms()).rooms.length).toBe(0);

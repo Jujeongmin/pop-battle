@@ -2488,14 +2488,15 @@ export class Game {
   }
 
   /** 방 목록 (서버 listRooms). 서버에 함수가 없거나 연결 실패면 ok: false — 목록을 지어내지 않음 */
-  private async listRooms(): Promise<{ ok: boolean; reason?: string; rooms: Array<{ code: string; mode: NetMode; players: number; maxPlayers: number; phase: NetRoomSummary['phase']; joinable: boolean; reason?: string }> }> {
+  private async listRooms(): Promise<{ ok: boolean; reason?: string; rooms: Array<{ code: string; mode: NetMode; title?: number; players: number; maxPlayers: number; phase: NetRoomSummary['phase']; joinable: boolean; reason?: string }> }> {
     try {
       if (!(await this.netClient.connect())) return { ok: false, reason: this.netClient.status === 'no-verse' ? 'offline' : 'connect', rooms: [] };
       const r = await this.netClient.call<{ ok: boolean; rooms: NetRoomSummary[] }>('listRooms');
       if (!r?.ok || !Array.isArray(r.rooms)) return { ok: false, reason: 'error', rooms: [] };
       return {
         ok: true,
-        rooms: r.rooms.map((x) => ({ code: displayCode(x.roomId), mode: x.mode, players: x.players, maxPlayers: x.max, phase: x.phase, joinable: x.joinable, ...(x.reason ? { reason: x.reason } : {}) })),
+        // 자유 테스트 방(연결·전투 점검용, 새 방 기본 모드)은 로비 목록에 안 보임 (코드로는 들어갈 수 있음)
+        rooms: r.rooms.filter((x) => x.mode !== 'test').map((x) => ({ code: displayCode(x.roomId), mode: x.mode, ...(typeof x.title === 'number' ? { title: x.title } : {}), players: x.players, maxPlayers: x.max, phase: x.phase, joinable: x.joinable, ...(x.reason ? { reason: x.reason } : {}) })),
       };
     } catch (e) {
       const msg = errText(e);

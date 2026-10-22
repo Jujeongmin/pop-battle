@@ -269,7 +269,10 @@ export class NetSession {
   }
 
   async quickMatch(characterId: string): Promise<boolean> {
-    return this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('quickMatch')).roomId);
+    const ok = await this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('quickMatch')).roomId);
+    // 기다리는 방이 없어 새 방을 만든 경우(내가 방장): 서버 새 방 기본값이 자유 테스트라 개인전으로 (자유 테스트 방이 생기지 않게)
+    if (ok && this.isHost && this.mode === 'test') await this.setMode('ffa');
+    return ok;
   }
 
   /** 방장만: 매치 시작 (서버가 모드별 인원·팀 확인 후 카운트다운·종료 시각을 룸에 공유) */

@@ -280,29 +280,41 @@
   .lb-lobby.lb-fs-out .lb-menu-layer { animation: none; }
 }
 
-/* 방 목록: 한 줄에 방 두 개, 칸 높이는 방 4개(2줄) 크기로 고정 → 더 많으면 목록 안에서 스크롤 */
+/* 방 목록: 세로 한 줄에 방 하나, 칸 높이는 방 2개로 고정 (0~2개 = 스크롤바 없음, 3개부터 목록 안에서만 스크롤) */
 .lb-lobby .lb-room-dock { max-height: none; }
 .lb-lobby .lb-room-dock .lb-room-list {
-  --room-h: 48px;
+  --room-h: 50px;
   --room-gap: 5px;
   display: grid;
   height: calc(var(--room-h) * 2 + var(--room-gap));
   flex: 0 0 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   grid-auto-rows: var(--room-h);
   align-content: start;
   gap: var(--room-gap);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-@media (max-height: 520px) {
-  .lb-lobby .lb-room-dock .lb-room-list { --room-h: 36px; --room-gap: 3px; }
-}
-.lb-lobby .lb-room-dock .lb-room-list > .lb-room-state { grid-column: 1 / -1; }
-.lb-lobby .lb-room-dock .lb-room-card { width: auto; min-width: 0; height: 100%; min-height: 0; grid-template-columns: minmax(0, 1fr) auto auto auto; }
 .lb-lobby .lb-room-dock .lb-room-list > .lb-room-state { grid-row: 1 / span 2; align-content: center; padding: 4px 8px; }
-
-/* 방 번호(코드): 제목 앞 작은 배지 */
-.lb-lobby .lb-room-dock .lb-room-name { align-items: center; }
-.lb-lobby .lb-room-dock .lb-room-no { flex: 0 0 auto; padding: 2px 6px; border-radius: 6px; background: #eef1f8; color: #4a5578; font-size: 12px; font-weight: 900; letter-spacing: .5px; }
+/* 방 한 줄: [제목 · 코드] [모드] [인원] [상태] [참가] — 제목 칸을 가장 넓게, 좁으면 코드가 먼저 줄어듦 */
+.lb-lobby .lb-room-dock .lb-room-card { width: auto; height: 100%; min-width: 0; min-height: 0; grid-template-columns: minmax(0, 1fr) auto auto auto auto; }
+.lb-lobby .lb-room-dock .lb-room-name { display: flex; min-width: 0; align-items: baseline; gap: 8px; overflow: hidden; }
+.lb-lobby .lb-room-dock .lb-room-title { min-width: 4em; flex: 0 1 auto; overflow: hidden; font-family: var(--lb-display-font); font-size: 18px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lobby .lb-room-dock .lb-room-no { min-width: 0; flex: 0 1000 auto; overflow: hidden; padding: 0; background: none; color: rgba(39, 50, 92, .5); font-size: 11px; font-weight: 800; letter-spacing: .5px; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-height: 520px) {
-  .lb-lobby .lb-room-dock .lb-room-no { padding: 1px 4px; font-size: 10px; }
+  .lb-lobby .lb-room-dock .lb-room-list { --room-h: 38px; --room-gap: 3px; }
+  .lb-lobby .lb-room-dock .lb-room-title { font-size: 14px; }
+  .lb-lobby .lb-room-dock .lb-room-no { font-size: 10px; }
+}
+
+/* Jua 한글은 글자 모양이 줄 상자 가운데보다 약 1.5px 위 (16px 실측) → 방 목록 버튼 글자를 위아래 가운데로 */
+.lb-lobby .lb-room-dock .lb-room-join,
+.lb-lobby .lb-room-dock .lb-code-submit,
+.lb-lobby .lb-room-dock .lb-room-actions .lb-btn {
+  align-items: center;
+  justify-content: center;
+  padding-top: 3px;
+  padding-bottom: 0;
+  line-height: 1;
 }

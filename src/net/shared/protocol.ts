@@ -105,9 +105,14 @@ export interface NetHubUserState {
 }
 
 /** 방 목록 한 줄 (서버 'listRooms'): 서버가 아는 값만 */
+/** 방 제목 번호 범위 (1~이 값). 문구는 클라이언트 roomTitles.ts (서버는 번호만 저장) */
+export const ROOM_TITLE_COUNT = 20;
+
 export interface NetRoomSummary {
   roomId: string;
   mode: NetMode;
+  /** 방 제목 번호 (1~ROOM_TITLE_COUNT). 이 기능 전에 만들어진 방은 없음 */
+  title?: number;
   players: number;
   max: number;
   phase: NetMatchPhase;
@@ -335,6 +340,8 @@ export interface NetRoomState {
   players: NetPlayers;
   host: string | null;
   mode: NetMode;
+  /** 방 제목 번호 (1~ROOM_TITLE_COUNT, 0 = 아직 없음 → 처음 저장할 때 무작위로 한 번 정함) */
+  title: number;
   phase: NetMatchPhase;
   /** GO 시각 (서버 ms) */
   startAt: number;

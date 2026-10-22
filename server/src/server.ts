@@ -31,6 +31,7 @@ import {
   NET_TIMING,
   NET_VALIDATION,
   NET_WEAPONS,
+  ROOM_TITLE_COUNT,
   netDamage,
   type NetHitClaim,
   type NetHitResult,
@@ -60,6 +61,8 @@ interface RoomMirror {
   n: number;
   phase: NetMatchPhase;
   mode: NetMode;
+  /** 방 제목 번호 (방 목록 표시용) */
+  ti?: number;
   t: number;
   /** 이번 매치 중 끊겨서 나간 계정 (같은 계정은 진행 중에도 돌아올 수 있음) */
   gone?: string[];
@@ -254,16 +257,17 @@ function assignTeams(players: NetPlayers, mode: NetMode): void {
 }
 
 function emptyRoom(): NetRoomState {
-  return { players: {}, host: null, mode: 'test', phase: 'lobby', startAt: 0, endAt: 0, timeLimitMs: 0, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} };
+  return { players: {}, host: null, mode: 'test', title: 0, phase: 'lobby', startAt: 0, endAt: 0, timeLimitMs: 0, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} };
 }
 
 async function readRoom(): Promise<NetRoomState> {
-  const st = ((await $room.getRoomState(['players', 'host', 'mode', 'phase', 'startAt', 'endAt', 'timeLimitMs', 'teamScore', 'result', 'gone'])) || {}) as Partial<NetRoomState>;
+  const st = ((await $room.getRoomState(['players', 'host', 'mode', 'title', 'phase', 'startAt', 'endAt', 'timeLimitMs', 'teamScore', 'result', 'gone'])) || {}) as Partial<NetRoomState>;
   const r = emptyRoom();
   return {
     players: st.players || r.players,
     host: st.host ?? null,
     mode: isNetMode(st.mode) ? st.mode : r.mode,
+    title: isRoomTitle(st.title) ? st.title : 0,
     phase: st.phase === 'countdown' || st.phase === 'playing' || st.phase === 'result' ? st.phase : 'lobby',
     startAt: st.startAt || 0,
     endAt: st.endAt || 0,
@@ -274,10 +278,15 @@ async function readRoom(): Promise<NetRoomState> {
   };
 }
 
-/** 룸 상태 전체 저장 + 글로벌 요약 갱신. 룸 락 안에서 호출 */
+function isRoomTitle(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= ROOM_TITLE_COUNT;
+}
+
+/** 룸 상태 전체 저장 + 글로벌 요약 갱신. 룸 락 안에서 호출. 제목 번호는 처음 저장할 때 한 번만 무작위로 (예전 방도 다음 저장 때 생김) */
 async function saveRoom(roomId: string, r: NetRoomState): Promise<void> {
+  if (!isRoomTitle(r.title)) r.title = 1 + Math.floor(Math.random() * ROOM_TITLE_COUNT);
   await $room.updateRoomState({ ...r }, { returnState: false });
-  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, t: Date.now(), gone: Object.keys(r.gone).filter((a) => !r.gone[a]!.quit), quit: Object.keys(r.gone).filter((a) => r.gone[a]!.quit), in: Object.keys(r.players) };
+  const m: RoomMirror = { n: Object.keys(r.players).length, phase: r.phase, mode: r.mode, ti: r.title, t: Date.now(), gone: Object.keys(r.gone).filter((a) => !r.gone[a]!.quit), quit: Object.keys(r.gone).filter((a) => r.gone[a]!.quit), in: Object.keys(r.players) };
   await $global.updateGlobalState({ [MIRROR(roomId)]: m });
 }
 
@@ -462,7 +471,7 @@ export class Server {
       if (!id.startsWith(NET_ROOM_PREFIX)) continue;
       if ((await $global.countRoomUsers(id)) <= 0) continue;
       const check = joinCheck(m, $sender.account);
-      rooms.push({ roomId: id, mode: m.mode, players: m.n, max: NET_MAX_PLAYERS, phase: m.phase, joinable: check.ok, ...(check.reason ? { reason: check.reason } : {}) });
+      rooms.push({ roomId: id, mode: m.mode, ...(isRoomTitle(m.ti) ? { title: m.ti } : {}), players: m.n, max: NET_MAX_PLAYERS, phase: m.phase, joinable: check.ok, ...(check.reason ? { reason: check.reason } : {}) });
       if (rooms.length >= 30) break;
     }
     rooms.sort((a, b) => Number(b.joinable) - Number(a.joinable) || b.players - a.players);

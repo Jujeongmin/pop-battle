@@ -125,6 +125,8 @@ export interface LobbyRoomInfo {
   /** 참가에 쓰는 방 코드 (화면 표시용, 예: AB12CD) */
   code: string;
   mode: NetMode;
+  /** 방 제목 번호 (1~20, 서버가 방을 만들 때 정함). 이 기능 전에 만들어진 방은 없음 → 모드 이름으로 대체 */
+  title?: number;
   players: number;
   maxPlayers: number;
   /** lobby = 대기 중, countdown·playing = 진행 중, result = 결과 화면(종료) */

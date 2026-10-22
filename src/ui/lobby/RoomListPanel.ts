@@ -1,10 +1,26 @@
 // 공개 방 목록 (로비 화면 위쪽 가운데에 늘 보이는 칸): 서버가 준 값만 표시, 보이는 동안 5초마다 갱신.
-// 머리: 방 만들기(크게) · 빠른 시작 · 연습전 · 새로고침. 한 줄에 방 두 개, 방마다 참가 버튼 (누르면 선택 강조, 두 번 누르면 참가).
-// 갱신해도 선택·입력 중인 방 코드는 그대로.
+// 머리: 방 만들기(크게) · 빠른 시작 · 연습전 · 새로고침. 세로 한 줄에 방 하나 (칸 높이 = 방 2개, 3개부터 목록 안 스크롤).
+// 방마다: 제목(서버가 정한 번호 → 보는 사람 언어) · 모드 · 코드(작게) · 인원 · 상태 · 참가.
+// 갱신 때 방 코드 기준으로 같은 줄을 고쳐 씀 (다시 만들지 않음) → 깜빡임·스크롤 위치·선택·입력 중인 코드 유지.
+import { NET_MODE_RULES } from '../../net/shared/protocol';
+import { roomTitle, viewerLang } from '../../net/shared/roomTitles';
 import { button, el, ICON, type LobbyHost, type LobbyPanel, type LobbyRoomInfo } from './lobbyDom';
 
-/** 방 제목 (서버에 방 이름이 없음 → 모드 이름) */
+/** 제목 번호가 없는 방(이 기능 전에 만들어진 방)의 대체 제목 = 모드 이름 */
 const MODE_TITLE: Record<LobbyRoomInfo['mode'], string> = { tdm: '팀 데스매치', ffa: '개인전', test: '자유 테스트' };
+
+/** 방 한 줄의 고칠 수 있는 부분 */
+interface RoomRow {
+  row: HTMLElement;
+  title: HTMLElement;
+  mode: HTMLElement;
+  code: HTMLElement;
+  count: HTMLElement;
+  dots: HTMLElement;
+  status: HTMLElement;
+  join: HTMLButtonElement;
+  room: LobbyRoomInfo;
+}
 
 export class RoomListPanel implements LobbyPanel {
   readonly id = 'rooms';
@@ -14,6 +30,9 @@ export class RoomListPanel implements LobbyPanel {
   private list: HTMLElement | null = null;
   private refreshButton: HTMLButtonElement | null = null;
   private rooms: LobbyRoomInfo[] = [];
+  /** 방 코드 → 화면의 줄 (갱신 때 재사용) */
+  private readonly rows = new Map<string, RoomRow>();
+  private stateBox: HTMLElement | null = null;
   /** 선택한 방 코드 (갱신 뒤에도 같은 방이 있으면 유지) */
   private selected: string | null = null;
   private timer: number | null = null;
@@ -25,6 +44,10 @@ export class RoomListPanel implements LobbyPanel {
 
   constructor(private readonly host: LobbyHost, openCreate: () => void) {
     this.openCreate = openCreate;
+    // 브라우저 언어가 바뀌면 방 제목을 바로 다시 씀
+    window.addEventListener('languagechange', () => {
+      for (const r of this.rows.values()) this.fillTitle(r);
+    });
   }
 
   render(body: HTMLElement): void {
@@ -43,6 +66,8 @@ export class RoomListPanel implements LobbyPanel {
     const create = button('', 'lb-room-create lb-room-create-main', this.openCreate, `${ICON.create}<span>방 만들기</span>`);
     actions.append(this.refreshButton, practice, quick, create);
     tools.append(copy, actions);
+    this.rows.clear();
+    this.stateBox = null;
     this.list = el('div', 'lb-room-list');
     this.list.setAttribute('role', 'listbox');
     this.list.setAttribute('aria-label', '열려 있는 방');
@@ -94,29 +119,30 @@ export class RoomListPanel implements LobbyPanel {
     }
   }
 
+  /** 안내 상태(불러오는 중·없음·오류)로 바꿈: 방 줄을 모두 치우고 안내 칸 하나 */
   private clearList(): HTMLElement | null {
     if (!this.list) return null;
     this.list.textContent = '';
-    return this.list;
+    this.rows.clear();
+    this.stateBox = el('div', 'lb-room-state');
+    this.list.append(this.stateBox);
+    return this.stateBox;
   }
 
   private drawLoading(): void {
-    const list = this.clearList();
-    if (!list) return;
-    const state = el('div', 'lb-room-state lb-room-loading');
+    const state = this.clearList();
+    if (!state) return;
+    state.classList.add('lb-room-loading');
     // 첫 조회는 서버 연결부터 (이후 자동 새로고침은 목록 조회만)
     state.append(el('i', 'lb-room-spinner'), el('b', '', this.loadedOnce ? '방 목록을 불러오는 중…' : '서버에 연결하는 중…'));
-    list.append(state);
   }
 
   private drawEmpty(): void {
     this.rooms = [];
     this.selected = null;
-    const list = this.clearList();
-    if (!list) return;
-    const state = el('div', 'lb-room-state');
-    state.append(el('b', '', '지금은 열린 방이 없어요'), el('p', '', '위의 방 만들기로 첫 방을 만들거나 연습전을 해 보세요!'));
-    list.append(state);
+    const state = this.clearList();
+    if (!state) return;
+    state.append(el('b', '', '현재 생성된 방이 없습니다'), el('p', '', '위의 방 만들기로 첫 방을 만들거나 연습전을 해 보세요!'));
   }
 
   /**
@@ -126,8 +152,9 @@ export class RoomListPanel implements LobbyPanel {
   private drawError(reason?: string): void {
     this.rooms = [];
     this.selected = null;
-    const list = this.clearList();
-    if (!list) return;
+    const state = this.clearList();
+    if (!state) return;
+    state.classList.add('lb-room-error');
     const [title, desc] =
       reason === 'offline'
         ? ['이 빌드에는 멀티플레이 서버가 없어요', '· Verse8에 올린 게임에서 방 목록을 볼 수 있어요']
@@ -136,48 +163,109 @@ export class RoomListPanel implements LobbyPanel {
           : reason === 'connect'
             ? ['서버에 연결하지 못했어요', '· 네트워크를 확인하고 다시 시도해 주세요']
             : ['방 목록을 불러오지 못했어요', '· 잠시 후 다시 시도해 주세요'];
-    const state = el('div', 'lb-room-state lb-room-error');
     state.append(el('b', '', title), el('p', '', desc));
     if (reason !== 'offline') state.append(button('다시 시도', 'lb-room-retry', () => void this.load()));
-    list.append(state);
   }
 
+  /**
+   * 방 줄을 방 코드 기준으로 맞춤: 있던 방은 내용만 고치고, 새 방만 만들고, 없어진 방만 지움 (목록 전체를 다시 만들지 않음).
+   * 순서가 바뀐 줄만 옮기고, 스크롤 위치는 그대로 두되 목록이 짧아지면 유효한 범위로 (사용자가 스크롤 중이어도 끊기지 않음)
+   */
   private drawRooms(rooms: LobbyRoomInfo[]): void {
     this.rooms = rooms;
     if (this.selected && !rooms.some((r) => r.code === this.selected)) this.selected = null;
-    const list = this.clearList();
+    const list = this.list;
     if (!list) return;
-    for (const room of rooms) list.append(this.roomRow(room));
+    const scroll = list.scrollTop;
+    if (this.stateBox) {
+      this.stateBox.remove();
+      this.stateBox = null;
+    }
+    const keep = new Set(rooms.map((r) => r.code));
+    for (const [code, r] of this.rows) {
+      if (keep.has(code)) continue;
+      r.row.remove();
+      this.rows.delete(code);
+    }
+    let prev: Element | null = null;
+    for (const room of rooms) {
+      let r = this.rows.get(room.code);
+      if (!r) {
+        r = this.makeRow(room);
+        this.rows.set(room.code, r);
+      }
+      this.fillRow(r, room);
+      const want: Element | null = prev ? prev.nextElementSibling : list.firstElementChild;
+      if (want !== r.row) list.insertBefore(r.row, want);
+      prev = r.row;
+    }
+    list.scrollTop = Math.min(scroll, Math.max(0, list.scrollHeight - list.clientHeight));
   }
 
-  /** 방 하나: 방 코드 · 제목(모드 이름) · 인원 · 진행 상태 · 참가 */
-  private roomRow(room: LobbyRoomInfo): HTMLElement {
-    const on = room.code === this.selected;
-    const row = el('div', `lb-room-card${on ? ' lb-selected' : ''}${room.joinable ? '' : ' lb-room-closed'}`);
+  /** 방 하나: 제목 · 모드 · 코드(작게) · 인원 · 진행 상태 · 참가 */
+  private makeRow(room: LobbyRoomInfo): RoomRow {
+    const row = el('div', 'lb-room-card');
     row.tabIndex = 0;
-    row.addEventListener('click', () => this.select(room.code));
-    row.addEventListener('keydown', (event) => {
-      event.stopPropagation();
-      if (event.key === 'Enter' && room.joinable) this.host.joinRoom(room.code);
-    });
     row.setAttribute('role', 'option');
-    row.setAttribute('aria-selected', String(on));
     row.dataset.code = room.code;
     const name = el('span', 'lb-room-name');
-    // 방 번호 = 방 코드 (갱신해도 그대로, 아래 '방 코드로 참가'에 치는 값과 같음) + 모드 이름
-    name.append(el('span', 'lb-room-no', room.code), el('b', '', MODE_TITLE[room.mode]));
+    const title = el('b', 'lb-room-title');
+    const code = el('small', 'lb-room-no');
+    name.append(title, code);
+    const mode = el('span', 'lb-room-mode');
     const slots = el('span', 'lb-room-slots');
     const dots = el('i', 'lb-room-dots');
-    for (let i = 0; i < room.maxPlayers; i++) dots.append(el('i', i < room.players ? 'lb-filled' : ''));
-    slots.append(dots, el('b', '', `${room.players}/${room.maxPlayers}`));
-    const status = el('span', `lb-room-status lb-room-phase-${room.phase}`, room.joinable ? this.phaseLabel(room.phase) : this.reasonLabel(room.reason));
-    const join = button(room.joinable ? '참가' : '입장 불가', 'lb-room-join', () => this.host.joinRoom(room.code));
-    join.disabled = !room.joinable;
-    row.append(name, slots, status, join);
-    row.addEventListener('dblclick', () => {
-      if (room.joinable) this.host.joinRoom(room.code);
+    const count = el('b');
+    slots.append(dots, count);
+    const status = el('span', 'lb-room-status');
+    const r: RoomRow = { row, title, mode, code, count, dots, status, join: null as unknown as HTMLButtonElement, room };
+    // 버튼·이벤트는 지금 방 값(r.room)을 읽음 (갱신해도 줄을 다시 만들지 않으므로)
+    r.join = button('참가', 'lb-room-join', () => {
+      if (r.room.joinable) this.host.joinRoom(r.room.code);
     });
-    return row;
+    row.addEventListener('click', () => this.select(r.room.code));
+    row.addEventListener('dblclick', () => {
+      if (r.room.joinable) this.host.joinRoom(r.room.code);
+    });
+    row.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter' && r.room.joinable) this.host.joinRoom(r.room.code);
+    });
+    row.append(name, mode, slots, status, r.join);
+    return r;
+  }
+
+  /** 바뀐 값만 DOM에 씀 (같으면 건드리지 않아 깜빡임 없음) */
+  private fillRow(r: RoomRow, room: LobbyRoomInfo): void {
+    r.room = room;
+    const set = (e: HTMLElement, text: string) => {
+      if (e.textContent !== text) e.textContent = text;
+    };
+    this.fillTitle(r);
+    set(r.code, room.code);
+    set(r.mode, NET_MODE_RULES[room.mode].short);
+    r.mode.className = `lb-room-mode lb-room-mode-${room.mode}`;
+    set(r.count, `${room.players}/${room.maxPlayers}`);
+    if (r.dots.childElementCount !== room.maxPlayers) {
+      r.dots.textContent = '';
+      for (let i = 0; i < room.maxPlayers; i++) r.dots.append(el('i'));
+    }
+    [...r.dots.children].forEach((d, i) => d.classList.toggle('lb-filled', i < room.players));
+    set(r.status, room.joinable ? this.phaseLabel(room.phase) : this.reasonLabel(room.reason));
+    r.status.className = `lb-room-status lb-room-phase-${room.phase}`;
+    set(r.join, room.joinable ? '참가' : '입장 불가');
+    r.join.disabled = !room.joinable;
+    const on = room.code === this.selected;
+    r.row.classList.toggle('lb-selected', on);
+    r.row.classList.toggle('lb-room-closed', !room.joinable);
+    r.row.setAttribute('aria-selected', String(on));
+  }
+
+  /** 제목: 서버 번호 → 보는 사람 언어 (번호 없는 예전 방은 모드 이름). 잘리면 마우스를 올려 전체 제목 */
+  private fillTitle(r: RoomRow): void {
+    const text = roomTitle(r.room.title, viewerLang()) ?? MODE_TITLE[r.room.mode];
+    if (r.title.textContent !== text) r.title.textContent = text;
+    r.row.title = `${text} · ${NET_MODE_RULES[r.room.mode].short} · ${r.room.code}`;
   }
 
   private select(code: string): void {
