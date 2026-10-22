@@ -137,7 +137,10 @@
 .lb-pause .lb-slider input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
-  height: 28px;
+  /* 핸들(28px)이 위아래로 잘리지 않게 입력 칸 높이에 여유 */
+  height: 34px;
+  margin: 0;
+  overflow: visible;
   background: none;
   cursor: pointer;
 }
@@ -160,7 +163,8 @@
   -webkit-appearance: none;
   width: 21px;
   height: 28px;
-  margin-top: -14px;
+  /* 트랙 내용 높이 8px의 가운데: (8 - 28) / 2 */
+  margin-top: -10px;
   border: 0;
   background: url('./kenney/slide_handle.png') center / contain no-repeat;
   box-shadow: none;
