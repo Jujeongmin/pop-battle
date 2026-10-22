@@ -5,7 +5,6 @@ import { toGame, viewH } from '../../core/screenRotation';
 import { CharacterPanel } from './CharacterPanel';
 import { CreateRoomPanel } from './CreateRoomPanel';
 import { LoadoutPanel } from './LoadoutPanel';
-import { MenuPanel } from './MenuPanel';
 import { button, el, ICON, type LobbyCharacter, type LobbyHost, type LobbyPanel, type LobbyRoamState } from './lobbyDom';
 import { PlayPanel } from './PlayPanel';
 import { RoomListPanel } from './RoomListPanel';
@@ -50,7 +49,6 @@ export class Lobby {
   /** 연결이 끊겼을 때 바로 다시 연결 */
   private readonly presenceRetry = button('다시 시도', 'lb-presence-retry', () => this.host.retryLobby());
   private readonly controlHint = el('div', 'lb-control-hint');
-  private readonly menuButton: HTMLButtonElement;
   private readonly nicknameModal = el('div', 'lb-nickname-modal');
   private readonly nicknameEditor: NicknameEditor;
   private open: string | null = null;
@@ -77,8 +75,6 @@ export class Lobby {
     this.roomListPanel = new RoomListPanel(host, () => this.show('create'));
     const openPanel = (id: string) => this.show(id);
     for (const panel of [
-      // MENU 창: 게임 시작 외의 목적지 (상단 바에는 로고·게임 시작·MENU만)
-      new MenuPanel(NAV.filter((item) => item.id !== 'play'), openPanel),
       new PlayPanel(host, openPanel),
       this.roomListPanel,
       new CreateRoomPanel(host),
@@ -90,9 +86,6 @@ export class Lobby {
       this.panels.set(panel.id, panel);
     }
 
-    this.menuButton = button('', 'lb-menu-button', () => this.toggleMenu(), `<span>${ICON.menu}</span><b>MENU</b><kbd>TAB</kbd>`);
-    this.menuButton.setAttribute('aria-label', '메뉴 열기');
-    this.menuButton.setAttribute('aria-expanded', 'false');
 
     this.nicknameEditor = this.buildNicknameModal();
 
@@ -148,8 +141,6 @@ export class Lobby {
     this.root.classList.add('lb-menu-open', 'lb-panel-open');
     this.menuLayer.inert = false;
     this.menuLayer.setAttribute('aria-hidden', 'false');
-    this.menuButton.setAttribute('aria-label', '메뉴 닫기');
-    this.menuButton.setAttribute('aria-expanded', 'true');
     if (changed) this.applyPanel(next);
     this.host.menuChanged(true, next);
   }
@@ -164,21 +155,19 @@ export class Lobby {
     this.open = null;
     this.menu = false;
     this.characterSuspended = false;
-    this.root.classList.remove('lb-menu-open', 'lb-panel-open', 'lb-character-open', 'lb-gamemenu-open');
+    this.root.classList.remove('lb-menu-open', 'lb-panel-open', 'lb-character-open');
     this.panelBox.classList.remove('lb-panel-in');
     this.menuLayer.inert = true;
     this.menuLayer.setAttribute('aria-hidden', 'true');
-    this.menuButton.setAttribute('aria-label', '메뉴 열기');
-    this.menuButton.setAttribute('aria-expanded', 'false');
     this.markNavigation();
     this.host.panelChanged(null);
     this.host.menuChanged(false, null);
   }
 
-  /** MENU·TAB: 닫혀 있으면 게임 메뉴 창, 열려 있으면(어느 창이든) 닫기 */
+  /** TAB: 닫혀 있으면 게임 시작 창, 열려 있으면(어느 창이든) 닫기 */
   toggleMenu(): void {
     if (this.menu) this.closeMenu();
-    else this.openMenu('menu');
+    else this.openMenu('play');
   }
 
   /** 터치 여부만 UI에 반영한다. 로비에는 이동 시작 안내나 포인터 잠금 안내가 없다. */
@@ -266,20 +255,27 @@ export class Lobby {
     this.presence.hidden = true;
     identity.append(this.playerName, this.presence);
     status.append(brand, identity);
-    const actions = el('div', 'lb-nav-actions');
+    // 상단 고정 메뉴 2줄: [로고 · 캐릭터 · 장비 · 상점 · 설정] / [게임 시작 · 방 목록 · 방 만들기] (화면 가로 전체)
+    // 예전 MENU 버튼·메뉴 창은 없앰. 누르면 해당 창이 열리고, 다른 메뉴를 누르면 그 창으로 바뀜
+    const icons = el('div', 'lb-top-icons');
+    const main = el('div', 'lb-top-main');
     for (const item of NAV) {
+      const isMain = item.id === 'play' || item.id === 'rooms' || item.id === 'create';
       const navButton = button(
         '',
-        `lb-nav-btn lb-nav-${item.id}`,
-        () => this.show(item.id),
-        `<span class="lb-nav-icon">${item.icon}</span><span class="lb-nav-label"><b>${item.korean}</b><small>${item.label}</small></span>${item.id === 'shop' ? '<i>SOON</i>' : ''}`,
+        `lb-top-btn ${isMain ? 'lb-top-main-btn' : 'lb-top-icon-btn'} lb-top-${item.id}`,
+        () => (this.menu && this.open === item.id ? this.closeMenu() : this.show(item.id)),
+        `<span class="lb-top-icon">${item.icon}</span><b>${item.korean}</b>`,
       );
       navButton.setAttribute('aria-label', item.korean);
       navButton.setAttribute('aria-pressed', 'false');
       this.navButtons.set(item.id, navButton);
-      actions.append(navButton);
+      (isMain ? main : icons).append(navButton);
     }
-    this.nav.append(status, actions, this.menuButton);
+    const row = el('div', 'lb-top-row');
+    row.append(status, icons);
+    this.nav.classList.add('lb-topbar');
+    this.nav.append(row, main);
   }
 
   private buildWindow(): void {
@@ -401,7 +397,6 @@ export class Lobby {
     this.open = next;
     this.characterSuspended = false;
     this.root.classList.toggle('lb-character-open', next === 'character');
-    this.root.classList.toggle('lb-gamemenu-open', next === 'menu');
     this.markNavigation();
     const panel = this.panels.get(next)!;
     this.renderPanel(panel);
@@ -427,7 +422,6 @@ export class Lobby {
       navButton.classList.toggle('lb-active', active);
       navButton.setAttribute('aria-pressed', String(active));
     }
-    this.menuButton.classList.toggle('lb-active', this.menu);
   }
 
   private layout(): void {

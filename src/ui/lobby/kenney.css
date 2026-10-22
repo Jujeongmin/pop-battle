@@ -36,7 +36,6 @@
   transition: filter .15s ease, color .15s ease;
 }
 /* 색 버튼 */
-.lb-lobby .lb-btn.lb-nav-play,
 .lb-lobby .lb-btn.lb-char-equip,
 .lb-lobby .lb-btn.lb-create-submit,
 .lb-lobby .lb-btn.lb-code-submit,
@@ -53,7 +52,6 @@
   border-image-source: var(--k-mint);
   color: #16473a;
 }
-.lb-lobby .lb-btn.lb-menu-button,
 .lb-lobby .lb-btn.lb-room-join,
 .lb-lobby .lb-btn.lb-mode-join,
 .lb-mp-overlay .lb-mp-btn.lb-mp-on {
@@ -67,9 +65,6 @@
   border-image-source: var(--k-pink);
   color: #5c1730;
 }
-/* 색 버튼 위 보조 글자·아이콘 칸은 면 색에 맞춤 */
-.lb-lobby .lb-btn.lb-menu-button kbd,
-.lb-lobby .lb-btn.lb-menu-button small { border-color: rgba(255, 255, 255, .7); color: #fff; }
 .lb-lobby .lb-mode-practice .lb-mode-copy small,
 .lb-lobby .lb-mode-tdm .lb-mode-copy small { color: rgba(39, 50, 92, .62); }
 .lb-lobby .lb-mode-join .lb-mode-copy small,
@@ -201,27 +196,11 @@
 .lb-lobby .lb-char-card.lb-preview,
 .lb-lobby .lb-weapon.lb-selected,
 .lb-lobby .lb-nav .lb-btn,
-.lb-lobby .lb-menu-button.lb-active,
 .lb-lobby .lb-gamemenu-tile,
 .lb-pause .lb-pause-item,
 .lb-pause .lb-pause-resume,
 .lb-pause .lb-pause-cancel,
 .lb-pause .lb-pause-confirm-leave { box-shadow: none; }
-
-/* ---------- 로비 상단: 게임 시작 = 큰 노랑 버튼 (아이콘 + 글자) ---------- */
-.lb-lobby .lb-nav .lb-btn.lb-nav-play { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 8px; padding: 0 10px; }
-.lb-lobby .lb-nav .lb-nav-play .lb-nav-label { display: block; width: auto; }
-.lb-lobby .lb-nav .lb-nav-play .lb-nav-icon {
-  display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center;
-  border: 0; border-radius: 50%; background: rgba(255, 255, 255, .6); box-shadow: none; color: #4a3200;
-}
-.lb-lobby .lb-nav .lb-nav-play .lb-nav-icon svg { width: 18px; height: 18px; }
-.lb-lobby .lb-nav .lb-nav-play .lb-nav-label b { color: #4a3200; font-size: 18px; -webkit-text-stroke: 0; white-space: nowrap; }
-.lb-lobby .lb-nav .lb-nav-play .lb-nav-label small { display: none; }
-@media (max-width: 1000px), (max-height: 520px) {
-  .lb-lobby .lb-nav .lb-nav-play .lb-nav-icon { display: grid; width: 24px; height: 24px; }
-  .lb-lobby .lb-nav .lb-nav-play .lb-nav-label b { font-size: 15px; }
-}
 
 /* ---------- 방 목록: 빈 상태·코드 참가 칸도 같은 흰 면 ---------- */
 .lb-lobby .lb-room-state,
@@ -294,4 +273,108 @@
   border-radius: 0;
   background: none;
   box-shadow: none;
+}
+
+/* ================= 상단 고정 메뉴 (2026-10-22): 로고 · 아이콘 메뉴 / 큰 메인 버튼 3개 ================= */
+.lb-lobby .lb-nav.lb-topbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  left: 8px;
+  display: flex;
+  width: auto;
+  height: auto;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.lb-lobby .lb-topbar .lb-top-row { display: flex; min-height: 58px; align-items: center; gap: 10px; }
+.lb-lobby .lb-topbar .lb-nav-status { flex: 1 1 auto; min-width: 0; }
+.lb-lobby .lb-topbar .lb-top-icons { display: flex; flex: 0 0 auto; gap: 8px; }
+.lb-lobby .lb-topbar .lb-top-main { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+
+/* 아이콘 메뉴: 흰 면 + 색 아이콘 + 아래 한글 */
+.lb-lobby .lb-topbar .lb-top-icon-btn {
+  display: grid;
+  width: 70px;
+  min-height: 58px;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 0;
+}
+.lb-lobby .lb-topbar .lb-top-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  color: #fff;
+}
+.lb-lobby .lb-topbar .lb-top-icon svg { width: 19px; height: 19px; }
+.lb-lobby .lb-topbar .lb-top-icon-btn b { font-family: var(--lb-display-font); font-size: 13px; font-weight: 400; line-height: 1.1; white-space: nowrap; }
+.lb-lobby .lb-topbar .lb-top-character .lb-top-icon { background: #f39a5c; }
+.lb-lobby .lb-topbar .lb-top-loadout .lb-top-icon { background: #5bc0b5; }
+.lb-lobby .lb-topbar .lb-top-shop .lb-top-icon { background: #ef7fa5; }
+.lb-lobby .lb-topbar .lb-top-settings .lb-top-icon { background: #8d7fe0; }
+
+/* 메인 버튼 3개: 가로 균등, 큰 아이콘 + 한글 */
+.lb-lobby .lb-topbar .lb-top-main-btn {
+  display: flex;
+  min-width: 0;
+  height: 56px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 8px;
+}
+.lb-lobby .lb-topbar .lb-top-main-btn .lb-top-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .62);
+}
+.lb-lobby .lb-topbar .lb-top-main-btn .lb-top-icon svg { width: 22px; height: 22px; }
+.lb-lobby .lb-topbar .lb-top-main-btn b { overflow: hidden; font-family: var(--lb-display-font); font-size: 21px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lobby .lb-topbar .lb-top-play { border-image-source: var(--k-yellow); color: #4a3200; }
+.lb-lobby .lb-topbar .lb-top-play .lb-top-icon { color: #b07a00; }
+.lb-lobby .lb-topbar .lb-top-rooms { border-image-source: var(--k-blue); color: #fff; text-shadow: 0 1px 0 rgba(39, 50, 92, .45); }
+.lb-lobby .lb-topbar .lb-top-rooms .lb-top-icon { color: #3f6fd6; }
+.lb-lobby .lb-topbar .lb-top-create { border-image-source: var(--k-mint); color: #16473a; }
+.lb-lobby .lb-topbar .lb-top-create .lb-top-icon { color: #2f9a7b; }
+
+/* 선택(열린 창): 아이콘 메뉴 = 노랑 테두리, 메인 버튼 = 진한 테두리 */
+.lb-lobby .lb-topbar .lb-top-icon-btn.lb-active { border-image-source: var(--k-selected); }
+.lb-lobby .lb-topbar .lb-top-main-btn.lb-active { outline: 3px solid var(--lb-ink, #27325c); outline-offset: 1px; }
+
+/* 창은 상단 메뉴 바로 아래 (메뉴 높이는 화면 크기에 따라 달라짐 → 실제 아래 끝 기준) */
+.lb-lobby .lb-panel {
+  top: calc(var(--lb-nav-bottom, 130px) + 10px);
+  max-height: calc(100% - var(--lb-nav-bottom, 130px) - 20px);
+}
+
+/* 가로형 휴대폰: 두 줄 모두 낮게, 세 버튼은 한 줄 유지 */
+@media (max-height: 520px) {
+  .lb-lobby .lb-nav.lb-topbar { top: 5px; right: 6px; left: 6px; gap: 4px; }
+  .lb-lobby .lb-topbar .lb-top-row { min-height: 44px; gap: 6px; }
+  .lb-lobby .lb-topbar .lb-top-icons { gap: 5px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn { width: 56px; min-height: 44px; }
+  .lb-lobby .lb-topbar .lb-top-icon { width: 22px; height: 22px; border-radius: 7px; }
+  .lb-lobby .lb-topbar .lb-top-icon svg { width: 15px; height: 15px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn b { font-size: 11px; }
+  .lb-lobby .lb-topbar .lb-top-main { gap: 5px; }
+  .lb-lobby .lb-topbar .lb-top-main-btn { height: 44px; gap: 6px; }
+  .lb-lobby .lb-topbar .lb-top-main-btn .lb-top-icon { width: 26px; height: 26px; }
+  .lb-lobby .lb-topbar .lb-top-main-btn .lb-top-icon svg { width: 16px; height: 16px; }
+  .lb-lobby .lb-topbar .lb-top-main-btn b { font-size: 16px; }
+  .lb-lobby .lb-topbar .lb-nav-brand { min-width: 0; height: 42px; padding: 2px 10px; }
 }
