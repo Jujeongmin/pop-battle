@@ -36,6 +36,13 @@ export class LobbySpace {
   private readonly ownMaterial: THREE.Material | null;
   private readonly colliders: RAPIER.Collider[] = [];
   private readonly merger = new KitMerger();
+  /** 하늘 탑 기둥만 따로 (카메라를 가리면 반투명하게, 모양·색·충돌은 그대로) */
+  private readonly pillarMerger = new KitMerger();
+  private readonly pillarMesh: THREE.Mesh;
+  private readonly pillarMaterial: THREE.Material;
+  private pillarAlpha = 1;
+  /** 기둥 충돌체 (로비 카메라 가림 검사에서 뺌 → 당기지 않고 기둥을 반투명하게) */
+  pillarCollider: RAPIER.Collider | null = null;
   private readonly unit = {
     box: new THREE.BoxGeometry(1, 1, 1),
     cylinder: new THREE.CylinderGeometry(1, 1, 1, 32),
@@ -72,16 +79,50 @@ export class LobbySpace {
     this.mesh.receiveShadow = true;
     this.mesh.matrixAutoUpdate = false;
     scene.add(this.mesh);
+
+    // 탑 기둥: 같은 재질의 복제본 (투명도만 바꿈, 원본 키트 재질은 경기장과 공유라 건드리지 않음)
+    this.pillarMaterial = (kit?.material ?? this.ownMaterial!).clone();
+    this.pillarMesh = new THREE.Mesh(this.pillarMerger.build()!, this.pillarMaterial);
+    this.pillarMesh.name = 'lobby-sky-tower-pillar';
+    this.pillarMesh.castShadow = true;
+    this.pillarMesh.receiveShadow = true;
+    this.pillarMesh.matrixAutoUpdate = false;
+    scene.add(this.pillarMesh);
   }
 
   /**
-   * 고정 카메라 보정: 하늘 탑 근처에서는 탑 바깥쪽에서 캐릭터를 보는 방향(rad, 카메라 yaw)을 돌려줌 → 탑 뒤로 돌아가도 가려지지 않음.
-   * 그 밖에서는 null (기본 고정 방향)
+   * 선분(카메라 → 캐릭터)이 탑 기둥을 지나는지 (가로 원 + 높이 범위). margin = 기둥 반지름에 더할 여유 (m)
    */
-  cameraYawHint(x: number, z: number): number | null {
-    const dx = x - (LobbySpace.CENTER.x + TOWER.x);
-    const dz = z - (LobbySpace.CENTER.z + TOWER.z);
-    return Math.hypot(dx, dz) < 7 ? Math.atan2(dx, dz) : null;
+  pillarBetween(a: THREE.Vector3, b: THREE.Vector3, margin = 0): boolean {
+    const cx = LobbySpace.CENTER.x + TOWER.x;
+    const cz = LobbySpace.CENTER.z + TOWER.z;
+    const y0 = LobbySpace.CENTER.y;
+    const y1 = y0 + TOWER.top;
+    const r = TOWER.r + margin;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len2 = dx * dx + dz * dz;
+    // 선분 위에서 기둥 중심과 가장 가까운 점
+    const t = len2 > 1e-9 ? Math.min(1, Math.max(0, ((cx - a.x) * dx + (cz - a.z) * dz) / len2)) : 0;
+    const px = a.x + dx * t;
+    const pz = a.z + dz * t;
+    if ((px - cx) ** 2 + (pz - cz) ** 2 > r * r) return false;
+    const py = a.y + (b.y - a.y) * t;
+    return py > y0 && py < y1;
+  }
+
+  /** 탑 기둥 투명도로 부드럽게 (1 = 불투명). 매 프레임 로비 카메라가 부름 */
+  fadePillar(target: number, dt: number): void {
+    this.pillarAlpha += (target - this.pillarAlpha) * (1 - Math.exp(-10 * dt));
+    if (Math.abs(this.pillarAlpha - target) < 0.005) this.pillarAlpha = target;
+    const m = this.pillarMaterial;
+    const see = this.pillarAlpha < 0.995;
+    if (m.transparent !== see) {
+      m.transparent = see;
+      m.depthWrite = !see;
+      m.needsUpdate = true;
+    }
+    m.opacity = see ? this.pillarAlpha : 1;
   }
 
   /** 섬·다리에서 떨어졌는지 (시작 지점으로 되돌림) */
@@ -95,6 +136,9 @@ export class LobbySpace {
     this.disposed = true;
     this.mesh.removeFromParent();
     this.mesh.geometry.dispose();
+    this.pillarMesh.removeFromParent();
+    this.pillarMesh.geometry.dispose();
+    this.pillarMaterial.dispose();
     this.ownMaterial?.dispose();
     for (const col of this.colliders) this.physics.removeCollider(col);
     this.colliders.length = 0;
@@ -204,8 +248,10 @@ export class LobbySpace {
     // 가운데 기둥: 층마다 색이 바뀌는 원통 + 꼭대기 넓은 전망대
     const bands = [p.blue, p.yellow, p.pink, p.mint, p.lavender, p.orange];
     const bandH = TOWER.top / bands.length;
-    bands.forEach((color, i) => this.cylinder(tx, y + bandH * (i + 0.5), tz, TOWER.r, bandH, lighten(color, 0.1)));
+    // 기둥 띠는 따로 합침 (카메라를 가리면 반투명)
+    bands.forEach((color, i) => this.pillarMerger.addBasic(this.unit.cylinder, trs(tx, y + bandH * (i + 0.5), tz, 0, [TOWER.r, bandH, TOWER.r]), lighten(color, 0.1)));
     this.prism(tx, tz, TOWER.r, y, y + TOWER.top, 20, '하늘 탑 기둥');
+    this.pillarCollider = this.colliders[this.colliders.length - 1]!;
     this.cylinder(tx, y + TOWER.top - 0.175, tz, 3.2, 0.35, p.white);
     this.cylinder(tx, y + TOWER.top + 0.01, tz, 2.6, 0.02, lighten(p.yellow, 0.3));
     this.prism(tx, tz, 3.2, y + TOWER.top - 0.35, y + TOWER.top, 20, '하늘 탑 전망대');

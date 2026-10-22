@@ -125,6 +125,8 @@ function readLastRoomCode(): string | null {
  * 마우스·터치로 돌지 않음. 장애물에 가리면 캐릭터 쪽으로 당김
  */
 const LOBBY_CAM = { yaw: 0, distance: 6.4, height: 3.3, lookHeight: 0.8, followSharpness: 6, heightSharpness: 3.5, pullInSharpness: 5, easeOutSharpness: 2.2, wallSharpness: 30 };
+/** 하늘 탑 기둥이 카메라를 가릴 때 투명도 (뒤쪽 나선 발판·캐릭터가 보이게) */
+const LOBBY_PILLAR_ALPHA = 0.28;
 /** 가림 때문에 당겨도 이보다 가까이 오지 않음 (m) */
 const LOBBY_CAM_MIN_DIST = 1.6;
 
@@ -1822,7 +1824,7 @@ export class Game {
    * 로비 고정 구도 따라가기 카메라 (TPS 카메라 결과를 덮어씀). 수평 방향(yaw)은 항상 고정, 위치만 부드럽게 따라감.
    * (예전엔 하늘 탑 근처에서 탑 바깥쪽을 보도록 yaw가 돌았는데, 로비 이동이 카메라 방향 기준이라 나선 경사로에서
    * W만 눌러도 카메라·이동 방향이 서로를 계속 돌려 빙글빙글 돎 → 회전 없이 고정)
-   * 구조물이 캐릭터를 가리면 방향은 그대로 두고 거리만 줄임: 레이 3개(가운데·좌우)로 가림을 미리 잡고,
+   * 하늘 탑 기둥은 당기지 않고 반투명하게 (뒤쪽 나선 발판이 보이도록). 그 밖의 구조물이 가리면 방향은 그대로 두고 거리만 줄임: 레이로 가림을 미리 잡고,
    * 가까워질 때는 빠르게·멀어질 때는 천천히 (갑자기 튀는 줌 방지)
    */
   private updateLobbyFollowCamera(cam: THREE.PerspectiveCamera, dt: number): void {
@@ -1847,8 +1849,10 @@ export class Game {
     // 가림 검사: 가까운 레이(가운데·좌우 0.3m) = 넘으면 벽 안이 보이는 한계, 먼 레이(좌우 1.8m) = 곧 가릴 구조물을 미리 보고
     // 천천히 당기기 시작 (옆으로 걸어 탑 뒤로 갈 때 한 번에 확 당겨지지 않게)
     const side = _v3.set(Math.cos(yaw), 0, -Math.sin(yaw));
+    // 하늘 탑 기둥은 가림 검사에서 뺌 → 기둥 뒤로 가도 당기지 않고 기둥을 반투명하게 (아래)
+    const pillar = this.lobbySpace?.pillarCollider ?? undefined;
     const ray = (offset: number): number => {
-      const hit = this.physics.raycast(_v4.copy(look).addScaledVector(side, offset), dir, full, undefined, this.player.body);
+      const hit = this.physics.raycast(_v4.copy(look).addScaledVector(side, offset), dir, full, pillar, this.player.body);
       return hit ? Math.max(LOBBY_CAM_MIN_DIST, hit.distance - 0.35) : full;
     };
     const hard = Math.min(ray(0), ray(0.3), ray(-0.3));
@@ -1863,6 +1867,19 @@ export class Game {
     cam.position.copy(look).addScaledVector(dir, this.lobbyCamDist);
     cam.lookAt(look);
     cam.updateMatrixWorld();
+    // 탑 기둥이 카메라와 캐릭터(발·머리) 사이, 또는 캐릭터 바로 옆(좌우 2.5m, 나선을 따라 이어지는 다음 발판 자리)을 가리면 기둥만 반투명
+    const space = this.lobbySpace;
+    if (space) {
+      const c = cam.position;
+      const sx = Math.cos(yaw) * 2.5;
+      const sz = -Math.sin(yaw) * 2.5;
+      const blocked =
+        space.pillarBetween(c, _v4.set(f.x, f.y + 1.1, f.z), 0.15) ||
+        space.pillarBetween(c, _v4.set(f.x, f.y + 0.15, f.z), 0.15) ||
+        space.pillarBetween(c, _v4.set(f.x + sx, f.y + 0.6, f.z + sz), 0) ||
+        space.pillarBetween(c, _v4.set(f.x - sx, f.y + 0.6, f.z - sz), 0);
+      space.fadePillar(blocked ? LOBBY_PILLAR_ALPHA : 1, dt);
+    }
   }
 
   /** 로비 HUD 안내 (클릭해서 움직이기 / 조작 중, PC / 터치). 바뀔 때만 알림 */
