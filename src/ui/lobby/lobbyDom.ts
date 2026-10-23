@@ -85,8 +85,8 @@ export interface LobbyHost {
   settings(): { sound: LobbySlider[]; controls: LobbySlider[]; touch: LobbySlider[] };
   /** 패널·메뉴를 피한 빈 공간의 가로 가운데 (px, null = 화면 가운데) → 3D 캐릭터를 그곳에 */
   panelChanged(centerX: number | null): void;
-  /** 로비 위쪽 UI(방 목록 칸)의 아래 끝 (px, null = 없음) → 3D 캐릭터가 그 아래에 보이게 화면을 내림 (카메라·조작은 그대로) */
-  uiBottomChanged(bottom: number | null): void;
+  /** 로비 3D가 보이는 빈 영역 (px, 방 목록 칸·시트를 뺀 곳) → 게임이 캐릭터를 그 가운데에 보이게. null = 화면 전체 */
+  uiAreaChanged(area: { top: number; bottom: number; left: number; right: number } | null): void;
   /**
    * TAB 메뉴가 열리거나 닫히거나 패널이 바뀔 때마다 (open = 메뉴 열림, panel = 열린 패널 id, 메뉴 첫 화면이면 null).
    * 사용자 동작(클릭·키) 처리 안에서 바로 불러야 함: 닫힐 때 게임이 포인터 잠금·터치 조작을 다시 켬 (브라우저는 사용자 동작 안에서만 허용).

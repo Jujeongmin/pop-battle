@@ -329,16 +329,41 @@ export class Lobby {
     status.append(brand, identity);
     // 상단: [로고 · 캐릭터 · 장비 · 상점 · 설정]. 게임 시작·방 만들기는 그 아래 방 목록 칸 머리에 (예전 큰 버튼 줄·MENU 창 없음)
     const icons = el('div', 'lb-top-icons');
+    // 메뉴 = 탭 목록 (화면 읽기 프로그램이 체크 상자·토글로 읽지 않게): ← → 이동, 선택은 aria-selected
+    icons.setAttribute('role', 'tablist');
+    icons.setAttribute('aria-label', '로비 메뉴');
     for (const item of NAV) {
       if (item.id === 'play' || item.id === 'create') continue;
+      // 상점: 구매 기능이 없어 비활성 (준비 중 표시 · 설명, 눌러도 막다른 화면으로 가지 않음)
+      const soon = item.id === 'shop';
       const navButton = button(
         '',
-        `lb-top-btn lb-top-icon-btn lb-top-${item.id}`,
-        () => (this.menu && this.open === item.id ? this.closeMenu() : this.show(item.id)),
-        `<span class="lb-top-icon">${item.icon}</span><b>${item.korean}</b>`,
+        `lb-top-btn lb-top-icon-btn lb-top-${item.id}${soon ? ' lb-nav-soon' : ''}`,
+        () => {
+          if (soon) return;
+          if (this.menu && this.open === item.id) this.closeMenu();
+          else this.show(item.id);
+        },
+        `<span class="lb-top-icon">${item.icon}</span><b>${item.korean}</b>${soon ? '<em class="lb-soon-badge">준비 중</em>' : ''}`,
       );
-      navButton.setAttribute('aria-label', item.korean);
-      navButton.setAttribute('aria-pressed', 'false');
+      navButton.id = `lb-tab-${item.id}`;
+      navButton.setAttribute('role', 'tab');
+      navButton.setAttribute('aria-selected', 'false');
+      navButton.setAttribute('aria-controls', 'lb-panel');
+      navButton.setAttribute('aria-label', soon ? `${item.korean} (준비 중)` : item.korean);
+      navButton.title = soon ? '상점은 준비 중이에요 · 스킨 판매는 다음 업데이트' : item.korean;
+      if (soon) navButton.setAttribute('aria-disabled', 'true');
+      navButton.addEventListener(
+        'keydown',
+        (e) => {
+          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+          e.preventDefault();
+          const all = [...this.navButtons.values()];
+          const i = all.indexOf(navButton);
+          all[(i + (e.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]!.focus();
+        },
+        { signal: this.abort.signal },
+      );
       // 누름 피드백: 마우스·터치 똑같이 100ms 어둡게 (짧은 탭은 :active가 거의 안 보여서 클래스로)
       let tapTimer = 0;
       navButton.addEventListener('pointerdown', () => {
@@ -386,6 +411,8 @@ export class Lobby {
     panelHead.append(this.panelTitle, close);
     this.panelBox.append(panelHead, this.panelBody);
     this.panelBox.setAttribute('aria-live', 'polite');
+    this.panelBox.id = 'lb-panel';
+    this.panelBox.setAttribute('role', 'tabpanel');
     this.menuLayer.append(this.charStage, this.panelBox);
   }
 
@@ -527,7 +554,7 @@ export class Lobby {
     for (const [id, navButton] of this.navButtons) {
       const active = this.menu && id === this.open;
       navButton.classList.toggle('lb-active', active);
-      navButton.setAttribute('aria-pressed', String(active));
+      navButton.setAttribute('aria-selected', String(active));
     }
   }
 
@@ -543,8 +570,17 @@ export class Lobby {
     this.root.style.setProperty('--lb-nav-bottom', `${this.nav.offsetTop + this.nav.offsetHeight}px`);
     this.root.style.setProperty('--lb-nav-right', `${Math.max(0, this.root.clientWidth - this.nav.offsetLeft - this.nav.offsetWidth)}px`);
     this.layoutCharacterStage();
-    // 방 목록 칸 아래 끝 → 게임이 캐릭터를 그 아래에 보이게
-    this.host.uiBottomChanged(this.visible && this.dockOn ? this.roomDock.offsetTop + this.roomDock.offsetHeight : null);
+    this.fitSheet();
+    // 3D가 보이는 빈 영역 (넓은 화면: 오른쪽 방 목록 칸 왼쪽 · 좁은 화면: 아래 시트 위) → 게임이 캐릭터를 그 가운데에
+    if (this.visible && this.dockOn) {
+      const w = this.root.clientWidth;
+      const h = this.root.clientHeight;
+      const top = this.nav.offsetTop + this.nav.offsetHeight;
+      const side = this.roomDock.offsetLeft > w * 0.4 && this.roomDock.offsetTop < h * 0.5;
+      this.host.uiAreaChanged(
+        side ? { top, bottom: h, left: 0, right: this.roomDock.offsetLeft - 8 } : { top, bottom: this.roomDock.offsetTop - 8, left: 0, right: w },
+      );
+    } else this.host.uiAreaChanged(null);
     if (!this.visible || !this.menu || this.open !== 'character') {
       this.host.panelChanged(null);
       return;
@@ -553,6 +589,34 @@ export class Lobby {
     const left = Math.max(8, 18 * scale);
     const right = this.panelBox.offsetLeft;
     this.host.panelChanged(right > left ? (left + right) / 2 : null);
+  }
+
+  /**
+   * 아래 시트(좁은·낮은 화면) + 터치 조작: 왼쪽 조이스틱과 오른쪽 점프·슬라이딩 버튼 사이에만 (버튼 크기 설정을 따라 실제 위치로).
+   * 넓은 화면 오른쪽 칸·마우스 조작이면 CSS 위치 그대로
+   */
+  private fitSheet(): void {
+    const d = this.roomDock;
+    const sheet = matchMedia('(max-width: 899px), (max-height: 520px)').matches;
+    const layer = document.querySelector('.touch-layer:not(.hidden)');
+    const stick = layer?.querySelector('.tc-stick');
+    const btns = layer ? [...layer.querySelectorAll<HTMLElement>('.tc-jump, .tc-slide')].filter((b) => b.offsetParent) : [];
+    if (!sheet || !stick || btns.length === 0) {
+      for (const k of ['left', 'right', 'width', 'transform', 'min-width'] as const) d.style.removeProperty(k);
+      return;
+    }
+    const w = this.root.clientWidth;
+    const left = Math.round(stick.getBoundingClientRect().right + 8);
+    const right = Math.round(w - Math.min(...btns.map((b) => b.getBoundingClientRect().left)) + 8);
+    if (w - left - right < 260) {
+      for (const k of ['left', 'right', 'width', 'transform', 'min-width'] as const) d.style.removeProperty(k);
+      return;
+    }
+    d.style.left = `${left}px`;
+    d.style.right = `${right}px`;
+    d.style.width = 'auto';
+    d.style.minWidth = '0';
+    d.style.transform = 'none';
   }
 
   private layoutCharacterStage(): void {

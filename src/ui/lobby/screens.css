@@ -185,7 +185,13 @@
   border-radius: 8px;
   background: radial-gradient(circle at 50% 75%, color-mix(in srgb, var(--c) 24%, #fff) 0%, #f4f6fb 72%);
 }
-.lb-lobby .lb-char-compare .lb-char-portrait img { inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); object-fit: contain; object-position: center bottom; }
+/* 초상(정사각 256px, 캐릭터가 세로 93%·가로 54%)은 칸 높이에 맞춰 크게: 칸이 세로로 길어도(확대 안 한 화면) 캐릭터가 칸을 채움.
+   칸이 아주 좁으면 가로 기준(칸 폭의 1.78배)으로 줄여 캐릭터 옆이 잘리지 않게. 가운데 · 발은 아래 */
+.lb-lobby .lb-char-compare .lb-char-portrait { container-type: size; overflow: hidden; }
+.lb-lobby .lb-char-compare .lb-char-portrait img {
+  inset: auto; top: auto; bottom: 2px; left: 50%; width: auto; max-width: none; height: min(calc(100cqh - 4px), 178cqw); aspect-ratio: 1;
+  object-fit: contain; object-position: center bottom; transform: translateX(-50%);
+}
 .lb-lobby .lb-char-compare .lb-char-card-copy { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 0; }
 .lb-lobby .lb-char-compare .lb-char-card-copy b { display: block; flex: 0 0 auto; min-height: 0; font-family: var(--lb-display-font); font-size: 17px; font-weight: 400; line-height: 1.15; white-space: nowrap; }
 .lb-lobby .lb-char-compare .lb-char-card-copy small { display: block; min-width: 0; color: #68718b; font-size: 11px; font-weight: 800; white-space: nowrap; }
@@ -911,4 +917,164 @@
   .lb-rank-mine-label { padding: 4px 8px; font-size: 11px; }
   .lb-rank-row-mine { border-width: 2px; box-shadow: 0 2px 0 var(--lb-ink); }
 }
+
+
+/* ================= 방 목록 칸 v2 (2026-10-23 UI 개선): 3D 월드·캐릭터가 주인공 =================
+   넓은 화면(가로 900px+ · 세로 521px+) = 오른쪽 떠 있는 칸, 좁은·낮은 화면 = 아래 시트(조이스틱·점프 버튼 사이).
+   머리(손잡이·제목·새로고침) + 시작 버튼(빠른 시작 > 연습전 > 방 만들기)은 접어도 보임, 목록·방 코드만 접힘.
+   색 역할: 파랑 = 빠른 시작·정보, 흰색 = 보조, 민트 = 만들기, 노랑 = 선택 */
+.lb-lobby {
+  --ui-ink: #27325c;
+  --ui-radius: 16px;
+  --ui-radius-sm: 12px;
+  --ui-shadow: 0 4px 0 var(--ui-ink);
+  --ui-shadow-sm: 0 3px 0 var(--ui-ink);
+  --ui-blue: #3d8bff;
+  --ui-blue-deep: #2a6ee8;
+  --ui-mint: #4fd1a5;
+  --ui-yellow: #ffd45e;
+  --ui-cream: #fffaf0;
+  --ui-fast: 160ms;
+}
+.lb-lobby .lb-room-dock.lb-dock2 {
+  top: calc(var(--lb-nav-bottom, 74px) + 10px);
+  right: 14px;
+  bottom: auto;
+  left: auto;
+  width: min(380px, 34vw);
+  max-height: calc(100% - var(--lb-nav-bottom, 74px) - 24px);
+  gap: 10px;
+  padding: 8px 12px 12px;
+  border: 3px solid var(--ui-ink);
+  border-image: none;
+  border-radius: 18px;
+  background: var(--ui-cream);
+  box-shadow: var(--ui-shadow), 0 14px 28px rgba(39, 50, 92, .16);
+  transform: none;
+}
+.lb-lobby .lb-dock2 .lb-dock-head { display: flex; min-height: 40px; flex: none; align-items: center; gap: 8px; }
+.lb-lobby .lb-dock2 .lb-dock-handle {
+  display: grid; width: 44px; height: 44px; flex: none; place-items: center; margin: -4px 0 -4px -6px; padding: 0;
+  border: 0; border-image: none; background: none; box-shadow: none; cursor: pointer;
+}
+.lb-lobby .lb-dock2 .lb-dock-handle i { width: 22px; height: 14px; background: none; border: 0; }
+.lb-lobby .lb-dock2 .lb-dock-handle i::before {
+  content: ''; display: block; width: 10px; height: 10px; margin: 0 auto; border-right: 3px solid var(--ui-ink); border-bottom: 3px solid var(--ui-ink);
+  transform: translateY(-2px) rotate(45deg); transition: transform var(--ui-fast) ease;
+}
+.lb-lobby .lb-dock2.lb-dock-collapsed .lb-dock-handle i::before { transform: translateY(3px) rotate(-135deg); }
+.lb-lobby .lb-dock2 .lb-dock-title { font-family: var(--lb-display-font); font-size: 21px; font-weight: 400; white-space: nowrap; }
+.lb-lobby .lb-dock2 .lb-dock-count { padding: 2px 8px; border-radius: 999px; background: #e6ecfa; color: #3f5fae; font-size: 12px; font-weight: 900; }
+.lb-lobby .lb-dock2 .lb-dock-count:empty { display: none; }
+.lb-lobby .lb-dock2 .lb-icon-btn {
+  display: grid; width: 44px; min-width: 44px; height: 44px; min-height: 44px; margin-left: auto; place-items: center; padding: 0;
+  border: 3px solid var(--ui-ink); border-image: none; border-radius: 50%; background: #fff; box-shadow: var(--ui-shadow-sm); color: var(--ui-ink); cursor: pointer;
+}
+.lb-lobby .lb-dock2 .lb-icon-btn svg { width: 20px; height: 20px; }
+.lb-lobby .lb-dock2 .lb-icon-btn:disabled svg { animation: lb-spin .8s linear infinite; }
+@keyframes lb-spin { to { transform: rotate(360deg); } }
+/* 시작 버튼 위계 */
+.lb-lobby .lb-dock2 .lb-dock-cta { display: grid; flex: none; gap: 8px; }
+.lb-lobby .lb-dock2 .lb-dock-cta .lb-btn {
+  display: flex; width: auto; align-items: center; justify-content: center; gap: 8px; margin: 0; border: 3px solid var(--ui-ink); border-image: none;
+  border-radius: 999px; box-shadow: var(--ui-shadow-sm); cursor: pointer; transition: transform var(--ui-fast) ease, box-shadow var(--ui-fast) ease, filter var(--ui-fast) ease;
+}
+.lb-lobby .lb-dock2 .lb-dock-cta .lb-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ui-ink); }
+@media (hover: hover) { .lb-lobby .lb-dock2 .lb-dock-cta .lb-btn:hover { filter: brightness(1.06); } }
+.lb-lobby .lb-dock2 .lb-cta-primary {
+  min-height: 60px; justify-content: flex-start; padding: 0 18px 0 8px; background: linear-gradient(180deg, #5aa2ff, var(--ui-blue-deep)); color: #fff;
+  box-shadow: var(--ui-shadow), inset 0 3px 0 rgba(255, 255, 255, .28);
+}
+.lb-lobby .lb-dock2 .lb-cta-primary svg { width: 40px; height: 40px; flex: none; padding: 9px; border: 2px solid rgba(255, 255, 255, .9); border-radius: 50%; background: rgba(255, 255, 255, .2); }
+.lb-lobby .lb-dock2 .lb-cta-copy { display: grid; justify-items: start; line-height: 1.1; }
+.lb-lobby .lb-dock2 .lb-cta-copy b { font-family: var(--lb-display-font); font-size: 24px; font-weight: 400; text-shadow: 0 2px 0 rgba(39, 50, 92, .35); }
+.lb-lobby .lb-dock2 .lb-cta-copy small { opacity: .92; font-size: 12px; font-weight: 800; }
+.lb-lobby .lb-dock2 .lb-dock-cta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lb-lobby .lb-dock2 .lb-cta-secondary,
+.lb-lobby .lb-dock2 .lb-cta-tertiary { min-height: 44px; padding: 0 12px; font-family: var(--lb-display-font); font-size: 16px; font-weight: 400; }
+.lb-lobby .lb-dock2 .lb-cta-secondary { background: #fff; color: var(--ui-ink); }
+.lb-lobby .lb-dock2 .lb-cta-tertiary { border-width: 2px; background: #e3faf1; color: #16473a; box-shadow: 0 2px 0 var(--ui-ink); }
+.lb-lobby .lb-dock2 .lb-cta-secondary svg,
+.lb-lobby .lb-dock2 .lb-cta-tertiary svg { width: 18px; height: 18px; flex: none; }
+/* 접히는 부분: 목록(안에서 스크롤) + 방 코드 */
+.lb-lobby .lb-dock2 .lb-dock-body { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: 8px; }
+.lb-lobby .lb-dock2.lb-dock-collapsed .lb-dock-body { display: none; }
+.lb-lobby .lb-dock2 .lb-room-list { display: flex; height: auto; min-height: 0; max-height: none; flex: 1 1 auto; flex-direction: column; gap: 6px; overflow-y: auto; padding: 2px; }
+.lb-lobby .lb-dock2 .lb-room-card {
+  display: grid; height: auto; min-height: 56px; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: 'name name name join' 'mode slots status join';
+  align-items: center; gap: 2px 8px; padding: 7px 10px; border: 2px solid rgba(39, 50, 92, .18); border-image: none; border-radius: var(--ui-radius-sm); background: #fff;
+}
+.lb-lobby .lb-dock2 .lb-room-card.lb-selected { border-color: var(--ui-ink); background: #fff7d6; box-shadow: inset 0 0 0 2px var(--ui-yellow); }
+.lb-lobby .lb-dock2 .lb-room-card.lb-room-closed { background: #f4f5f9; }
+.lb-lobby .lb-dock2 .lb-room-name { grid-area: name; }
+.lb-lobby .lb-dock2 .lb-room-mode { grid-area: mode; height: 22px; }
+.lb-lobby .lb-dock2 .lb-room-slots { grid-area: slots; }
+.lb-lobby .lb-dock2 .lb-room-dots { display: none; }
+.lb-lobby .lb-dock2 .lb-room-status { grid-area: status; }
+.lb-lobby .lb-dock2 .lb-room-join {
+  grid-area: join; width: auto; min-width: 64px; height: 44px; min-height: 44px; border: 3px solid var(--ui-ink); border-image: none; border-radius: 999px;
+  background: var(--ui-blue); color: #fff; box-shadow: var(--ui-shadow-sm); font-size: 15px;
+}
+.lb-lobby .lb-dock2 .lb-room-join:disabled { border-color: rgba(39, 50, 92, .3); background: #e7e9f1; color: rgba(39, 50, 92, .55); box-shadow: none; font-size: 11px; }
+.lb-lobby .lb-dock2 .lb-room-list > .lb-room-state { min-height: 96px; padding: 10px; border: 2px dashed rgba(39, 50, 92, .2); border-radius: var(--ui-radius-sm); }
+.lb-lobby .lb-dock2 .lb-code-details { flex: none; }
+.lb-lobby .lb-dock2 .lb-code-details summary {
+  display: flex; min-height: 44px; align-items: center; gap: 6px; padding: 0 4px; color: var(--lb-ink2, #5b6582); font-size: 13px; font-weight: 900; cursor: pointer; list-style: none;
+}
+.lb-lobby .lb-dock2 .lb-code-details summary::-webkit-details-marker { display: none; }
+.lb-lobby .lb-dock2 .lb-code-details summary::before { content: '+'; display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: #e6ecfa; color: #3f5fae; font-size: 16px; }
+.lb-lobby .lb-dock2 .lb-code-details[open] summary::before { content: '\2212'; }
+.lb-lobby .lb-dock2 .lb-code-join { justify-content: flex-start; flex-wrap: wrap; }
+.lb-lobby .lb-dock2 .lb-code-join label span { display: none; }
+.lb-lobby .lb-dock2 .lb-code-join input { width: 160px; height: 44px; border-radius: 12px; }
+.lb-lobby .lb-dock2 .lb-code-submit,
+.lb-lobby .lb-dock2 .lb-room-rejoin { min-height: 44px; border-radius: 999px; }
+.lb-lobby .lb-dock2 :focus-visible { outline: 3px solid var(--ui-blue-deep); outline-offset: 2px; }
+
+/* 좁은·낮은 화면: 아래 시트 (가운데, 왼쪽 조이스틱·오른쪽 점프 버튼 자리는 비움). 접으면 머리 + 시작 버튼만 */
+@media (max-width: 899px), (max-height: 520px) {
+  .lb-lobby .lb-room-dock.lb-dock2 {
+    top: auto; right: auto; bottom: 0; left: 50%; width: min(440px, calc(100% - 300px)); min-width: min(330px, 96vw); max-height: 74%;
+    gap: 6px; padding: 0 10px 8px; border-bottom: 0; border-radius: 18px 18px 0 0; box-shadow: 0 -4px 18px rgba(39, 50, 92, .18); transform: translateX(-50%);
+  }
+  .lb-lobby .lb-dock2 .lb-dock-head { min-height: 44px; gap: 6px; }
+  .lb-lobby .lb-dock2 .lb-dock-handle { width: 44px; height: 44px; margin: 0 0 0 -8px; }
+  .lb-lobby .lb-dock2 .lb-dock-title { font-size: 16px; }
+  .lb-lobby .lb-dock2 .lb-icon-btn { border-width: 2px; }
+  .lb-lobby .lb-dock2 .lb-icon-btn svg { width: 18px; height: 18px; }
+  /* 시작 버튼 한 줄 (모두 높이 44px): 빠른 시작이 가장 넓고 진함 */
+  .lb-lobby .lb-dock2 .lb-dock-cta { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+  .lb-lobby .lb-dock2 .lb-dock-cta-row { display: contents; }
+  .lb-lobby .lb-dock2 .lb-cta-primary { min-height: 48px; padding: 0 8px 0 4px; border-width: 2px; }
+  .lb-lobby .lb-dock2 .lb-cta-primary svg { width: 32px; height: 32px; padding: 7px; }
+  .lb-lobby .lb-dock2 .lb-cta-copy b { font-size: 17px; }
+  .lb-lobby .lb-dock2 .lb-cta-copy small { display: none; }
+  .lb-lobby .lb-dock2 .lb-cta-secondary,
+  .lb-lobby .lb-dock2 .lb-cta-tertiary { min-height: 44px; padding: 0 6px; border-width: 2px; font-size: 13px; box-shadow: 0 2px 0 var(--ui-ink); }
+  .lb-lobby .lb-dock2 .lb-cta-secondary svg,
+  .lb-lobby .lb-dock2 .lb-cta-tertiary svg { display: none; }
+  .lb-lobby .lb-dock2 .lb-dock-cta .lb-btn { min-width: 0; overflow: hidden; white-space: nowrap; }
+  .lb-lobby .lb-dock2 .lb-cta-copy b { white-space: nowrap; }
+  .lb-lobby .lb-dock2 .lb-room-card { min-height: 48px; padding: 4px 8px; }
+  .lb-lobby .lb-dock2 .lb-room-join { height: 40px; min-height: 40px; }
+}
+/* 세로 화면(폰 세로): 시트를 화면 폭 거의 전부 */
+@media (max-width: 600px) and (orientation: portrait) {
+  .lb-lobby .lb-room-dock.lb-dock2 { width: calc(100% - 12px); min-width: 0; }
+  .lb-lobby .lb-dock2 .lb-dock-cta-row { grid-template-columns: 1fr 1fr; }
+  .lb-lobby .lb-dock2 .lb-cta-secondary,
+  .lb-lobby .lb-dock2 .lb-cta-tertiary { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-lobby .lb-dock2 *, .lb-lobby .lb-dock2 *::before { transition: none !important; animation-duration: 0s !important; }
+}
+
+/* 상단 메뉴: 상점 비활성 (준비 중 배지, 눌러도 화면 안 바뀜) */
+.lb-lobby .lb-topbar .lb-top-icon-btn.lb-nav-soon { position: relative; filter: grayscale(.75); opacity: .62; cursor: not-allowed; }
+.lb-lobby .lb-topbar .lb-top-icon-btn.lb-nav-soon:active { filter: grayscale(.75); }
+.lb-soon-badge {
+  position: absolute; top: -6px; right: -4px; padding: 1px 5px; border: 2px solid #fff; border-radius: 999px; background: #8a93ad; color: #fff;
+  font-size: 9px; font-style: normal; font-weight: 900; line-height: 1.3; white-space: nowrap;
+}
+.lb-lobby .lb-topbar .lb-top-ranking .lb-top-icon { background: #f2b53a; }
 
