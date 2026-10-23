@@ -1,3 +1,4 @@
+import { CoachMarks, type CoachStep } from '../ui/CoachMarks';
 import type { RankingResult } from '../net/shared/ranking';
 import { levelInfo } from '../net/shared/progression';
 import { loadXpCache, saveXpCache } from '../net/progress';
@@ -169,6 +170,19 @@ function lobbyWeapon(w: WeaponDef): LobbyWeapon {
   return { id: w.id, name: w.name, type: WEAPON_TYPE[w.id], stats: { damage: w.damage, pellets: w.pellets, rpm: w.rpm, range: w.range } };
 }
 
+/** 첫 플레이 안내 단계 (로비) */
+const LOBBY_COACH: CoachStep[] = [
+  { id: 'move', pc: 'WASD로 걸어 보세요', touch: '왼쪽 화면을 끌어 걸어 보세요' },
+  { id: 'jump', pc: 'Space로 점프!', touch: '점프 버튼을 눌러 보세요' },
+];
+/** 첫 플레이 안내 단계 (첫 매치) */
+const MATCH_COACH: CoachStep[] = [
+  { id: 'move', pc: 'WASD로 이동', touch: '왼쪽 화면을 끌어 이동' },
+  { id: 'look', pc: '마우스로 둘러보기', touch: '오른쪽 화면을 끌어 둘러보기' },
+  { id: 'fire', pc: '좌클릭으로 사격', touch: '사격 버튼으로 사격' },
+  { id: 'switch', pc: '1 · 2 · 3으로 무기 바꾸기', touch: '아래 무기 칸을 눌러 바꾸기' },
+];
+
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -184,6 +198,8 @@ export class Game {
   private readonly soundActors: SoundActor[] = [];
   /** 인게임 실시간 상황판 (PC Tab 누르는 동안 / 모바일 점수판 터치) */
   private scoreboard!: Scoreboard;
+  /** 첫 플레이 안내 (로비: 이동·점프, 첫 매치: 이동·시점·사격·무기 교체) */
+  private coach!: CoachMarks;
   private readonly resizeObserver = new ResizeObserver(() => this.resize());
   /** 모바일 조이스틱 자동 달리기 (입력 장치가 조이스틱일 때만) */
   private readonly autoSprint = new JoystickAutoSprint();
@@ -385,6 +401,7 @@ export class Game {
     this.audio.attachUnlock(window);
     this.sounds = new GameSounds(this.audio, container);
     this.scoreboard = new Scoreboard(container);
+    this.coach = new CoachMarks(container);
     this.scoreboard.onClose = () => this.scoreboard.setOpen(false);
     this.hud.onMatchBarTap = () => this.scoreboard.setOpen(!this.scoreboard.open && this.scoreboardAllowed);
     window.addEventListener('keyup', this.onScoreboardKeyUp, { signal: this.abort.signal, capture: true });
@@ -1095,6 +1112,7 @@ export class Game {
     this.netHud?.update(dt, this.netGame && !!this.netPanel?.isOpen);
     this.updateSounds();
     this.updateScoreboard();
+    this.updateCoach(dt);
     this.mpRefreshTimer -= dt;
     if (this.mpRefreshTimer <= 0 && this.mpMenu) {
       this.mpRefreshTimer = 0.25;
@@ -1714,6 +1732,35 @@ export class Game {
       controls: [user('mouseSensitivity', '마우스 감도', x, (v) => (this.input.mouseSensitivity = v))],
       touch: [touch('lookSensitivity', '시점 회전 감도', x), touch('joystickScale', '조이스틱 크기', pct), touch('buttonScale', '버튼 크기', pct)],
     };
+  }
+
+  /**
+   * 첫 플레이 안내: 로비 자유 이동 중엔 이동 → 점프, 첫 매치 전투 중엔 이동 → 시점 → 사격 → 무기 교체.
+   * 이번 프레임 입력으로 해 봤는지 판단 (조작 로직은 그대로). 다 하면 이 기기에 저장돼 다시 안 나옴
+   */
+  private updateCoach(dt: number): void {
+    const c = this.coach;
+    const lobbyFree = this.lobbyShown && !this.lobbyMenuOpen && !this.resultScreen?.open && !!this.nick;
+    const fighting = !this.lobbyShown && this.match.state === 'PLAYING' && this.input.isLocked && !this.dead && !this.resultScreen?.open && !this.pauseMenu?.visible;
+    const want = lobbyFree ? 'lobby' : fighting ? 'match' : null;
+    if (c.active && c.active !== want) c.stop();
+    if (want === 'lobby') c.start('lobby', LOBBY_COACH);
+    else if (want === 'match') c.start('match', MATCH_COACH);
+    if (!want) return;
+    const s = this.input.state;
+    c.update(dt, this.input.touchMode, (id) =>
+      id === 'move'
+        ? s.moveX !== 0 || s.moveY !== 0
+        : id === 'look'
+          ? s.lookDX !== 0 || s.lookDY !== 0
+          : id === 'fire'
+            ? s.fireHeld
+            : id === 'switch'
+              ? s.slotPressed > 0 || s.wheelSteps !== 0
+              : id === 'jump'
+                ? s.jumpPressed
+                : false,
+    );
   }
 
   /** 매치 진행 중 (연습전: 카운트다운·전투, 멀티: 방의 매치가 결과 단계 전) */

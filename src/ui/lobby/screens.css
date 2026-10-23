@@ -1078,3 +1078,6 @@
 }
 .lb-lobby .lb-topbar .lb-top-ranking .lb-top-icon { background: #f2b53a; }
 
+
+/* 로비 아래 긴 조작법 한 줄은 첫 플레이 안내(CoachMarks)로 대체 · 전체 조작법은 설정·일시정지 메뉴 */
+.lb-lobby .lb-control-hint { display: none !important; }

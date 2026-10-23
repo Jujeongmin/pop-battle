@@ -113,7 +113,7 @@ const LOW_HP = 0.3;
 const LOW_AMMO = 0.25;
 
 /** 상단 매치 카드의 모드 이름 */
-const MODE_TITLE: Record<NetScoreHud['mode'], string> = { tdm: 'TEAM DEATHMATCH', ffa: 'FREE FOR ALL', test: 'FREE TEST' };
+const MODE_TITLE: Record<NetScoreHud['mode'], string> = { tdm: '팀 데스매치', ffa: '개인전', test: '자유 테스트' };
 
 const HEART_SVG =
   '<svg viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21 C 5 16 1 12 1 7.2 A 5.6 5.6 0 0 1 12 4.6 A 5.6 5.6 0 0 1 23 7.2 C 23 12 19 16 12 21 Z" fill="currentColor"/>' +
@@ -158,6 +158,8 @@ export class Hud {
   private readonly scope: HTMLDivElement;
   private readonly blocked: HTMLDivElement;
   private readonly hitmarker: HTMLDivElement;
+  private readonly popEl: HTMLDivElement;
+  private popAnim: Animation | null = null;
   private readonly weaponCard: HTMLDivElement;
   private readonly weaponIcon: HTMLDivElement;
   private readonly weaponName: HTMLDivElement;
@@ -239,6 +241,8 @@ export class Hud {
       <div class="crosshair" data-style="cross"><i class="ring"></i><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
       <div class="blocked-marker"></div>
       <div class="hitmarker"><i></i><i></i><i></i><i></i><b></b></div>
+      <div class="pop-burst" aria-hidden="true">POP!</div>
+      <div class="low-vignette" aria-hidden="true"></div>
       <div class="reload"><svg class="rl-ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rl-track" cx="18" cy="18" r="14"/><circle class="rl-fill" cx="18" cy="18" r="14" pathLength="100"/><path class="rl-check" d="M11.5 18.5l4.5 4.5 8.5-9"/></svg><span class="rl-label"></span></div>
       <div class="fps">-- FPS</div>
       <pre class="debug-lines"></pre>
@@ -313,6 +317,7 @@ export class Hud {
     this.scope = q('.scope');
     this.blocked = q('.blocked-marker');
     this.hitmarker = q('.hitmarker');
+    this.popEl = q('.pop-burst');
     for (let i = 0; i < POPUP_POOL; i++) {
       const el = document.createElement('div');
       el.className = 'dmg';
@@ -561,7 +566,7 @@ export class Hud {
       const mb = this.matchBar;
       mb.classList.toggle('tdm', mode === 'tdm');
       mb.classList.toggle('solo', mode !== 'tdm');
-      mb.querySelector('.mb-mode')!.textContent = n ? MODE_TITLE[mode] : `${MODE_TITLE.ffa} · BOTS`;
+      mb.querySelector('.mb-mode')!.textContent = n ? MODE_TITLE[mode] : `${MODE_TITLE.ffa} · 연습전`;
       mb.querySelector('.mb-time')!.textContent = time;
       const pill = (sel: string, html: string | null) => {
         const el = mb.querySelector(sel) as HTMLElement;
@@ -584,7 +589,7 @@ export class Hud {
         pill('.mb-rank', `<b>${rank}</b>위 / ${players}`);
         pill('.mb-goal', null);
       } else {
-        pill('.mb-kills', `MY KILLS <b>${pad2(kills)}</b> / ${goal}`);
+        pill('.mb-kills', `내 킬 <b>${pad2(kills)}</b> / ${goal}`);
         pill('.mb-rank', `<b>${rank}</b>위 / ${players}`);
         pill('.mb-goal', null);
       }
@@ -628,6 +633,16 @@ export class Hud {
       { duration: killed ? 380 : headshot ? 240 : 170, easing: 'ease-out' },
     );
     if (killed) {
+      // 처치: 화면 가운데 짧은 "POP!" (버블이 터지듯 커졌다 사라짐, 260ms · 조준점 위쪽이라 시야를 오래 가리지 않음)
+      this.popAnim?.cancel();
+      this.popAnim = this.popEl.animate(
+        [
+          { opacity: 0, transform: 'translate(-50%, -50%) scale(.6)' },
+          { opacity: 1, transform: 'translate(-50%, -50%) scale(1.15)', offset: 0.35 },
+          { opacity: 0, transform: 'translate(-50%, -50%) scale(1.3)' },
+        ],
+        { duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 260, easing: 'ease-out' },
+      );
       this.killRingAnim?.cancel();
       this.killRingAnim = hm.querySelector('b')!.animate(
         [
@@ -909,6 +924,8 @@ export class Hud {
       this.hpLag.classList.toggle('instant', !dropped);
       this.hpLag.style.width = pct;
       this.hpCard.classList.toggle('low', f.hp > 0 && f.hp <= f.maxHp * LOW_HP);
+      // 체력 낮음: 숫자·막대(hp low)와 함께 화면 가장자리도 붉게
+      this.root.classList.toggle('low-hp', f.hp > 0 && f.hp <= f.maxHp * LOW_HP);
       this.hpCard.classList.toggle('empty', f.hp <= 0);
     }
     this.protectTag.classList.toggle('show', f.protection > 0 && !f.dead);

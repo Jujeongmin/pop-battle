@@ -821,3 +821,94 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   .sb-level img { width: 18px; height: 18px; }
   .sb-name { gap: 4px; }
 }
+
+/* ================= 전투 HUD 가독성 층 (2026-10-23 UI 개선) =================
+   배치는 그대로 (위 가운데 시간·점수·순위 / 왼쪽 체력 / 아래 가운데 무기 슬롯 / 오른쪽 탄약). 밝은 맵에서도 읽히게
+   반투명 네이비 카드 + 흰 테두리·흰 글자, 핵심 숫자(시간·체력·탄약·킬)는 한 단계 크게, 보조 글자는 흐리게.
+   팀 색은 고정: BLUE = 청록·파랑, RED = 분홍·빨강. 조준점 주변은 비움 */
+.hud {
+  --hud-bg: rgba(28, 36, 74, .64);
+  --hud-line: rgba(255, 255, 255, .9);
+  --hud-text: #fff;
+  --hud-sub: rgba(255, 255, 255, .72);
+  --hud-num-shadow: 0 2px 0 rgba(16, 22, 50, .6);
+}
+.hud .hp, .hud .weapon-card, .hud .match-bar,
+.hud.touch .hp, .hud.touch .weapon-card, .hud.touch .match-bar {
+  border-color: var(--hud-line);
+  background: var(--hud-bg);
+  color: var(--hud-text);
+  box-shadow: 0 3px 0 rgba(16, 22, 50, .35);
+}
+.hud .hp-text, .hud .ammo .mag, .hud .mb-time, .hud .mb-score, .hud.touch .hp-text, .hud.touch .ammo .mag { color: #fff; text-shadow: var(--hud-num-shadow); }
+.hud .hp-max, .hud .ammo .res, .hud .wc-name, .hud .mb-tname { color: var(--hud-sub); opacity: 1; }
+.hud .mb-mode { color: #ffd45e; }
+.hud .wc-state { color: #9fd0ff; }
+.hud .weapon-card.empty .wc-state, .hud .weapon-card.low .wc-state { color: #ff8a9b; }
+.hud .mb-time { background: rgba(255, 255, 255, .14); }
+.hud .match-bar.hurry .mb-time { background: #ff4b5c; }
+.hud .mb-pill { background: rgba(255, 255, 255, .14); color: var(--hud-sub); }
+.hud .mb-pill b { color: #ffd45e; }
+.hud .hp-bar { background: rgba(255, 255, 255, .18); box-shadow: none; }
+/* 핵심 숫자 한 단계 크게 (PC) */
+.hud:not(.touch) .hp-text { font-size: calc(30px * var(--u)); }
+.hud:not(.touch) .ammo .mag { font-size: calc(38px * var(--u)); }
+.hud:not(.touch) .mb-time { font-size: calc(30px * var(--u)); }
+.hud:not(.touch) .mb-pill b { font-size: max(12px, calc(16px * var(--u))); }
+/* 터치: 숫자 조금 크게, 카드는 그대로 작게 */
+.hud.touch .hp-text { font-size: 22px; }
+.hud.touch .ammo .mag { font-size: 25px; }
+.hud.touch .mb-time { font-size: 22px; }
+.hud.touch .mb-score { font-size: 22px; }
+/* 체력 낮음: 숫자·막대·화면 가장자리 동시에 */
+.hud .hp.low .hp-text { color: #ff8a9b; }
+.hud .low-vignette {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0;
+  box-shadow: inset 0 0 70px 18px rgba(255, 46, 77, .45); transition: opacity .2s ease;
+}
+.hud.low-hp .low-vignette { opacity: 1; animation: low-vig 1.2s ease-in-out infinite; }
+@keyframes low-vig { 50% { opacity: .55; } }
+/* 무기 슬롯: 활성 = 노랑(색), 비활성 = 반투명 네이비 + 낮은 채도 */
+.hud .slot { border-color: rgba(255, 255, 255, .55); background: var(--hud-bg); color: rgba(255, 255, 255, .62); }
+.hud .slot .slot-icon { filter: saturate(.25) brightness(1.4); opacity: .75; }
+.hud .slot b { background: rgba(255, 255, 255, .22); }
+.hud .slot.active { border-color: #fff; background: var(--yellow); color: var(--ink); }
+.hud .slot.active .slot-icon { filter: none; opacity: 1; }
+.hud .slot.active b { background: var(--ink); }
+.hud.touch .slot { background: var(--hud-bg); border-color: rgba(255, 255, 255, .55); }
+.hud.touch .slot.active { background: var(--yellow); border-color: #fff; }
+/* 처치 "POP!": 조준점 조금 위, 260ms */
+.hud .pop-burst {
+  position: absolute; left: 50%; top: calc(50% - 64px); z-index: 2; opacity: 0; pointer-events: none;
+  color: #ffd45e; font-family: 'POP Jua', var(--font); font-size: 34px; letter-spacing: 1px; white-space: nowrap;
+  text-shadow: 0 3px 0 #b5481f, 0 0 2px #fff; -webkit-text-stroke: 1.5px #fff; paint-order: stroke fill;
+  transform: translate(-50%, -50%);
+}
+.hud.touch .pop-burst { top: calc(50% - 50px); font-size: 26px; }
+@media (prefers-reduced-motion: reduce) {
+  .hud.low-hp .low-vignette { animation: none; }
+}
+
+/* 첫 플레이 안내 (ui/CoachMarks.ts): 위쪽 가운데 작은 말풍선 (조준점·버튼을 가리지 않게) */
+.coach {
+  position: absolute; left: 50%; top: max(96px, 15%); z-index: 11; display: flex; max-width: calc(100% - 32px); align-items: center; gap: 10px;
+  padding: 8px 8px 8px 14px; border: 3px solid #fff; border-radius: 999px; background: rgba(28, 36, 74, .86); color: #fff;
+  box-shadow: 0 4px 0 rgba(16, 22, 50, .4); font-family: var(--font); transform: translateX(-50%); pointer-events: auto;
+  animation: coach-in .2s ease-out;
+}
+.coach.hidden { display: none; }
+.coach b { font-size: 16px; font-weight: 900; white-space: nowrap; }
+.coach-dots { color: #ffd45e; font-size: 10px; letter-spacing: 2px; white-space: nowrap; }
+.coach-skip {
+  min-width: 44px; min-height: 36px; padding: 0 12px; border: 2px solid rgba(255, 255, 255, .7); border-radius: 999px; background: transparent;
+  color: #fff; font: inherit; font-size: 12px; font-weight: 900; cursor: pointer;
+}
+.coach-skip:focus-visible { outline: 3px solid #ffd45e; outline-offset: 2px; }
+@keyframes coach-in { from { opacity: 0; transform: translate(-50%, -6px); } }
+@media (max-height: 460px) {
+  /* 낮은 화면: 왼쪽 위 체력·탄약 카드 아래 (조준점보다는 위) */
+  .coach { top: 104px; gap: 8px; padding: 4px 4px 4px 10px; border-width: 2px; }
+  .coach b { font-size: 13px; }
+  .coach-skip { min-height: 30px; }
+}
+@media (prefers-reduced-motion: reduce) { .coach { animation: none; } }

@@ -209,7 +209,7 @@ export function comingSoon(title: string, desc: string): HTMLElement {
   box.setAttribute('aria-disabled', 'true');
   const copy = el('div', 'lb-soon-copy');
   copy.append(el('b', '', title), el('p', '', desc));
-  box.append(el('span', 'lb-soon-mark', '…'), copy, el('span', 'lb-soon-badge', 'COMING SOON'));
+  box.append(el('span', 'lb-soon-mark', '…'), copy, el('span', 'lb-soon-badge', '준비 중'));
   return box;
 }
 
