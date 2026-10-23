@@ -16,7 +16,7 @@
 - 로비 UI 스타일 층: lobby.css → toy.css → kenney.css(Kenney 스킨) → screens.css(배치 + 끝의 '게임 UI 정리' 층이 최종: 글자 최소 PC 12px·모바일 11px, 보조 글씨 --lb-ink2, 사람 문장(방 제목·닉네임)은 Jua 대신 굵은 고딕 — Jua 작은 글씨에서 '같'이 '갇'처럼 보임). 슬라이더는 채움 트랙(--p, lobbyDom.slider). 사운드 설정 = 효과음 + 배경음(배경음 버스만 있고 음악 에셋 없음 → '준비 중' 잠금). 글자 선택·끌기 금지(style.css, main.ts dragstart).
 - 매치 결과 화면 (연습전·멀티 공용): `ui/result/ResultScreen.ts`(종료 배너→덮기 전환→카드·버튼) + 3D 무대 `result/ResultStage.ts`(경기장 대신 그림, 최대 4명, 포즈는 대기 클립 + 본 회전) + 데이터 `result/resultData.ts`(서버 결과 그대로, 순위·MVP 규칙). 결과 키당 한 번만 표시. 상세 docs/MULTIPLAYER_TEST.md 11장.
 - 매치 일시정지 메뉴 `ui/lobby/PauseMenu.ts`(+`pause.css`, Codex 한도로 Claude가 작성) ← `Game.syncPauseMenu`/`pauseHost`: 매치 중 포인터 잠금·터치 조작이 꺼지면 표시. 연습전은 타이머·봇 정지, 멀티는 계속 진행(입력만 막힘). 옛 HUD 시작 카드(lock-overlay)·멀티 메뉴 'paused' 화면은 안 씀.
-- 모바일 터치 조작 (가로 화면): `core/GameInput.ts`(키보드·마우스 + 터치 → 같은 InputState, 터치 모드는 실제 터치/마우스 입력으로 전환), `core/TouchInput.ts`(왼쪽 떠다니는 조이스틱·오른쪽 드래그 시점·사격/ADS/점프/슬라이딩/재장전·일시정지, pointerId별 멀티터치, 설정 localStorage `popbattle.touch`), HUD 슬롯 터치. 이동·사격·달리기 규칙은 PC와 같은 코드.
+- 모바일 터치 조작 (가로 화면): `core/GameInput.ts`(키보드·마우스 + 터치 → 같은 InputState, 터치 모드는 실제 터치/마우스 입력으로 전환), `core/TouchInput.ts`(왼쪽 떠다니는 조이스틱·오른쪽 드래그 시점·사격/ADS/점프/슬라이딩/재장전·일시정지, pointerId별 멀티터치, 설정 localStorage `popbattle.touch`), HUD 슬롯 터치. 이동·사격·달리기 규칙은 PC와 같은 코드. 터치 모드 카메라 `CAMERA_MOBILE`(gameConfig, FOV 58·거리 3.3·어깨 1.1·높이 0.2; ADS는 PC와 같은 확대 비율, `TpsCamera.mobile`).
 - 디버그 패널(` 키): 뿅망치 자세 실시간 조절·손목 자동 맞춤·자세 보기 카메라, 무적(콘솔 `__game.god()`), 사격 경로 디버그(콘솔 `__game.setShotDebug(true)`: 카메라 조준 레이·총구·실제 탄 경로·충돌 물체).
 
 ## 에셋 워크플로 (사용자 지침, 2026-10-20)

@@ -238,6 +238,19 @@ export const CAMERA = {
 
 } as const;
 
+/**
+ * 모바일(터치 모드) 일반 시점 값. ADS는 무기별 설정(배율·거리·어깨) 그대로 — FOV는 이 일반 FOV에 배율을 적용해
+ * '일반 대비 확대 비율'이 PC와 같음 (PC 카메라 CAMERA는 그대로).
+ * 작은 가로 화면(667×375)은 같은 FOV에서도 적이 몇 px밖에 안 됨 → FOV를 조금 좁혀 중거리 적을 키우고,
+ * 그만큼 커지는 내 캐릭터는 카메라를 조금 뒤·오른쪽·위로 옮겨 조준선과 화면 가운데를 덜 가리게
+ */
+export const CAMERA_MOBILE = {
+  fov: 58,
+  distance: 3.3,
+  shoulderOffset: 1.1,
+  heightOffset: 0.2,
+} as const;
+
 export const RENDER = {
   maxPixelRatio: 2,
   shadowMapSize: 2048,

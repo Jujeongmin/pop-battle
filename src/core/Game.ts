@@ -814,6 +814,8 @@ export class Game {
     const turnInPlace = !this.dead && this.player.grounded && !this.player.isSliding && speed < 0.3;
 
     // --- 카메라 ---
+    // 터치 모드면 모바일 일반 시점 (PC 마우스 모드는 그대로)
+    this.tpsCamera.mobile = this.input.touchMode;
     this.tpsCamera.update({
       dt,
       target: this.renderFeet,

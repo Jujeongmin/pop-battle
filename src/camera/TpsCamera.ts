@@ -1,7 +1,7 @@
 import type RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import { CAMERA } from '../config/gameConfig';
-import { aimProfileFov, type AimProfile } from '../config/weapons';
+import { CAMERA, CAMERA_MOBILE } from '../config/gameConfig';
+import { adsFov, aimProfileFov, type AimProfile } from '../config/weapons';
 import type { Physics } from '../physics/Physics';
 
 export interface CameraFrame {
@@ -48,6 +48,8 @@ export class TpsCamera {
    * 엄폐물 위를 넘겨보는 이점이 없게, 큰 캐릭터는 머리 뒤 시점 유지
    */
   heightScale = 1;
+  /** 모바일(터치 모드): 일반 시점 = CAMERA_MOBILE, ADS = 무기별 설정 + PC와 같은 확대 비율 (Game이 매 프레임 설정) */
+  mobile = false;
 
   constructor(
     aspect: number,
@@ -105,12 +107,16 @@ export class TpsCamera {
     // TPS형 ADS: 모든 무기가 오른쪽 어깨 카메라를 당기며 확대 (스코프 정렬 없음)
     const p = f.aimProfile;
     const blend = f.aimBlend;
-    const shoulder = THREE.MathUtils.lerp(CAMERA.shoulderOffset, p?.shoulderOffset ?? CAMERA.shoulderOffset, blend);
-    const height = THREE.MathUtils.lerp(CAMERA.heightOffset, p?.heightOffset ?? CAMERA.heightOffset, blend);
-    const distance = THREE.MathUtils.lerp(CAMERA.distance, p?.cameraDistance ?? CAMERA.distance, blend);
+    // 일반 시점 값 (모바일만 따로). ADS 끝값(거리·어깨·높이)은 무기별 설정 그대로 → 사이는 부드럽게 보간.
+    // ADS FOV: PC에서의 '일반 대비 확대 비율'(배율, 또는 직접 지정 FOV를 PC 기본 FOV와 비교한 비율)을 모바일 일반 FOV에 적용
+    // → 낮은 배율 무기(샷건·권총)가 모바일 ADS에서 오히려 넓어지지 않음. PC는 기존 계산 그대로
+    const hip = this.mobile ? CAMERA_MOBILE : CAMERA;
+    const shoulder = THREE.MathUtils.lerp(hip.shoulderOffset, p?.shoulderOffset ?? hip.shoulderOffset, blend);
+    const height = THREE.MathUtils.lerp(hip.heightOffset, p?.heightOffset ?? hip.heightOffset, blend);
+    const distance = THREE.MathUtils.lerp(hip.distance, p?.cameraDistance ?? hip.distance, blend);
     this.sprintT = damp(this.sprintT, f.sprinting ? 1 : 0, 6, dt);
     const fov =
-      THREE.MathUtils.lerp(CAMERA.fov, p ? aimProfileFov(CAMERA.fov, p) : CAMERA.fov, blend) +
+      THREE.MathUtils.lerp(hip.fov, p ? this.adsFovFor(p) : hip.fov, blend) +
       CAMERA.sprintFovAdd * this.sprintT * (1 - f.aimBlend);
 
     // 피벗(머리 뒤 회전 중심) 보간
@@ -160,6 +166,14 @@ export class TpsCamera {
 
     this.setFov(fov);
     this.camera.updateMatrixWorld();
+  }
+
+  /** 무기 ADS FOV (도). PC = 무기 설정 그대로, 모바일 = 같은 확대 비율을 모바일 일반 FOV에 */
+  private adsFovFor(p: AimProfile): number {
+    const pc = aimProfileFov(CAMERA.fov, p);
+    if (!this.mobile) return pc;
+    const half = (deg: number) => Math.tan(THREE.MathUtils.degToRad(deg / 2));
+    return adsFov(CAMERA_MOBILE.fov, half(CAMERA.fov) / half(pc));
   }
 
   /** 시작 구가 이미 벽과 겹치면(toi 0) 작은 구로 다시 검사 */
