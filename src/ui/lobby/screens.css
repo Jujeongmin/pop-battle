@@ -189,7 +189,7 @@
    칸이 아주 좁으면 가로 기준(칸 폭의 1.78배)으로 줄여 캐릭터 옆이 잘리지 않게. 가운데 · 발은 아래 */
 .lb-lobby .lb-char-compare .lb-char-portrait { container-type: size; overflow: hidden; }
 .lb-lobby .lb-char-compare .lb-char-portrait img {
-  inset: auto; top: auto; bottom: 2px; left: 50%; width: auto; max-width: none; height: min(calc(100cqh - 4px), 178cqw); aspect-ratio: 1;
+  inset: auto; top: auto; bottom: 2px; left: 50%; width: auto; max-width: none; height: min(calc(100cqh - 4px), 170cqw); aspect-ratio: 1;
   object-fit: contain; object-position: center bottom; transform: translateX(-50%);
 }
 .lb-lobby .lb-char-compare .lb-char-card-copy { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; column-gap: 6px; row-gap: 0; }
@@ -728,7 +728,9 @@
   /* 카드: 왼쪽 세로 전신 · 오른쪽 이름·게이지 (낮은 칸에서도 전신이 보이게) */
   .lb-lobby .lb-char-compare .lb-char-card { grid-template-columns: 54px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-content: center; column-gap: 6px; row-gap: 2px; padding: 3px 6px 3px 3px; }
   .lb-lobby .lb-char-compare .lb-char-portrait { grid-column: 1; grid-row: 1 / span 2; align-self: stretch; overflow: hidden; }
-  .lb-lobby .lb-char-compare .lb-char-portrait img { inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 70%; }
+  /* 낮은 화면(아이폰 가로 등)도 같은 방식: 가운데 기준 정사각 그림을 칸 높이·폭 중 작은 쪽에 맞춤.
+     (예전 cover + 기본 규칙의 translateX(-50%)가 겹쳐 그림이 반 칸 왼쪽으로 밀려 캐릭터 왼쪽이 잘렸음) */
+  .lb-lobby .lb-char-compare .lb-char-portrait img { inset: auto; bottom: 1px; left: 50%; width: auto; height: min(calc(100cqh - 2px), 170cqw); object-fit: contain; object-position: center bottom; transform: translateX(-50%); }
   .lb-lobby .lb-char-compare .lb-char-card-copy { grid-column: 2; grid-row: 1; align-self: end; }
   .lb-lobby .lb-char-compare .lb-char-stats { grid-column: 2; grid-row: 2; align-self: start; gap: 1px; }
   /* 게이지: 윗줄 "라벨 … 숫자", 아랫줄 막대 */
