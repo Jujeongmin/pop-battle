@@ -207,7 +207,7 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 /* 킬로그 (우측 상단): 처치자 · 무기 아이콘(+헤드샷) · 사망자. 새 줄이 위, 최대 4줄 */
 .killfeed {
   position: absolute; z-index: 5; pointer-events: none;
-  top: calc(12px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px));
+  top: 12px; right: 14px;
   display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
   max-width: min(340px, 34vw);
 }
@@ -231,7 +231,7 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .kf-row.local-death .kf-victim { font-weight: 900; padding: 0 5px; border-radius: 6px; background: rgba(255, 100, 100, .22); }
 /* 좁은·낮은 화면 (모바일 가로): 글자·아이콘·이름 폭 축소, 정보(처치자·무기·사망자)는 유지 */
 @media (max-width: 900px), (max-height: 520px) {
-  .killfeed { top: calc(8px + env(safe-area-inset-top, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); gap: 3px; max-width: 30vw; }
+  .killfeed { top: 8px; right: 8px; gap: 3px; max-width: 30vw; }
   .kf-row { font-size: 11px; gap: 5px; padding: 3px 8px; border-radius: 10px; }
   .kf-name { max-width: 6.5em; }
   .kf-icon { transform: scale(.85); transform-origin: center; }
@@ -332,8 +332,8 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   --u: 1;
   --pad-x: calc(16px * var(--u));
   --pad-y: calc(14px * var(--u));
-  --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
-  --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
+  /* 가장자리 여백 변수: safe area(env) 처리 안 함 — Verse8 iframe이고 viewport-fit=cover가 없어 env()는 늘 0이었음 */
+  --safe-t: 0px; --safe-b: 0px; --safe-l: 0px; --safe-r: 0px;
   --touch-lift-l: 0px; --touch-lift-r: 0px;
   --team-blue: #3d8bff; --team-red: #ff4b5c;
   --toy-shadow: 0 calc(4px * var(--u)) 0 rgba(39, 50, 92, .25);
@@ -528,8 +528,8 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
    --tu = 화면 높이 400px 기준 배율(0.75~1.3, TouchInput이 설정), --stick / --btn = 사용자 크기 설정 */
 .touch-layer {
   --tu: 1; --stick: 1; --btn: 1;
-  --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
-  --safe-l: env(safe-area-inset-left, 0px); --safe-r: env(safe-area-inset-right, 0px);
+  /* 가장자리 여백 변수: safe area(env) 처리 안 함 — Verse8 iframe이고 viewport-fit=cover가 없어 env()는 늘 0이었음 */
+  --safe-t: 0px; --safe-b: 0px; --safe-l: 0px; --safe-r: 0px;
   position: absolute; inset: 0; z-index: 8; touch-action: none; user-select: none; -webkit-user-select: none;
   -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
 }
