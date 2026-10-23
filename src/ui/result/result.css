@@ -347,3 +347,36 @@
 .pb-res-board-many .pb-res-side .pb-res-cell:nth-child(n + 3) { border-top: 2px dashed rgba(39, 50, 92, .14); }
 .pb-res-board-many.pb-res-board-tdm { width: min(980px, 100%); }
 
+/* 경험치 카드 (멀티 TDM·FFA): 왼쪽 아래, 무대·버튼과 겹치지 않게 작게 */
+.pb-res-xp {
+  position: absolute; left: 16px; bottom: 16px; z-index: 3; display: grid; width: 240px; gap: 5px; padding: 9px 12px 10px;
+  border: 3px solid var(--ink); border-radius: 16px; background: #fffdf6; box-shadow: 0 4px 0 var(--ink); color: var(--ink); pointer-events: auto;
+}
+.pb-res-xp[hidden] { display: none; }
+.pb-res-xp-head { display: flex; align-items: center; gap: 7px; }
+.pb-res-xp-icon { width: 40px; height: 40px; flex: none; object-fit: contain; }
+.pb-res-xp-lv { font-size: 17px; font-weight: 900; }
+.pb-res-xp-total { margin-left: auto; padding: 1px 8px; border-radius: 10px; background: #ffd45e; color: #6b4500; font-family: var(--res-font); font-size: 16px; }
+.pb-res-xp-lines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px 10px; font-size: 11px; font-weight: 800; color: #5b6582; }
+.pb-res-xp-lines span { display: flex; justify-content: space-between; gap: 4px; }
+.pb-res-xp-lines b { color: var(--ink); }
+.pb-res-xp-bar { position: relative; height: 10px; overflow: hidden; border-radius: 999px; background: #dfe5f3; }
+.pb-res-xp-bar i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, #6fb6ff, #2f7cf0); }
+.pb-res-xp-text { justify-self: end; color: #5b6582; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pb-res-xp-note { margin: 0; color: #9e3650; font-size: 10px; font-weight: 800; }
+.pb-res-xp-up { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 4px 8px; border-radius: 10px; background: linear-gradient(180deg, #fff2bf, #ffe48a); }
+.pb-res-xp-up[hidden] { display: none; }
+.pb-res-xp-up b { color: #e08a00; font-family: var(--res-font); font-size: 16px; }
+.pb-res-xp-up span { font-size: 12px; font-weight: 900; }
+.pb-res-xp-rank { flex-basis: 100%; color: #8a5a00; font-size: 11px !important; }
+.pb-res-xp-levelup { box-shadow: 0 4px 0 var(--ink), 0 0 0 3px #ffd45e; }
+@media (max-height: 460px) {
+  .pb-res-xp { left: 8px; bottom: 8px; width: 186px; gap: 3px; padding: 5px 8px 6px; border-width: 2px; border-radius: 12px; box-shadow: 0 3px 0 var(--ink); }
+  .pb-res-xp-icon { width: 28px; height: 28px; }
+  .pb-res-xp-lv { font-size: 13px; }
+  .pb-res-xp-total { font-size: 13px; }
+  .pb-res-xp-lines { font-size: 9px; }
+  .pb-res-xp-bar { height: 7px; }
+  .pb-res-xp-text { font-size: 9px; }
+  .pb-res-xp-up b { font-size: 13px; }
+}

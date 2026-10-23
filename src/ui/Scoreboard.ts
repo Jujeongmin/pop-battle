@@ -3,6 +3,7 @@
 // TDM = RED 왼쪽 · BLUE 오른쪽 두 칸(팀마다 킬 많은 순), FFA = 1~8위 한 줄 순위표(결과 화면과 같은 순위 규칙).
 // 표시: 닉네임 · 킬 · 데스만 (K/D 비율·캐릭터 이름·그림 없음), 내 줄은 은은한 바탕색.
 import { rankList } from '../result/resultData';
+import { levelBadge } from './popgun';
 
 export interface ScoreRow {
   id: string;
@@ -15,6 +16,8 @@ export interface ScoreRow {
   left: boolean;
   /** 같은 킬·데스일 때 순서 (자리·등록 순) */
   order: number;
+  /** 플레이어 레벨 (봇은 null → 계급 표시 없음) */
+  level: number | null;
 }
 
 export interface ScoreboardData {
@@ -73,7 +76,7 @@ export class Scoreboard {
   update(d: ScoreboardData): void {
     if (!this.openState) return;
     const time = d.timeLeft === null ? '' : formatTime(d.timeLeft);
-    const key = [d.teams, d.label, time, d.blue, d.red, d.goal, ...d.rows.map((r) => `${r.id}:${r.name}:${r.k}:${r.d}:${r.me}:${r.team}:${r.left}`)].join('|');
+    const key = [d.teams, d.label, time, d.blue, d.red, d.goal, ...d.rows.map((r) => `${r.id}:${r.name}:${r.k}:${r.d}:${r.me}:${r.team}:${r.left}:${r.level}`)].join('|');
     if (key === this.key) return;
     this.key = key;
     this.render(d, time);
@@ -129,7 +132,9 @@ export class Scoreboard {
   private row(r: ScoreRow, rank: number | null): HTMLElement {
     const row = el('div', `sb-row${rank === null ? ' sb-no-rank' : ''}${r.me ? ' sb-me' : ''}${r.left ? ' sb-left' : ''}`);
     if (rank !== null) row.append(el('span', `sb-rank sb-rank-${Math.min(rank, 4)}`, String(rank)));
-    const name = el('span', 'sb-name', r.name);
+    const name = el('span', 'sb-name');
+    if (r.level !== null) name.append(levelBadge(r.level, 'popgun-badge sb-level'));
+    name.append(el('span', 'sb-nick', r.name));
     if (r.left) name.append(el('em', '', '나감'));
     row.append(name, el('span', 'sb-k', String(r.k)), el('span', 'sb-d', String(r.d)));
     return row;

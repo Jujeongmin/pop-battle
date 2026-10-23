@@ -826,3 +826,24 @@
 }
 .lb-switch.on { background: #ff8a9b; }
 .lb-switch.on::after { transform: translateX(24px); }
+
+/* 로비 레벨 카드 (로고 옆): 팝건 계급 · 닉네임 · Lv · 다음 레벨까지 경험치 */
+.lb-lobby .lb-level-card {
+  display: flex; min-width: 0; max-width: 270px; align-items: center; gap: 8px; padding: 5px 12px 6px 6px;
+  border: 3px solid var(--lb-ink, #27325c); border-radius: 16px; background: #fffdf6; box-shadow: 0 3px 0 var(--lb-ink, #27325c);
+}
+.lb-level-icon { width: 44px; height: 44px; flex: none; object-fit: contain; }
+.lb-level-copy { display: grid; min-width: 0; flex: 1 1 auto; gap: 2px; }
+.lb-level-name { min-width: 0; overflow: hidden; color: var(--lb-ink, #27325c); font-size: 15px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.lb-level-row { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.lb-level-lv { flex: none; color: #2f6cf0; font-size: 13px; font-weight: 900; }
+.lb-level-bar { position: relative; min-width: 50px; height: 9px; flex: 1 1 auto; overflow: hidden; border-radius: 999px; background: #dfe5f3; box-shadow: inset 0 1px 0 rgba(39, 50, 92, .12); }
+.lb-level-bar i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: linear-gradient(90deg, #6fb6ff, #2f7cf0); }
+.lb-level-xp { flex: none; color: var(--lb-ink2, #5b6582); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px), (max-height: 460px) {
+  .lb-lobby .lb-level-card { max-width: 200px; gap: 6px; padding: 3px 8px 4px 4px; border-width: 2px; border-radius: 12px; box-shadow: 0 2px 0 var(--lb-ink, #27325c); }
+  .lb-level-icon { width: 32px; height: 32px; }
+  .lb-level-name { font-size: 12px; }
+  .lb-level-lv { font-size: 11px; }
+  .lb-level-xp { display: none; }
+}

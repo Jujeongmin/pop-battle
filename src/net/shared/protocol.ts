@@ -3,6 +3,7 @@
 // 무기·캐릭터 수치는 config/weapons.ts·config/characters.ts의 복사본 → 클라이언트가 시작할 때 checkNetRules로 어긋남을 검사.
 
 import { checkNickname, NICK_RULE } from './nickFilter';
+import type { XpAward } from './progression';
 export { checkNickname, type NickFailReason } from './nickFilter';
 
 /** 룸 정원 (최대 8명) */
@@ -298,6 +299,10 @@ export interface NetPlayerRecord {
   team?: NetTeam | null;
   /** 표시 닉네임 (sanitizeNick 통과, 없으면 화면은 자리 번호) */
   nick?: string;
+  /** 플레이어 레벨 (서버 저장 경험치 기준, 입장·매치 종료 때 갱신) */
+  lv?: number;
+  /** 이번 매치 상대별 처치 수 (경험치 킬 보상 검사용) */
+  kv?: Record<string, number>;
   /** 연사 검증 토큰 (서버 내부) */
   rb?: { tokens: number; t: number };
 }
@@ -312,6 +317,8 @@ export interface NetStanding {
   team: NetTeam | null;
   /** 표시 닉네임 (있을 때만) */
   nick?: string;
+  /** 레벨 (있을 때만) */
+  lv?: number;
   k: number;
   d: number;
   left?: boolean;
@@ -333,6 +340,8 @@ export interface NetMatchResult {
   /** 순위 (킬 많은 순 → 데스 적은 순) */
   standings: NetStanding[];
   endedAt: number;
+  /** 계정별 경험치 지급 결과 (서버가 확정, TEST·개발용 짧은 경기는 없음) */
+  xp?: Record<string, XpAward>;
 }
 
 /** 룸 공용 상태 (서버 소유, 모든 클라이언트에 푸시) */

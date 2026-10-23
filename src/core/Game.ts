@@ -1,3 +1,5 @@
+import { levelInfo } from '../net/shared/progression';
+import { loadXpCache, saveXpCache } from '../net/progress';
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { loadCharacterModel, loadGameAssets, type LoadedModel } from '../assets/loadAssets';
@@ -336,6 +338,8 @@ export class Game {
   private lobbyCamDist = Math.hypot(LOBBY_CAM.distance, LOBBY_CAM.height);
   /** 표시용 닉네임 (이 기기 저장, null = 아직 정하지 않음) */
   private nick: string | null = loadNickname();
+  /** 내 누적 경험치 (서버 저장값의 사본: 접속 때 progressGet, 멀티 매치 종료 때 서버 지급 결과로 갱신) */
+  private myXp = loadXpCache();
   /** 마지막 닉네임 변경 시각 (서버 없는 빌드의 변경 간격 제한) */
   private nickChangedAt = -Infinity;
   /** 서버 닉네임 확인 끝남 (그 전에는 첫 설정 창을 열지 않음) */
@@ -440,8 +444,8 @@ export class Game {
       const rule = NET_MODE_RULES[s.mode];
       const myName = s.nickOf(s.me) ?? this.nick ?? '나';
       const rows: ScoreRow[] = [
-        ...Object.entries(s.players).map(([acc, p]) => ({ id: acc, name: acc === s.me ? myName : s.displayName(acc), k: p.k, d: p.d, me: acc === s.me, team: p.team ?? null, left: false, order: p.slot })),
-        ...Object.values(s.gone).map((g) => ({ id: g.account, name: s.displayName(g.account), k: g.k, d: g.d, me: false, team: g.team ?? null, left: true, order: g.slot + 100 })),
+        ...Object.entries(s.players).map(([acc, p]) => ({ id: acc, name: acc === s.me ? myName : s.displayName(acc), k: p.k, d: p.d, me: acc === s.me, team: p.team ?? null, left: false, order: p.slot, level: p.lv ?? 1 })),
+        ...Object.values(s.gone).map((g) => ({ id: g.account, name: s.displayName(g.account), k: g.k, d: g.d, me: false, team: g.team ?? null, left: true, order: g.slot + 100, level: g.lv ?? 1 })),
       ];
       sb.update({ teams: rule.teams, label: rule.short, timeLeft: this.netScoreHud()?.timeLeft ?? null, blue: s.teamScore.BLUE, red: s.teamScore.RED, goal: rule.scoreToWin, rows });
       return;
@@ -456,6 +460,8 @@ export class Game {
       team: null,
       left: false,
       order: i,
+      // 연습전: 내 레벨만 (봇은 계급 없음)
+      level: st.isLocal ? levelInfo(this.myXp).level : null,
     }));
     sb.update({ teams: false, label: '연습전 · 개인전', timeLeft: m.timeLeft, blue: 0, red: 0, goal: m.rules.scoreToWin, rows });
   }
@@ -1840,6 +1846,7 @@ export class Game {
       menuChanged: (open, panel) => this.onLobbyMenu(open, panel),
       // 표시용 닉네임: 서버(계정별 글로벌 사용자 상태)가 최종 검사·저장, 이 기기에도 사본 (서버 식별은 계정)
       playerName: () => this.nick ?? '플레이어',
+      progress: () => levelInfo(this.myXp),
       nickname: () => this.nick,
       nicknameReady: () => this.nickReady,
       setNickname: (raw) => this.setNickname(raw),
@@ -1902,6 +1909,14 @@ export class Game {
   }
 
   /** 닉네임 적용: 이 기기 저장 → 로비(sendHub = 서버에 아직 안 알렸을 때만)·다음 방 입장(hello)·로비 화면 */
+  /** 서버가 알려 준 내 경험치 반영 (사본 저장 + 로비 카드) */
+  private setMyXp(xp: number): void {
+    if (!Number.isFinite(xp) || xp < 0) return;
+    this.myXp = Math.floor(xp);
+    saveXpCache(this.myXp);
+    this.lobby?.refresh();
+  }
+
   private applyNickname(nick: string, sendHub: boolean): void {
     this.nick = nick;
     saveNickname(nick);
@@ -1919,6 +1934,11 @@ export class Game {
       if (this.netClient.status === 'no-verse') return;
       if (!(await withTimeout(this.netClient.connect(), 10000))) return;
       const g = await withTimeout(this.netClient.call<{ ok: boolean; nick: string | null }>('nickGet'), 8000);
+      // 레벨·경험치: 서버 저장값 (이전 서버 배포에 함수가 없으면 사본 그대로)
+      void this.netClient
+        .call<{ ok: boolean; xp: number }>('progressGet')
+        .then((p) => this.setMyXp(p.xp))
+        .catch(() => undefined);
       if (g.nick) {
         if (g.nick !== this.nick) this.applyNickname(g.nick, false);
       } else if (this.nick) {
@@ -2829,7 +2849,11 @@ export class Game {
       else if (s.matchPhase === 'lobby' && this.match.state !== 'WAITING') this.resetNetMatch();
       // 서버가 확정한 결과 (모두 같은 값). 같은 결과는 한 번만 — 재접속·주기 갱신으로 다시 오면 그대로,
       // 다른 사람이 먼저 대기실로 가도 내 결과 화면은 직접 닫을 때까지 유지 (새 매치 시작 때 닫힘)
-      if (s.matchPhase === 'result' && s.result && s.roomId) this.resultScreen?.show(fromNetResult(s.result, s.me, s.roomId, this.nick));
+      if (s.matchPhase === 'result' && s.result && s.roomId) {
+        const award = s.result.xp?.[s.me];
+        if (award) this.setMyXp(award.after);
+        this.resultScreen?.show(fromNetResult(s.result, s.me, s.roomId, this.nick));
+      }
     }
     this.mpMenu?.refresh();
     this.hud.setMultiplayerCovered(!!this.mpMenu?.covering);

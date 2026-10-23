@@ -810,3 +810,14 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 /* 터치: 상단 점수판을 누르면 상황판 (조작 중에만 터치 레이어 위로) */
 .hud.touch.playing .match-bar { z-index: 9; pointer-events: auto; touch-action: none; cursor: pointer; }
 
+/* 팝건 계급 아이콘 + 레벨 (ui/popgun.ts, 대기실·상황판 공용) */
+.popgun-badge { display: inline-flex; flex: none; align-items: center; gap: 3px; }
+.popgun-badge img { width: 22px; height: 22px; object-fit: contain; filter: drop-shadow(0 1px 0 rgba(39, 50, 92, .25)); }
+.popgun-badge b { color: #3b62c4; font-size: .78em; font-weight: 900; font-variant-numeric: tabular-nums; }
+.sb-name { display: flex; align-items: center; gap: 6px; }
+.sb-nick { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-name em { flex: none; }
+@media (max-height: 460px) {
+  .sb-level img { width: 18px; height: 18px; }
+  .sb-name { gap: 4px; }
+}

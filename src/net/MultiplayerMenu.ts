@@ -1,6 +1,7 @@
 // 시작 화면의 "Multiplayer" 화면: 모드 선택(TDM 4v4 / FFA 8인 / 자유 테스트) · 방 만들기 · 코드로 입장 ·
 // 대기실(팀·방장 시작) · 진행 중 일시정지 · 결과 화면 · 연결 끊김. 서버에는 준비 상태가 없다.
 // 표시는 전부 서버가 확인한 상태(NetSession)만 읽는다 — 클라이언트가 임의로 성공·결과를 만들지 않음.
+import { levelBadge } from '../ui/popgun';
 import { displayCode, type NetSession } from './NetSession';
 import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEAM_SIZE, NET_TEST_TIME_LIMIT_SEC, type NetMode, type NetPlayerRecord, type NetTeam } from './shared/protocol';
 import '../ui/lobby/room.css';
@@ -391,7 +392,8 @@ export class MultiplayerMenu {
     const copy = el('span', 'lb-mp-player-copy');
     // 닉네임(서버 검사 값) 우선, 없으면 자리 번호. 계정·캐릭터 id는 표시하지 않음
     const nick = s.nickOf(entry.acc) ?? (mine ? s.nick : null);
-    const player = el('b', '', mine ? `${nick ?? '나'} (나)` : nick ?? `P${entry.p.slot + 1}`);
+    const player = el('b', 'lb-mp-name-row');
+    player.append(levelBadge(entry.p.lv ?? 1, 'popgun-badge lb-mp-level'), el('span', 'lb-mp-name', mine ? `${nick ?? '나'} (나)` : nick ?? `P${entry.p.slot + 1}`));
     const character = el('small', '', this.host.characterLabel(entry.p.char));
     const team = s.mode === 'tdm' && entry.p.team ? ` · ${entry.p.team} 팀` : ' · 개인전';
     character.append(team);

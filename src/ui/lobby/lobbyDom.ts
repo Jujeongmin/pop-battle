@@ -94,6 +94,8 @@ export interface LobbyHost {
   menuChanged(open: boolean, panel: string | null): void;
   /** 내 표시 닉네임 (아직 정하지 않았으면 기본 이름 "플레이어") */
   playerName(): string;
+  /** 내 레벨·경험치 (서버 저장값의 사본, 로비 레벨 카드) */
+  progress(): { level: number; into: number; need: number; max: boolean };
   /** 저장된 닉네임 (null = 아직 정하지 않음 → 처음 접속 닉네임 입력 창) */
   nickname(): string | null;
   /**

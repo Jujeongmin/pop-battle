@@ -3,6 +3,8 @@
 // 결과 하나(ResultData.key)는 한 번만 띄움 — 같은 결과가 다시 와도(주기 갱신·재접속) 그대로, 닫은 결과는 다시 열지 않음.
 import type { ResultData, ResultEntry } from '../../result/resultData';
 import type { ResultStage } from '../../result/ResultStage';
+import { levelInfo, popgunTier, rankName, type XpAward } from '../../net/shared/progression';
+import { popgunUrl } from '../popgun';
 import './result.css';
 
 export interface ResultHost {
@@ -48,6 +50,9 @@ export class ResultScreen {
   private readonly platesEl = el('div', 'pb-res-plates');
   private readonly bar = el('div', 'pb-res-bar');
   private readonly note = el('div', 'pb-res-note');
+  /** 경험치 결과 (멀티 TDM·FFA): 항목별 보상 + 진행 바 + 레벨 업 */
+  private readonly xpEl = el('div', 'pb-res-xp');
+  private xpAnim = 0;
   private plates: Plate[] = [];
   private data: ResultData | null = null;
   /** 이미 띄웠던(닫은 것 포함) 결과 키 */
@@ -65,7 +70,8 @@ export class ResultScreen {
     private readonly host: ResultHost,
   ) {
     this.root.hidden = true;
-    this.root.append(this.platesEl, this.head, this.bar, this.note, this.finishEl, this.wipe);
+    this.root.append(this.platesEl, this.head, this.bar, this.note, this.xpEl, this.finishEl, this.wipe);
+    this.xpEl.hidden = true;
     container.appendChild(this.root);
   }
 
@@ -107,6 +113,9 @@ export class ResultScreen {
     this.head.textContent = '';
     this.bar.textContent = '';
     this.note.textContent = '';
+    cancelAnimationFrame(this.xpAnim);
+    this.xpEl.textContent = '';
+    this.xpEl.hidden = true;
   }
 
   dispose(): void {
@@ -175,7 +184,74 @@ export class ResultScreen {
     this.update(0);
     this.root.classList.add('pb-res-shown');
     this.root.classList.remove('pb-res-cover');
+    if (data.xp) this.renderXp(data.xp, token);
     this.host.onPhase?.('shown', data);
+  }
+
+  /**
+   * 경험치 카드: 획득 총합 · 경기 완료 · 승리 · 킬 · FFA 순위 보너스 + 현재 레벨 진행 바 (지급 전 → 후로 차오름).
+   * 레벨이 오르면 LEVEL UP! · 이전 → 새 레벨, 팝건 계급이 바뀌면 새 아이콘
+   */
+  private renderXp(a: XpAward, token: number): void {
+    const c = this.xpEl;
+    c.textContent = '';
+    c.hidden = false;
+    const from = levelInfo(a.before);
+    const to = levelInfo(a.after);
+    const head = el('div', 'pb-res-xp-head');
+    const icon = el('img', 'pb-res-xp-icon');
+    icon.src = popgunUrl(from.level);
+    icon.alt = rankName(from.level);
+    icon.draggable = false;
+    const lv = el('b', 'pb-res-xp-lv', `Lv.${from.level}`);
+    head.append(icon, lv, el('span', 'pb-res-xp-total', `+${a.total} XP`));
+    const lines = el('div', 'pb-res-xp-lines');
+    const line = (label: string, v: number) => {
+      const row = el('span', '');
+      row.append(el('span', '', label), el('b', '', `+${v}`));
+      lines.append(row);
+    };
+    line('경기 완료', a.complete);
+    line('승리 보너스', a.win);
+    line('킬 보너스', a.kill);
+    if (a.rank > 0) line('순위 보너스', a.rank);
+    const why = a.note === 'left' ? '중도 이탈 경기는 경험치가 없어요' : a.note === 'short' ? '경기 시간이 너무 짧아 경험치가 없어요' : a.note === 'capped' ? '짧은 경기·같은 상대 반복 처치는 일부만 반영돼요' : '';
+    const bar = el('div', 'pb-res-xp-bar');
+    const fill = el('i');
+    bar.append(fill);
+    const text = el('span', 'pb-res-xp-text');
+    const up = el('div', 'pb-res-xp-up');
+    up.hidden = true;
+    c.append(head, lines, bar, text);
+    if (why) c.append(el('p', 'pb-res-xp-note', why));
+    c.append(up);
+    const show = (xp: number) => {
+      const i = levelInfo(xp);
+      fill.style.width = `${Math.round(i.progress * 100)}%`;
+      lv.textContent = i.max ? `Lv.${i.level} MAX` : `Lv.${i.level}`;
+      text.textContent = i.max ? '최대 레벨' : `${i.into.toLocaleString()} / ${i.need.toLocaleString()} XP`;
+      if (i.level > from.level && up.hidden) {
+        up.hidden = false;
+        const tierUp = popgunTier(i.level).tier !== popgunTier(from.level).tier;
+        up.append(el('b', '', 'LEVEL UP!'), el('span', '', `Lv.${from.level} → Lv.${to.level}`));
+        if (tierUp) up.append(el('span', 'pb-res-xp-rank', `새 팝건 계급 아이콘! (${rankName(to.level)})`));
+        icon.src = popgunUrl(i.level);
+        icon.alt = rankName(i.level);
+        c.classList.add('pb-res-xp-levelup');
+      }
+    };
+    show(a.before);
+    // 진행 바가 지급 전 → 후로 차오름 (움직임 줄이기 설정이면 바로)
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const dur = reduce ? 0 : 1100;
+    const t0 = performance.now() + 250;
+    const step = (now: number) => {
+      if (token !== this.token) return;
+      const t = dur <= 0 ? 1 : Math.min(1, Math.max(0, (now - t0) / dur));
+      show(a.before + (a.after - a.before) * (1 - (1 - t) ** 3));
+      if (t < 1) this.xpAnim = requestAnimationFrame(step);
+    };
+    this.xpAnim = requestAnimationFrame(step);
   }
 
   private setStage(on: boolean): void {

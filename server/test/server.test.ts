@@ -495,6 +495,38 @@ describe('team deathmatch', () => {
   });
 });
 
+describe('experience (XP)', () => {
+  test('TDM score end grants server-computed XP once, saved per account; new account starts at Lv.1', async (server) => {
+    server.connect({ account: 'alice', roomId: '__no_room__' });
+    const fresh = await server.progressGet();
+    expect([fresh.xp, fresh.lv]).toEqual([0, 1]);
+    expect((await roomN(server, 4, 'tdm')).ok).toBe(true);
+    expect((await server.startMatch()).ok).toBe(true);
+    spin(COUNTDOWN + 21000);
+    for (let round = 0; round < 10; round++) {
+      await shotgunKill(server, 'alice', 'bob');
+      await shotgunKill(server, 'carol', 'dave');
+      if (round < 9) await respawnAll(server, ['bob', 'dave']);
+    }
+    const r = await roomState(server);
+    expect(r.phase).toBe('result');
+    const a = r.result.xp.alice;
+    const b = r.result.xp.bob;
+    // 짧은 경기(약 45초): 완료·승리는 경기 시간 비례(최소 50%), 같은 상대 10킬은 상대별 상한 6킬까지만
+    expect(a.kill).toBe(60);
+    expect(a.complete >= 50 && a.complete < 100).toBe(true);
+    expect(a.win > 0).toBe(true);
+    expect(a.total).toBe(a.complete + a.win + a.kill);
+    expect([a.before, a.after]).toEqual([0, a.total]);
+    expect([b.win, b.kill, b.total]).toEqual([0, 0, b.complete]);
+    server.connect({ account: 'alice', roomId: '__no_room__' });
+    const saved = await server.progressGet();
+    expect([saved.xp, saved.lv]).toEqual([a.total, 1]);
+    server.connect({ account: 'bob', roomId: '__no_room__' });
+    expect((await server.progressGet()).xp).toBe(b.total);
+  });
+});
+
 describe('free for all', () => {
   test('eight-player FFA starts; each player keeps its own K/D', async (server) => {
     expect((await roomN(server, 8, 'ffa')).ok).toBe(true);

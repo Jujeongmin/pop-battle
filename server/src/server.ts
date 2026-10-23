@@ -48,6 +48,7 @@ import {
   type NetStanding,
   type NetTeam,
 } from '../../src/net/shared/protocol';
+import { levelInfo, matchXp, MAX_XP, standingRanks, type StoredProgress, type XpAward } from '../../src/net/shared/progression';
 
 const NO_ROOM = '__no_room__';
 const ROOM_CODE = /^pb-[a-z0-9]{4,12}$/;
@@ -316,7 +317,60 @@ function isLive(r: NetRoomState, now: number): boolean {
 }
 
 function standingOf(acc: string, p: NetPlayerRecord): NetStanding {
-  return { account: acc, slot: p.slot, char: p.char, team: p.team ?? null, k: p.k, d: p.d, ...(p.nick ? { nick: p.nick } : {}) };
+  return { account: acc, slot: p.slot, char: p.char, team: p.team ?? null, k: p.k, d: p.d, ...(p.nick ? { nick: p.nick } : {}), ...(p.lv ? { lv: p.lv } : {}) };
+}
+
+// ---------------- 경험치 (계정별 글로벌 사용자 상태에 영구 저장) ----------------
+
+/** 저장된 경험치 읽기 (없거나 이상하면 Lv.1 · 0 XP) — 다른 키(닉네임 등)는 건드리지 않음 */
+function progressOf(st: Record<string, unknown> | null | undefined): StoredProgress {
+  const xp = typeof st?.xp === 'number' && Number.isFinite(st.xp) ? Math.max(0, Math.min(MAX_XP, Math.floor(st.xp))) : 0;
+  const xpm = Array.isArray(st?.xpm) ? (st!.xpm as unknown[]).filter((x): x is string => typeof x === 'string').slice(-20) : [];
+  return { xp, lv: levelInfo(xp).level, xpAt: typeof st?.xpAt === 'number' ? st.xpAt : 0, xpm };
+}
+
+/**
+ * 매치 종료 경험치 지급 (룸 락 안, finishMatch 직후 한 번): 서버가 확정한 결과(standings·킬 기록·경기 시간)로만 계산.
+ * TEST 모드·개발용 제한 시간 경기는 지급 없음. 계정마다 xp 락 안에서 읽고-더하고-쓰기 → 동시 요청에도 유실·중복 없음,
+ * 경기 id(룸:종료 시각)를 계정 기록에 남겨 같은 경기는 두 번 지급하지 않음. 결과는 result.xp에 실어 결과 화면이 표시
+ */
+async function awardMatchXp(roomId: string, r: NetRoomState): Promise<void> {
+  const res = r.result;
+  if (!res || r.mode === 'test' || r.timeLimitMs !== NET_MODE_RULES[r.mode].timeLimitMs) return;
+  const key = `${roomId}:${res.endedAt}`;
+  const playedMs = res.endedAt - r.startAt;
+  const ranks = standingRanks(res.standings);
+  const awards: Record<string, XpAward> = {};
+  for (let i = 0; i < res.standings.length; i++) {
+    const s = res.standings[i]!;
+    const live = r.players[s.account];
+    const xp = matchXp({
+      mode: r.mode,
+      playedMs,
+      left: !!s.left || !live,
+      win: !res.draw && (r.mode === 'tdm' ? !!s.team && s.team === res.winnerTeam : res.winners.includes(s.account)),
+      killsByVictim: Object.values(live?.kv ?? {}),
+      rank: ranks[i]!,
+      players: res.standings.length,
+    });
+    try {
+      await $lock(`xp:${s.account}`, async () => {
+        const st = progressOf((await $global.getUserState(s.account)) as Record<string, unknown>);
+        if (st.xpm.includes(key)) return;
+        const after = Math.min(MAX_XP, st.xp + xp.total);
+        if (xp.total > 0) {
+          const lv = levelInfo(after).level;
+          await $global.updateUserState(s.account, { xp: after, lv, xpAt: Date.now(), xpm: [...st.xpm, key].slice(-20) });
+          if (live) live.lv = lv;
+        }
+        awards[s.account] = { ...xp, before: st.xp, after };
+      });
+    } catch (err) {
+      slog('xp_error', roomId, { account: s.account, err: String(err) });
+    }
+  }
+  res.xp = awards;
+  slog('xp', roomId, { key, playedMs, awards: Object.fromEntries(Object.entries(awards).map(([a, x]) => [a, x.total])) });
 }
 
 /** 매치 종료 확정 (한 번만): 순위·승자·무승부 → 결과 단계 */
@@ -629,6 +683,12 @@ export class Server {
   // ---------------- 닉네임 (룸 안팎 모두) ----------------
 
   /** 저장된 내 닉네임 (없으면 null → 클라이언트가 첫 설정 화면) */
+  /** 내 경험치 (로비 표시용, 원본은 서버 저장값) */
+  async progressGet(): Promise<{ ok: true; xp: number; lv: number }> {
+    const p = progressOf((await $global.getMyState()) as Record<string, unknown>);
+    return { ok: true, xp: p.xp, lv: p.lv };
+  }
+
   async nickGet(): Promise<{ ok: true; nick: string | null }> {
     return { ok: true, nick: await storedNick() };
   }
@@ -734,8 +794,10 @@ export class Server {
     await $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       const t = Date.now();
-      if (r.endAt > 0 && t >= r.endAt) finishMatch(r, 'time', t);
-      else if (r.phase === 'countdown' && t >= r.startAt) r.phase = 'playing';
+      if (r.endAt > 0 && t >= r.endAt) {
+        finishMatch(r, 'time', t);
+        await awardMatchXp(roomId, r);
+      } else if (r.phase === 'countdown' && t >= r.startAt) r.phase = 'playing';
       else return;
       await saveRoom(roomId, r);
       if (r.phase === 'result') slog('match_end', roomId, { reason: 'time', mode: r.mode, teamScore: r.teamScore, winners: r.result?.winners.length, draw: r.result?.draw });
@@ -819,10 +881,17 @@ export class Server {
         await saveRoom(roomId, r);
         $room.broadcastToRoom('joined', { account: me, slot });
       }
-      // 표시 닉네임 (서버에 저장된 값 먼저, 검사 통과한 값만, 바뀔 때만 저장)
+      // 표시 닉네임 (서버에 저장된 값 먼저, 검사 통과한 값만, 바뀔 때만 저장) + 레벨 (서버 저장 경험치)
       const n = await displayNick(nick);
-      if (n && n !== p.nick) {
-        p.nick = n;
+      let lv = p.lv ?? 1;
+      try {
+        lv = progressOf((await $global.getMyState()) as Record<string, unknown>).lv;
+      } catch {
+        // 글로벌 상태를 못 읽어도 입장은 막지 않음
+      }
+      if ((n && n !== p.nick) || lv !== p.lv) {
+        if (n) p.nick = n;
+        p.lv = lv;
         await $room.updateRoomState({ players: r.players }, { returnState: false });
       }
       if (typeof char === 'string' && char in NET_CHARACTER_HP && (char !== p.char || p.max !== NET_CHARACTER_HP[char])) {
@@ -897,7 +966,7 @@ export class Server {
       const custom = typeof t === 'number' && Number.isFinite(t) && t >= NET_TEST_TIME_LIMIT_SEC.min && t <= NET_TEST_TIME_LIMIT_SEC.max && rule.timeLimitMs > 0;
       const limit = custom ? Math.round(t) * 1000 : rule.timeLimitMs;
       for (const p of Object.values(r.players)) {
-        Object.assign(p, { hp: p.max, dead: false, respawnAt: 0, k: 0, d: 0, prot: startAt });
+        Object.assign(p, { hp: p.max, dead: false, respawnAt: 0, k: 0, d: 0, prot: startAt, kv: {} });
         delete p.rb;
       }
       Object.assign(r, { phase: 'countdown', startAt, endAt: limit > 0 ? startAt + limit : 0, timeLimitMs: limit, teamScore: { BLUE: 0, RED: 0 }, result: null, gone: {} });
@@ -1105,6 +1174,7 @@ export class Server {
           vic.respawnAt = now + NET_TIMING.respawnDelayMs;
           vic.d++;
           att.k++;
+          (att.kv ??= {})[h.v] = (att.kv[h.v] ?? 0) + 1;
           if (rule.teams && att.team) r.teamScore[att.team]++;
         }
         changed = true;
@@ -1117,6 +1187,7 @@ export class Server {
       }
       // 피해 처리는 자주 일어나므로 룸 상태만 쓰고, 종료(단계 변경) 때만 글로벌 요약까지
       if (r.phase === 'result') {
+        await awardMatchXp(roomId, r);
         await saveRoom(roomId, r);
         slog('match_end', roomId, { reason: 'score', mode: r.mode, teamScore: r.teamScore, winners: r.result?.winners.length, draw: r.result?.draw });
       } else if (changed) await $room.updateRoomState({ players, teamScore: r.teamScore }, { returnState: false });

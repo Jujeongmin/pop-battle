@@ -1,4 +1,6 @@
 // 자유 이동 로비의 상단 메뉴 바와 창. 3D 월드와 캐릭터는 게임이 그리고, 여기서는 DOM UI만 맡는다.
+import { rankName } from '../../net/shared/progression';
+import { popgunImg } from '../popgun';
 import './lobby.css';
 import './toy.css';
 import { toGame, viewH } from '../../core/screenRotation';
@@ -53,6 +55,9 @@ export class Lobby {
   private readonly stageRole = el('span', 'lb-stage-role');
   private readonly stageBadges = el('span', 'lb-stage-badges');
   private readonly playerName = el('b', 'lb-player-name');
+  /** 레벨 카드: 팝건 계급 아이콘 · 닉네임 · Lv · 다음 레벨까지 경험치 */
+  private readonly levelCard = el('div', 'lb-level-card');
+  private lastLevelKey = '';
   private readonly presence = el('span', 'lb-presence');
   private readonly presenceLabel = el('span', 'lb-presence-label');
   /** 연결이 끊겼을 때 바로 다시 연결 */
@@ -276,7 +281,32 @@ export class Lobby {
       this.presence.hidden = p.status === 'online';
       this.presenceRetry.hidden = p.status !== 'disconnected';
     }
+    this.syncLevelCard(player);
     this.syncRequiredNickname();
+  }
+
+  /** 레벨 카드 (값이 바뀔 때만 다시 그림). 최대 레벨은 Lv.100 MAX · 진행률 100% */
+  private syncLevelCard(player: string): void {
+    const p = this.host.progress();
+    const key = `${player}|${p.level}|${p.into}|${p.need}|${p.max}`;
+    if (key === this.lastLevelKey) return;
+    this.lastLevelKey = key;
+    const c = this.levelCard;
+    c.textContent = '';
+    const name = el('b', 'lb-level-name', player);
+    name.title = player;
+    const lv = el('span', 'lb-level-lv', p.max ? `Lv.${p.level} MAX` : `Lv.${p.level}`);
+    const bar = el('span', 'lb-level-bar');
+    const fill = el('i');
+    fill.style.width = `${Math.round((p.max ? 1 : p.into / Math.max(1, p.need)) * 100)}%`;
+    bar.append(fill);
+    const xp = el('span', 'lb-level-xp', p.max ? 'MAX' : `${p.into.toLocaleString()} / ${p.need.toLocaleString()} XP`);
+    const row = el('span', 'lb-level-row');
+    row.append(lv, bar, xp);
+    const copy = el('span', 'lb-level-copy');
+    copy.append(name, row);
+    c.append(popgunImg(p.level, 'lb-level-icon'), copy);
+    c.setAttribute('aria-label', `${player} · ${rankName(p.level)} Lv.${p.level}${p.max ? ' 최대 레벨' : ` · 경험치 ${p.into} / ${p.need}`}`);
   }
 
   show(id: string | null): void {
@@ -292,7 +322,7 @@ export class Lobby {
     this.presence.append(this.presenceLabel, this.presenceRetry);
     this.presenceRetry.hidden = true;
     this.presence.hidden = true;
-    identity.append(this.playerName, this.presence);
+    identity.append(this.levelCard, this.playerName, this.presence);
     status.append(brand, identity);
     // 상단: [로고 · 캐릭터 · 장비 · 상점 · 설정]. 게임 시작·방 만들기는 그 아래 방 목록 칸 머리에 (예전 큰 버튼 줄·MENU 창 없음)
     const icons = el('div', 'lb-top-icons');

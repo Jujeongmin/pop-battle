@@ -1,5 +1,6 @@
 // 결과 화면 데이터: 연습전(로컬 Match)·멀티(서버 확정 NetMatchResult)를 같은 형식으로 바꾼다 (렌더링과 무관한 순수 로직).
 // 승패·무승부는 원래 판정(Match.finish / 서버 finishMatch) 값을 그대로 쓰고 여기서 다시 계산하지 않는다.
+import { standingRanks, type XpAward } from '../net/shared/progression';
 import { CHARACTERS, type CharacterId } from '../config/characters';
 import type { MatchResult } from '../match/Match';
 import type { MatchRules } from '../config/match';
@@ -30,6 +31,8 @@ export interface ResultData {
   /** 배치 방식: tdm = 이긴 팀 앞·진 팀 뒤, ffa = 순위 시상대 (자유 테스트·연습전 포함) */
   readonly layout: 'tdm' | 'ffa';
   readonly practice: boolean;
+  /** 내 경험치 지급 결과 (서버 확정, 멀티 TDM·FFA만. 연습전·TEST는 없음) */
+  readonly xp?: XpAward;
   readonly label: string;
   readonly reason: 'score' | 'time';
   /** 목표 점수 (0 = 없음) */
@@ -63,15 +66,8 @@ function charOf(id: string): CharacterId {
  * 킬·데스가 모두 같으면 같은 순위 (기존 순위표 규칙). list는 이미 킬 내림차순 → 데스 오름차순으로 정렬돼 있음
  */
 export function rankList(list: ReadonlyArray<{ k: number; d: number }>): number[] {
-  const top = list[0]?.k ?? 0;
-  const ranks: number[] = [];
-  list.forEach((e, i) => {
-    const prev = list[i - 1];
-    if (e.k === top) ranks.push(1);
-    else if (prev && prev.k === e.k && prev.d === e.d) ranks.push(ranks[i - 1]!);
-    else ranks.push(i + 1);
-  });
-  return ranks;
+  // 서버 경험치 순위 보너스와 같은 함수 (net/shared/progression)
+  return standingRanks(list);
 }
 
 /**
@@ -123,6 +119,7 @@ export function fromNetResult(r: NetMatchResult, me: string, roomId: string, myN
     teamScore: r.mode === 'tdm' ? { ...r.teamScore } : null,
     winnerTeam: r.winnerTeam,
     entries: finish(raw, new Set(r.winners)),
+    ...(r.xp?.[me] ? { xp: r.xp[me] } : {}),
   };
 }
 
