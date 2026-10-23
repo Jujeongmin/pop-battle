@@ -3,7 +3,7 @@ import type { CrosshairDef } from '../config/weapons';
 import type { BotLabel } from '../bots/BotManager';
 import { COMBAT } from '../config/combat';
 import type { MatchState } from '../match/Match';
-import { KillFeed, weaponIconSvg, type KillFeedEvent } from './KillFeed';
+import { KILL_FEED, KillFeed, weaponIconSvg, type KillFeedEvent } from './KillFeed';
 import { viewerLang } from '../net/shared/roomTitles';
 
 /** 재장전 표시 글자 (브라우저 언어: 한국어면 한글) */
@@ -484,6 +484,9 @@ export class Hud {
   /** 모바일 터치 조작: 터치 버튼 자리를 비운 배치 + 슬롯 터치 + 시작 카드 안내·설정 버튼 */
   setTouchMode(on: boolean): void {
     this.root.classList.toggle('touch', on);
+    // 모바일 가로: 킬로그는 2줄 (전투 시야 확보)
+    this.killFeed.maxRows = on ? 2 : KILL_FEED.maxRows;
+    this.lastWeaponKey = '';
   }
 
   /** 멀티플레이 화면이 덮고 있으면 시작 카드 숨김 */
@@ -818,7 +821,19 @@ export class Hud {
     }
     const empty = !f.melee && f.magazine === 0 && f.reserve === 0;
     const low = !f.melee && !f.reloading && f.magazine <= Math.ceil(f.magazineSize * LOW_AMMO);
-    const state = f.melee ? '근접 무기' : f.reloading ? '재장전 중…' : empty ? '탄약 없음' : f.magazine === 0 ? 'R 재장전' : low ? '탄약 부족 · R' : '';
+    // 터치: PC 키(R) 안내 없음, 재장전 중은 조준선 아래 재장전 표시가 대신함 (중복 글자 없음)
+    const touch = this.root.classList.contains('touch');
+    const state = f.melee
+      ? '근접 무기'
+      : f.reloading
+        ? touch ? '' : '재장전 중…'
+        : empty
+          ? '탄약 없음'
+          : f.magazine === 0
+            ? touch ? '재장전' : 'R 재장전'
+            : low
+              ? touch ? '탄약 부족' : '탄약 부족 · R'
+              : '';
     const key = `${f.magazine}|${f.reserve}|${f.melee}|${f.reloading}|${state}|${low}`;
     if (key !== this.lastWeaponKey) {
       this.lastWeaponKey = key;

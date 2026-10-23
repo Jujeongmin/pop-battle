@@ -598,6 +598,47 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .wc-icon.has-img { width: calc(84px * var(--u)); background: #fff6e6; box-shadow: inset 0 calc(-3px * var(--u)) 0 rgba(39,50,92,.12); overflow: hidden; }
 .wc-icon.has-img img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .hud.touch .wc-icon.has-img { width: calc(64px * var(--u)); }
+/* 모바일 전투 HUD (터치, 667×375 기준): 핵심 숫자(HP·탄약·시간·점수)는 크게, 설명·중복 글자는 빼고,
+   카드 바탕은 반투명 얇게 (전투 시야 확보). --u가 최소 0.6이라 글자 크기는 px로 직접 */
+.hud.touch .hp { gap: 5px; padding: 3px 10px 4px 5px; border-width: 2px; border-radius: 14px; background: rgba(255, 253, 248, .8); box-shadow: 0 2px 0 rgba(39, 50, 92, .18); }
+.hud.touch .hp-icon { width: 18px; height: 17px; }
+.hud.touch .hp-main { gap: 2px; }
+.hud.touch .hp-nums { gap: 3px; }
+.hud.touch .hp-text { font-size: 20px; text-shadow: 0 1px 0 #fff; }
+/* 최대 체력(/100)은 막대가 대신 보여 줌 */
+.hud.touch .hp-max { display: none; }
+.hud.touch .hp-bar { width: 92px; height: 7px; }
+.hud.touch .protect-tag { font-size: 10px; padding: 0 6px; }
+.hud.touch .weapon-card {
+  top: calc(var(--pad-y) + var(--safe-t) + 40px); gap: 6px; padding: 3px 10px 3px 4px; border-width: 2px; border-radius: 14px;
+  background: rgba(255, 253, 248, .8); box-shadow: 0 2px 0 rgba(39, 50, 92, .18);
+}
+.hud.touch .wc-icon,
+.hud.touch .wc-icon.has-img { width: 44px; height: 26px; border-radius: 9px; }
+/* 무기 이름은 아래 슬롯·그림이 대신 (탄약 숫자만 크게) */
+.hud.touch .wc-name { display: none; }
+.hud.touch .ammo { gap: 3px; }
+.hud.touch .ammo .mag { font-size: 22px; text-shadow: 0 1px 0 #fff; }
+.hud.touch .ammo .res { font-size: 12px; opacity: .65; }
+.hud.touch .wc-state { min-height: 0; font-size: 11px; line-height: 1.15; }
+.hud.touch .wc-state:empty { display: none; }
+.hud.touch .wc-reload { left: 8px; right: 8px; bottom: 2px; height: 3px; }
+.hud.touch .ads-tag { top: -9px; right: 4px; padding: 0 6px; font-size: 10px; border-width: 1.5px; }
+.hud.touch .match-bar { gap: 2px; padding: 3px 8px 4px; border-width: 2px; border-radius: 14px; background: rgba(255, 253, 248, .8); box-shadow: 0 2px 0 rgba(39, 50, 92, .18); }
+/* 모드 이름(FREE FOR ALL · BOTS)은 생략: 시간·점수만 */
+.hud.touch .mb-mode { display: none; }
+.hud.touch .mb-row { gap: 5px; }
+.hud.touch .mb-time { padding: 1px 8px; border-radius: 9px; font-size: 20px; }
+.hud.touch .mb-side { gap: 4px; padding: 1px 7px; border-radius: 10px; }
+.hud.touch .mb-tname { font-size: 10px; letter-spacing: .5px; }
+.hud.touch .mb-score { font-size: 20px; }
+.hud.touch .mb-sub { gap: 4px; }
+.hud.touch .mb-pill { padding: 0 7px; font-size: 10px; line-height: 16px; }
+.hud.touch .mb-pill b { font-size: 12px; }
+.hud.touch .hud-notice { top: calc(var(--pad-y) + var(--safe-t) + 52px); font-size: 12px; }
+/* 킬로그: 2줄(Hud.setTouchMode) · 이름 폭 · 글자 */
+.hud.touch .kf-row { font-size: 12px; padding: 2px 8px; }
+
 /* 터치: 오른쪽 엄지 버튼 묶음(버튼 크기 설정 최대 140%)과 겹치지 않게 슬롯 바를 가운데보다 조금 왼쪽에 */
 .hud.touch .slots { left: 44%; bottom: calc(var(--pad-y) + var(--safe-b)); }
 /* 조작 중에만 슬롯 바를 터치 레이어 위로 (일시정지 카드 위에 겹치지 않게) */

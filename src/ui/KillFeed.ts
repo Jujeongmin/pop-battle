@@ -146,6 +146,9 @@ export class KillFeed {
   }
 
   /** 확정된 사망 1건 → 맨 위에 추가 */
+  /** 보이는 최대 줄 수 (모바일 터치 2줄, PC 4줄 — Hud.setTouchMode) */
+  maxRows = KILL_FEED.maxRows;
+
   push(e: KillFeedEvent): void {
     const el = document.createElement('div');
     el.className = 'kf-row';
@@ -170,8 +173,14 @@ export class KillFeed {
     el.appendChild(name('kf-victim', e.victimName, e.victimColor));
     this.root.prepend(el);
     this.rows.unshift({ el, expireAt: e.timestamp + KILL_FEED.holdMs, removeAt: 0 });
-    // 넘치면 가장 오래된 것부터 바로 제거 (표시 중인 줄만 세고, 이미 사라지는 중인 줄은 제거)
-    while (this.rows.length > KILL_FEED.maxRows) this.rows.pop()!.el.remove();
+    // 넘치면 가장 오래된 줄부터 페이드아웃 (표시 중인 줄만 셈). 사라지는 중인 줄이 쌓이면 바로 제거
+    const live = this.rows.filter((r) => r.removeAt === 0);
+    while (live.length > this.maxRows) {
+      const old = live.pop()!;
+      old.removeAt = e.timestamp + KILL_FEED.fadeMs;
+      old.el.classList.add('out');
+    }
+    while (this.rows.length > this.maxRows + 2) this.rows.pop()!.el.remove();
   }
 
   /** 매 프레임 (Hud.update). 만료된 줄 페이드아웃 → 제거 */
