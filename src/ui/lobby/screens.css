@@ -1009,3 +1009,21 @@
 .lb-lobby .lb-panel-body:has(> .lb-weapon-preview) .lb-weapon b { overflow: visible; line-height: 1.15; text-overflow: clip; white-space: normal; word-break: keep-all; }
 /* 장비 오른쪽 칸 항목은 글자 높이 아래로 눌리지 않게 (미리보기가 여러 줄을 차지해도 겹침·잘림 없이 칸이 스크롤) */
 .lb-lobby .lb-panel-body:has(> .lb-weapon-preview) > .lb-soon { min-height: max-content; }
+
+/* 대기실 칸이 좁을 때 (세로 태블릿 등): 초상 위 · 글자 아래로 쌓아 닉네임 폭 확보. 기준 = 팀 열(카드 2장)·개인전 목록(카드 4장) 폭 */
+.lb-mp-overlay .lb-mp-team-column { container: mpcol / inline-size; }
+.lb-mp-overlay .lb-mp-players.lb-mp-ffa { container: mpffa / inline-size; }
+@media (min-height: 521px) {
+  @container mpcol (max-width: 340px) {
+    .lb-mp-player:not(.lb-mp-empty) { grid-template-columns: minmax(0, 1fr) !important; justify-items: center; text-align: center; }
+    .lb-mp-player:not(.lb-mp-empty) .lb-mp-player-copy { width: 100%; justify-items: center; }
+    .lb-mp-player:not(.lb-mp-empty) .lb-mp-meta { justify-content: center; }
+    .lb-mp-player:not(.lb-mp-empty) .lb-mp-connection { justify-self: center; }
+  }
+  @container mpffa (max-width: 700px) {
+    .lb-mp-player:not(.lb-mp-empty) { grid-template-columns: minmax(0, 1fr) !important; justify-items: center; text-align: center; }
+    .lb-mp-player:not(.lb-mp-empty) .lb-mp-player-copy { width: 100%; justify-items: center; }
+    .lb-mp-player:not(.lb-mp-empty) .lb-mp-meta { justify-content: center; }
+    .lb-mp-player:not(.lb-mp-empty) .lb-mp-connection { justify-self: center; }
+  }
+}

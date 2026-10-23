@@ -46,15 +46,6 @@ export class CharacterPanel implements LobbyPanel {
         this.gauge('이동', 'lb-g-speed', character.speed / speedMax, `${Math.round(character.speed * 100)}%`),
       );
       card.append(figure, copy, stats, el('span', 'lb-card-equipped', '✓ 장착 중'), el('span', 'lb-card-preview', '미리보기'));
-      // 마우스를 올리면 바로 3D 미리보기 (PC, 잠깐 지나가는 것은 무시)
-      let hover = 0;
-      card.addEventListener('mouseenter', () => {
-        window.clearTimeout(hover);
-        hover = window.setTimeout(() => {
-          if (this.preview !== character.id) this.show(character, true);
-        }, 140);
-      });
-      card.addEventListener('mouseleave', () => window.clearTimeout(hover));
       if (character.locked) {
         const lock = el('span', 'lb-lock');
         lock.innerHTML = `${ICON.lock}<i>잠김</i>`;
