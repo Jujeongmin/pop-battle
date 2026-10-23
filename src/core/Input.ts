@@ -63,6 +63,8 @@ export class KeyboardMouseInput {
    * 글자 입력 칸에 포커스가 있으면 키를 받지 않음 (방 코드 입력 중 캐릭터가 움직이지 않게)
    */
   private cursorKeys = false;
+  /** 포인터 잠금 재시도 타이머 (requestLock) */
+  private retryTimer: number | null = null;
 
   constructor(private readonly element: HTMLElement) {
     const opts = { signal: this.abort.signal };
@@ -90,10 +92,20 @@ export class KeyboardMouseInput {
   }
 
   requestLock(): void {
-    if (!this.locked) {
-      // 사용자 제스처가 아니거나 문서가 포커스를 잃은 경우 거부될 수 있다 (다음 클릭에서 재시도)
-      Promise.resolve(this.element.requestPointerLock?.()).catch(() => undefined);
-    }
+    if (this.locked) return;
+    // 사용자 제스처가 아니거나 문서가 포커스를 잃은 경우 거부될 수 있다 (다음 클릭에서 재시도)
+    this.tryLock();
+    // ESC로 잠금을 푼 직후(약 1초)는 브라우저가 다시 잡기를 거부함 (일시정지 메뉴 '계속하기'를 바로 누르면 반응 없음)
+    // → 클릭(사용자 동작)이 아직 유효한 동안 한 번 더. 그사이 잡히면 취소
+    if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
+    this.retryTimer = window.setTimeout(() => {
+      this.retryTimer = null;
+      if (!this.locked && document.hasFocus()) this.tryLock();
+    }, 1100);
+  }
+
+  private tryLock(): void {
+    Promise.resolve(this.element.requestPointerLock?.()).catch(() => undefined);
   }
 
   releaseLock(): void {
@@ -223,6 +235,10 @@ export class KeyboardMouseInput {
 
   private readonly onPointerLockChange = (): void => {
     this.locked = document.pointerLockElement === this.element;
+    if (this.locked && this.retryTimer !== null) {
+      window.clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     if (!this.locked) this.onBlur();
     this.state.fireHeld = this.locked && this.mouseLeft;
     this.onLockChange?.(this.locked);
