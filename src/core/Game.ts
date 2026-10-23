@@ -1,3 +1,4 @@
+import type { RankingResult, RankKind } from '../net/shared/ranking';
 import { levelInfo } from '../net/shared/progression';
 import { loadXpCache, saveXpCache } from '../net/progress';
 import * as THREE from 'three';
@@ -1847,6 +1848,7 @@ export class Game {
       // 표시용 닉네임: 서버(계정별 글로벌 사용자 상태)가 최종 검사·저장, 이 기기에도 사본 (서버 식별은 계정)
       playerName: () => this.nick ?? '플레이어',
       progress: () => levelInfo(this.myXp),
+      ranking: (kind) => this.ranking(kind),
       nickname: () => this.nick,
       nicknameReady: () => this.nickReady,
       setNickname: (raw) => this.setNickname(raw),
@@ -1909,6 +1911,22 @@ export class Game {
   }
 
   /** 닉네임 적용: 이 기기 저장 → 로비(sendHub = 서버에 아직 안 알렸을 때만)·다음 방 입장(hello)·로비 화면 */
+  /** 랭킹 조회 (서버 정렬 결과 그대로). 랭킹을 열 때마다 새로 받음 → 레벨·전적 변화가 바로 보임 */
+  private async ranking(kind: RankKind): Promise<RankingResult> {
+    const fail = (reason: string): RankingResult => ({ ok: false, reason, kind, rows: [], mine: null, total: 0 });
+    if (this.netClient.status === 'no-verse') return fail('offline');
+    try {
+      if (!(await withTimeout(this.netClient.connect(), 10000))) return fail('connect');
+      const r = await withTimeout(this.netClient.call<RankingResult>('rankingGet', [kind]), 10000);
+      // 내 레벨도 최신으로 (다른 기기에서 올렸을 수 있음)
+      if (r.ok && r.mine) this.lobby?.refresh();
+      return r;
+    } catch (e) {
+      this.netClient.addLog('warn', `랭킹 불러오기 실패: ${errText(e)}`);
+      return fail('error');
+    }
+  }
+
   /** 서버가 알려 준 내 경험치 반영 (사본 저장 + 로비 카드) */
   private setMyXp(xp: number): void {
     if (!Number.isFinite(xp) || xp < 0) return;

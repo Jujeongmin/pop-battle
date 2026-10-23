@@ -48,7 +48,8 @@ import {
   type NetStanding,
   type NetTeam,
 } from '../../src/net/shared/protocol';
-import { levelInfo, matchXp, MAX_XP, standingRanks, type StoredProgress, type XpAward } from '../../src/net/shared/progression';
+import { levelInfo, MATCH_XP, matchXp, MAX_XP, standingRanks, type StoredProgress, type XpAward } from '../../src/net/shared/progression';
+import { addMatch, RANK_COLLECTION, RANK_KEY_FIELD, RANK_PAGE, rankKeys, readStats, type RankingResult, type RankKind, type RankRow, type RankStats } from '../../src/net/shared/ranking';
 
 const NO_ROOM = '__no_room__';
 const ROOM_CODE = /^pb-[a-z0-9]{4,12}$/;
@@ -330,9 +331,28 @@ function progressOf(st: Record<string, unknown> | null | undefined): StoredProgr
 }
 
 /**
- * 매치 종료 경험치 지급 (룸 락 안, finishMatch 직후 한 번): 서버가 확정한 결과(standings·킬 기록·경기 시간)로만 계산.
- * TEST 모드·개발용 제한 시간 경기는 지급 없음. 계정마다 xp 락 안에서 읽고-더하고-쓰기 → 동시 요청에도 유실·중복 없음,
- * 경기 id(룸:종료 시각)를 계정 기록에 남겨 같은 경기는 두 번 지급하지 않음. 결과는 result.xp에 실어 결과 화면이 표시
+ * 랭킹 컬렉션 한 줄 갱신 (계정마다 한 줄, id는 계정 상태 rid에 보관). 정렬 키 3개(ka·kt·kf)로 서버가 상위만 읽음.
+ * 줄이 지워졌거나 처음이면 새로 만듦 → 새 id 반환
+ */
+async function upsertRankRow(rid: unknown, account: string, nick: string, lv: number, stats: RankStats): Promise<string> {
+  const keys = rankKeys(stats);
+  const row = { acc: account, nick, lv, ka: keys.all, kt: keys.tdm, kf: keys.ffa, s: stats, t: Date.now() };
+  if (typeof rid === 'string' && rid) {
+    try {
+      await $global.updateCollectionItem(RANK_COLLECTION, { __id: rid, ...row });
+      return rid;
+    } catch {
+      // 줄이 없으면 아래에서 새로
+    }
+  }
+  return (await $global.addCollectionItem(RANK_COLLECTION, row)).__id;
+}
+
+/**
+ * 매치 종료 경험치·공식 전적 반영 (룸 락 안, finishMatch 직후 한 번): 서버가 확정한 결과(standings·킬 기록·경기 시간)로만 계산.
+ * TEST 모드·개발용 제한 시간 경기는 둘 다 없음, 20초 미만 경기는 전적에도 넣지 않음. 중도 이탈은 경험치 없이 전적만 (TDM 패배).
+ * 계정마다 xp 락 안에서 읽고-더하고-쓰기 → 동시 요청에도 유실·중복 없음, 경기 id(룸:종료 시각)를 계정 기록에 남겨
+ * 같은 경기는 두 번 반영하지 않음. 경험치 결과는 result.xp에 실어 결과 화면이 표시, 전적은 랭킹 컬렉션에도 복사
  */
 async function awardMatchXp(roomId: string, r: NetRoomState): Promise<void> {
   const res = r.result;
@@ -353,16 +373,36 @@ async function awardMatchXp(roomId: string, r: NetRoomState): Promise<void> {
       rank: ranks[i]!,
       players: res.standings.length,
     });
+    const left = !!s.left || !live;
+    const counted = playedMs >= MATCH_XP.minMatchMs && (r.mode === 'tdm' || r.mode === 'ffa');
     try {
       await $lock(`xp:${s.account}`, async () => {
-        const st = progressOf((await $global.getUserState(s.account)) as Record<string, unknown>);
+        const raw = ((await $global.getUserState(s.account)) || {}) as Record<string, unknown>;
+        const st = progressOf(raw);
         if (st.xpm.includes(key)) return;
         const after = Math.min(MAX_XP, st.xp + xp.total);
-        if (xp.total > 0) {
-          const lv = levelInfo(after).level;
-          await $global.updateUserState(s.account, { xp: after, lv, xpAt: Date.now(), xpm: [...st.xpm, key].slice(-20) });
-          if (live) live.lv = lv;
+        const lv = levelInfo(after).level;
+        const update: Record<string, unknown> = { xp: after, lv, xpAt: xp.total > 0 ? Date.now() : st.xpAt, xpm: [...st.xpm, key].slice(-20) };
+        if (counted) {
+          const stats = addMatch(readStats(raw.st), {
+            mode: r.mode as 'tdm' | 'ffa',
+            k: s.k,
+            d: s.d,
+            left,
+            outcome: res.draw ? 'draw' : (r.mode === 'tdm' ? s.team === res.winnerTeam : res.winners.includes(s.account)) ? 'win' : 'lose',
+            rank: ranks[i]!,
+            players: res.standings.length,
+          });
+          const nick = checkNickname(raw.nick);
+          update.st = stats;
+          try {
+            update.rid = await upsertRankRow(raw.rid, s.account, nick.ok ? nick.value : (s.nick ?? `P${s.slot + 1}`), lv, stats);
+          } catch (err) {
+            slog('rank_error', roomId, { account: s.account, err: String(err) });
+          }
         }
+        await $global.updateUserState(s.account, update);
+        if (live) live.lv = lv;
         awards[s.account] = { ...xp, before: st.xp, after };
       });
     } catch (err) {
@@ -683,6 +723,53 @@ export class Server {
   // ---------------- 닉네임 (룸 안팎 모두) ----------------
 
   /** 저장된 내 닉네임 (없으면 null → 클라이언트가 첫 설정 화면) */
+  /**
+   * 랭킹 조회 (전체·TDM·FFA): 서버가 랭킹 컬렉션을 정렬 키 내림차순으로 상위 100명만 읽음 (전체 사용자를 내려보내지 않음).
+   * 내 순위 = 내 키보다 큰 사람 수 + 1 (100위 밖이어도), 키가 같으면 같은 순위. 공식 기록이 없으면 순위 없음(rank 0).
+   * 화면에 계정 id는 보내지 않음 (내 줄 표시는 me)
+   */
+  async rankingGet(kind: unknown): Promise<RankingResult> {
+    const k: RankKind = kind === 'tdm' || kind === 'ffa' ? kind : 'all';
+    const field = RANK_KEY_FIELD[k];
+    const me = $sender.account;
+    const has = [{ field, operator: '>' as const, value: 0 }];
+    try {
+      const [items, total, mineRaw] = await Promise.all([
+        $global.getCollectionItems(RANK_COLLECTION, { filters: has, orderBy: [{ field, direction: 'desc' }], limit: RANK_PAGE }),
+        $global.countCollectionItems(RANK_COLLECTION, { filters: has }),
+        $global.getMyState(),
+      ]);
+      const rows: RankRow[] = [];
+      items.forEach((it, i) => {
+        const key = Number(it[field]) || 0;
+        const prev = rows[i - 1];
+        const prevKey = i > 0 ? Number(items[i - 1]![field]) || 0 : -1;
+        rows.push({
+          rank: prev && prevKey === key ? prev.rank : i + 1,
+          nick: typeof it.nick === 'string' ? it.nick : '플레이어',
+          lv: Math.max(1, Math.min(100, Number(it.lv) || 1)),
+          me: it.acc === me,
+          s: readStats(it.s),
+        });
+      });
+      const raw = (mineRaw || {}) as Record<string, unknown>;
+      const stats = readStats(raw.st);
+      const myKey = rankKeys(stats)[k];
+      const nick = checkNickname(raw.nick);
+      const mine: RankRow = {
+        rank: myKey > 0 ? (await $global.countCollectionItems(RANK_COLLECTION, { filters: [{ field, operator: '>', value: myKey }] })) + 1 : 0,
+        nick: nick.ok ? nick.value : '',
+        lv: progressOf(raw).lv,
+        me: true,
+        s: stats,
+      };
+      return { ok: true, kind: k, rows, mine, total };
+    } catch (err) {
+      slog('rank_error', '-', { err: String(err) });
+      return { ok: false, reason: 'error', kind: k, rows: [], mine: null, total: 0 };
+    }
+  }
+
   /** 내 경험치 (로비 표시용, 원본은 서버 저장값) */
   async progressGet(): Promise<{ ok: true; xp: number; lv: number }> {
     const p = progressOf((await $global.getMyState()) as Record<string, unknown>);
@@ -706,6 +793,8 @@ export class Server {
       const last = typeof st.nickAt === 'number' ? st.nickAt : 0;
       if (typeof st.nick === 'string' && st.nick && now - last < NICK_CHANGE_MS) return { ok: false, reason: 'rate', retryMs: NICK_CHANGE_MS - (now - last) };
       await $global.updateMyState({ nick: r.value, nickAt: now });
+      const rid = (st as { rid?: unknown }).rid;
+      if (typeof rid === 'string' && rid) await $global.updateCollectionItem(RANK_COLLECTION, { __id: rid, nick: r.value }).catch(() => undefined);
     }
     if (hubOf()) await $room.updateMyState({ n: r.value }, { returnState: false });
     return { ok: true, nick: r.value };

@@ -11,6 +11,7 @@ import { button, el, ICON, type LobbyCharacter, type LobbyHost, type LobbyPanel,
 import { PlayPanel } from './PlayPanel';
 import { RoomListPanel } from './RoomListPanel';
 import { SettingsPanel } from './SettingsPanel';
+import { RankingPanel } from './RankingPanel';
 import { ShopPanel } from './ShopPanel';
 import { nicknameEditor, type NicknameEditor } from './nicknameUi';
 
@@ -19,12 +20,13 @@ const NAV: Array<{ id: string; label: string; korean: string; icon: string }> = 
   { id: 'create', label: 'CREATE ROOM', korean: '방 만들기', icon: ICON.create },
   { id: 'character', label: 'CHARACTER', korean: '캐릭터', icon: ICON.character },
   { id: 'loadout', label: 'LOADOUT', korean: '장비', icon: ICON.loadout },
+  { id: 'ranking', label: 'RANKING', korean: '랭킹', icon: ICON.ranking },
   { id: 'shop', label: 'SHOP', korean: '상점', icon: ICON.shop },
   { id: 'settings', label: 'SETTINGS', korean: '설정', icon: ICON.settings },
 ];
 
 /** 전체 화면 메뉴 (로비를 가리고 독립 화면으로): 캐릭터·장비·상점·설정. 게임 시작·방 만들기는 로비 위 창 */
-const FULLSCREEN = new Set(['character', 'loadout', 'shop', 'settings']);
+const FULLSCREEN = new Set(['character', 'loadout', 'ranking', 'shop', 'settings']);
 
 type ManagedLobbyPanel = LobbyPanel & {
   activate?(): void;
@@ -93,6 +95,7 @@ export class Lobby {
       new CreateRoomPanel(host),
       this.characterPanel,
       new LoadoutPanel(host),
+      new RankingPanel(host),
       new ShopPanel(host),
       new SettingsPanel(host),
     ]) {

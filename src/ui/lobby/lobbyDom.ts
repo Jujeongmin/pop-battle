@@ -1,4 +1,5 @@
 // 로비 공용: DOM 도우미 + 로비가 게임에 요청하는 동작(LobbyHost). 패널은 이 인터페이스만 알고 Game 내부는 모름.
+import type { RankingResult, RankKind } from '../../net/shared/ranking';
 import type { NetMode } from '../../net/shared/protocol';
 import type { NickFailReason } from '../../net/shared/nickFilter';
 
@@ -94,6 +95,8 @@ export interface LobbyHost {
   menuChanged(open: boolean, panel: string | null): void;
   /** 내 표시 닉네임 (아직 정하지 않았으면 기본 이름 "플레이어") */
   playerName(): string;
+  /** 전체 유저 랭킹 (서버가 정렬한 상위 100명 + 내 순위). 서버 없는 빌드는 ok:false reason 'offline' */
+  ranking(kind: RankKind): Promise<RankingResult>;
   /** 내 레벨·경험치 (서버 저장값의 사본, 로비 레벨 카드) */
   progress(): { level: number; into: number; need: number; max: boolean };
   /** 저장된 닉네임 (null = 아직 정하지 않음 → 처음 접속 닉네임 입력 창) */
@@ -276,6 +279,8 @@ export const ICON = {
     '<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="4.5" fill="currentColor"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z" fill="currentColor"/></svg>',
   loadout:
     '<svg viewBox="0 0 24 24"><rect x="2" y="9" width="15" height="5" rx="2.5" fill="currentColor"/><rect x="16" y="10" width="6" height="2.6" rx="1.3" fill="currentColor"/><rect x="7" y="13" width="3.6" height="6" rx="1.6" fill="currentColor"/></svg>',
+  ranking:
+    '<svg viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0z" fill="currentColor"/><path d="M7 6H4.5a2.5 2.5 0 0 0 3 3.6M17 6h2.5a2.5 2.5 0 0 1-3 3.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10.5 12.5h3l.6 4h-4.2z" fill="currentColor"/><rect x="7.5" y="17" width="9" height="3" rx="1" fill="currentColor"/></svg>',
   shop: '<svg viewBox="0 0 24 24"><path d="M5 8h14l-1.3 12H6.3z" fill="currentColor"/><path d="M8.5 9V7a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   settings:
     '<svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm9 4.7v-2.4l-2.4-.6a7 7 0 0 0-.7-1.6l1.3-2.1-1.7-1.7-2.1 1.3a7 7 0 0 0-1.6-.7L13.2 3h-2.4l-.6 2.4a7 7 0 0 0-1.6.7L6.5 4.8 4.8 6.5l1.3 2.1a7 7 0 0 0-.7 1.6L3 10.8v2.4l2.4.6c.2.6.4 1.1.7 1.6l-1.3 2.1 1.7 1.7 2.1-1.3c.5.3 1 .5 1.6.7l.6 2.4h2.4l.6-2.4c.6-.2 1.1-.4 1.6-.7l2.1 1.3 1.7-1.7-1.3-2.1c.3-.5.5-1 .7-1.6z" fill="currentColor"/></svg>',

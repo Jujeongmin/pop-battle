@@ -710,7 +710,8 @@
   .lb-lobby.lb-fullscreen .lb-panel-head {
     position: absolute;
     top: calc(1px - var(--lb-nav-bottom, 52px));
-    right: 256px;
+    /* 오른쪽 상단 메뉴 아이콘 5개(52px) 자리를 비움 */
+    right: 296px;
     left: 78px;
     height: 44px;
     padding: 0;
@@ -736,7 +737,8 @@
   .lb-lobby.lb-fullscreen .lb-panel-close { min-height: 36px; font-size: 14px; }
   .lb-lobby.lb-fullscreen .lb-panel-body { gap: 6px; }
   .lb-lobby .lb-section { font-size: 14px; }
-  .lb-lobby .lb-topbar .lb-top-icon-btn { width: 60px; }
+  /* 상단 아이콘 6개(랭킹 포함) + 로비로 버튼이 667px 폭에 겹치지 않게 */
+  .lb-lobby .lb-topbar .lb-top-icon-btn { width: 52px; }
   .lb-lobby .lb-topbar .lb-top-icon { width: 22px; height: 22px; }
   .lb-lobby .lb-topbar .lb-top-icon-btn b { font-size: 12px; }
 
@@ -848,3 +850,73 @@
   .lb-level-lv { font-size: 11px; }
   .lb-level-xp { display: none; }
 }
+
+/* ================= 랭킹 (RankingPanel) =================
+   위: 종류 탭(전체·TDM·FFA) · 기준 설명 / 가운데: 머리줄 + 스크롤 목록 / 아래: 내 랭킹 고정 */
+.lb-rank { display: flex; height: 100%; min-height: 0; flex-direction: column; gap: 8px; }
+.lb-rank-tabs { display: flex; flex: none; gap: 8px; }
+.lb-lobby .lb-rank-tab {
+  min-width: 92px; min-height: 44px; padding: 0 18px; border: 3px solid var(--lb-ink); border-radius: 999px; background: #fff;
+  color: var(--lb-ink); box-shadow: 0 3px 0 var(--lb-ink); font-family: var(--lb-display-font); font-size: 17px; cursor: pointer;
+}
+.lb-lobby .lb-rank-tab.lb-active { background: #ffd45e; }
+.lb-lobby .lb-rank-tab:focus-visible { outline: 3px solid #2f7cf0; outline-offset: 2px; }
+.lb-rank-hint { flex: none; margin: 0; color: var(--lb-ink2); font-size: 12px; font-weight: 800; }
+.lb-rank-panel {
+  display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; overflow: hidden;
+  border: 3px solid var(--lb-ink); border-radius: 16px; background: #fffdf6; box-shadow: 0 4px 0 var(--lb-ink);
+}
+.lb-rank-list { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 4px 6px 6px; }
+.lb-rank-row {
+  display: grid; grid-template-columns: 56px 44px minmax(0, 1fr) 64px minmax(120px, auto); align-items: center; gap: 8px;
+  min-height: 46px; padding: 2px 12px; border-radius: 12px; color: var(--lb-ink); font-weight: 900;
+}
+.lb-rank-list .lb-rank-row + .lb-rank-row { margin-top: 3px; }
+.lb-rank-head { min-height: 30px; flex: none; border-bottom: 2px dashed rgba(39, 50, 92, .14); border-radius: 0; color: var(--lb-ink2); font-size: 12px; }
+.lb-rank-pos { text-align: center; font-family: var(--lb-display-font); font-size: 18px; font-variant-numeric: tabular-nums; }
+.lb-rank-head .lb-rank-pos { font-family: inherit; font-size: inherit; }
+.lb-rank-pos.lb-rank-none { font-family: inherit; color: var(--lb-ink2); font-size: 12px; }
+.lb-rank-icon-col { display: grid; place-items: center; }
+.lb-rank-icon { width: 38px; height: 38px; object-fit: contain; }
+.lb-rank-nick { min-width: 0; overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.lb-rank-lv { color: #2f6cf0; font-size: 14px; }
+.lb-rank-rec { color: var(--lb-ink2); font-size: 13px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lb-rank-head .lb-rank-lv, .lb-rank-head .lb-rank-rec { color: inherit; font-size: inherit; }
+/* 1~3위: 금·은·동 */
+.lb-rank-top-1 { background: linear-gradient(90deg, #fff1b8, #fffaf0 70%); }
+.lb-rank-top-2 { background: linear-gradient(90deg, #e7edf8, #fbfcff 70%); }
+.lb-rank-top-3 { background: linear-gradient(90deg, #ffe2cc, #fffaf6 70%); }
+.lb-rank-top .lb-rank-pos { display: grid; width: 34px; height: 34px; justify-self: center; place-items: center; border: 2px solid var(--lb-ink); border-radius: 50%; }
+.lb-rank-top-1 .lb-rank-pos { background: radial-gradient(circle at 35% 30%, #fff6c8, #ffc531 70%); }
+.lb-rank-top-2 .lb-rank-pos { background: radial-gradient(circle at 35% 30%, #ffffff, #b9c8e6 70%); }
+.lb-rank-top-3 .lb-rank-pos { background: radial-gradient(circle at 35% 30%, #ffe3cf, #ff9f6e 70%); }
+/* 내 줄 */
+.lb-rank-me { box-shadow: inset 0 0 0 3px #5b8cff; background-color: #eaf2ff; }
+.lb-rank-mine { display: flex; flex: none; align-items: center; gap: 10px; }
+.lb-rank-mine:empty { display: none; }
+.lb-rank-mine-label { flex: none; padding: 6px 12px; border-radius: 999px; background: var(--lb-ink); color: #fff; font-size: 13px; font-weight: 900; }
+.lb-rank-row-mine { flex: 1 1 auto; min-width: 0; border: 3px solid var(--lb-ink); background: #eaf2ff; box-shadow: 0 3px 0 var(--lb-ink); }
+.lb-rank-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 160px; color: var(--lb-ink2); font-size: 14px; font-weight: 800; text-align: center; }
+.lb-rank-spinner { width: 30px; height: 30px; border: 4px solid rgba(91, 140, 255, .25); border-top-color: #5b8cff; border-radius: 50%; animation: lb-rank-spin .8s linear infinite; }
+@keyframes lb-rank-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .lb-rank-spinner { animation-duration: 2.4s; } }
+.lb-lobby .lb-rank-retry { min-height: 44px; padding: 0 18px; border: 3px solid var(--lb-ink); border-radius: 999px; background: #ffd45e; color: var(--lb-ink); box-shadow: 0 3px 0 var(--lb-ink); font-weight: 900; cursor: pointer; }
+.lb-rank-more { margin: 6px 0 2px; color: var(--lb-ink2); font-size: 12px; font-weight: 800; text-align: center; }
+/* 모바일 가로: 글자·칸 줄임 */
+@media (max-width: 760px), (max-height: 460px) {
+  .lb-rank { gap: 5px; }
+  .lb-lobby .lb-rank-tab { min-width: 70px; min-height: 44px; padding: 0 12px; border-width: 2px; font-size: 14px; box-shadow: 0 2px 0 var(--lb-ink); }
+  .lb-rank-hint { font-size: 11px; }
+  .lb-rank-panel { border-width: 2px; border-radius: 12px; box-shadow: 0 3px 0 var(--lb-ink); }
+  .lb-rank-row { grid-template-columns: 40px 32px minmax(0, 1fr) 48px minmax(92px, auto); gap: 6px; min-height: 38px; padding: 1px 8px; }
+  .lb-rank-head { min-height: 24px; font-size: 11px; }
+  .lb-rank-pos { font-size: 15px; }
+  .lb-rank-top .lb-rank-pos { width: 28px; height: 28px; }
+  .lb-rank-icon { width: 30px; height: 30px; }
+  .lb-rank-nick { font-size: 13px; }
+  .lb-rank-lv { font-size: 12px; }
+  .lb-rank-rec { font-size: 11px; }
+  .lb-rank-mine-label { padding: 4px 8px; font-size: 11px; }
+  .lb-rank-row-mine { border-width: 2px; box-shadow: 0 2px 0 var(--lb-ink); }
+}
+

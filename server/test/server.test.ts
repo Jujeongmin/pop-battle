@@ -524,6 +524,21 @@ describe('experience (XP)', () => {
     expect([saved.xp, saved.lv]).toEqual([a.total, 1]);
     server.connect({ account: 'bob', roomId: '__no_room__' });
     expect((await server.progressGet()).xp).toBe(b.total);
+
+    // 공식 전적 → 랭킹 (서버 정렬·상위만, 계정 id 없이)
+    const tdm = await server.rankingGet('tdm');
+    expect(tdm.ok).toBe(true);
+    expect(tdm.total).toBe(4);
+    expect(tdm.rows.map((x: any) => x.rank)).toEqual([1, 1, 3, 3]);
+    expect(tdm.rows.some((x: any) => 'acc' in x)).toBe(false);
+    expect([tdm.mine.rank, tdm.mine.s.tw, tdm.mine.s.tl]).toEqual([3, 0, 1]);
+    const ffa = await server.rankingGet('ffa');
+    expect([ffa.total, ffa.mine.rank]).toEqual([0, 0]);
+    server.connect({ account: 'alice', roomId: '__no_room__' });
+    const all = await server.rankingGet('all');
+    expect(all.mine.rank).toBe(1);
+    expect(all.mine.s.m).toBe(1);
+    expect(all.rows[0].me || all.rows[1].me).toBe(true);
   });
 });
 
