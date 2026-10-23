@@ -4,9 +4,17 @@ import { ARENA } from '../config/maps';
 import type { Physics } from '../physics/Physics';
 import type { GameMap, SpawnPoint } from './GameMap';
 import { balloon } from './maps/arenaCity';
-import { KitMerger, lighten, trs } from './maps/kit';
+import { KitMerger, lighten, trs, type KitModel } from './maps/kit';
 
 const UP = new THREE.Vector3(0, 1, 0);
+/**
+ * 섬 바닥에 밑면이 닿는 물체는 밑면을 바닥 아래로 이만큼 늘림 (윗면·모양은 그대로).
+ * 밑면이 바닥 윗면과 같은 높이면 카메라가 물체 안·가장자리에 들어갈 때 두 면이 겹쳐 바닥이 일렁임
+ */
+const BASE_SINK = 0.03;
+const _box = new THREE.Box3();
+const _partBox = new THREE.Box3();
+const _sink = new THREE.Matrix4();
 /** 섬 윗면 반지름 (m) */
 const R = 28;
 /** 가장자리 울타리 반지름 */
@@ -193,7 +201,7 @@ export class LobbySpace {
       const px = cx + Math.sin(a) * r;
       const pz = cz + Math.cos(a) * r;
       const color = colors[i % colors.length]!;
-      if (this.kit) this.merger.addKit(this.kit.models.round1x1, trs(px, y, pz, a, ARENA.brickScale), color);
+      if (this.kit) this.addKit(this.kit.models.round1x1, trs(px, y, pz, a, ARENA.brickScale), color);
       else this.cylinder(px, y + 0.34, pz, 0.28, 0.67, color, this.unit.post);
     }
     // 난간: 짧은 원기둥 조각을 이어 붙임 (입구는 비움)
@@ -407,8 +415,8 @@ export class LobbySpace {
     const S = ARENA.brickScale;
     const plateH = ARENA.plateBodyHeight * S;
     if (this.kit) {
-      this.merger.addKit(this.kit.models.flat2x4, trs(x, y, z, rot, S), color);
-      this.merger.addKit(this.kit.models.plate2x4, trs(x, y + plateH, z, rot, S), color);
+      this.addKit(this.kit.models.flat2x4, trs(x, y, z, rot, S), color);
+      this.addKit(this.kit.models.plate2x4, trs(x, y + plateH, z, rot, S), color);
     } else {
       this.boxMesh(x, y + plateH, z, 0.32 * S, plateH * 2, 0.16 * S, rot, color);
     }
@@ -472,14 +480,35 @@ export class LobbySpace {
   /** 깃발 (키트 깃발 모델, 테스트 맵은 생략). 깃대는 얇은 충돌 상자 */
   private flag(x: number, y: number, z: number, color: number, scale: number): void {
     if (!this.kit) return;
-    this.merger.addKit(this.kit.models.flag, trs(x, y, z, Math.PI / 2, scale), color, true);
+    this.addKit(this.kit.models.flag, trs(x, y, z, Math.PI / 2, scale), color, true);
     this.box(new THREE.Vector3(x, y + scale / 2, z), new THREE.Vector3(0.08, scale / 2, 0.08), 0, '로비 깃대');
   }
 
   // ---------------- 도우미 ----------------
 
   private add(geo: THREE.BufferGeometry, matrix: THREE.Matrix4, color: number): void {
-    this.merger.addBasic(geo, matrix, color);
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    this.merger.addBasic(geo, this.sinkBase(matrix, geo.boundingBox!), color);
+  }
+
+  private addKit(model: KitModel, matrix: THREE.Matrix4, color: number, swatch = false): void {
+    _box.makeEmpty();
+    for (const part of model.parts) {
+      if (!part.geometry.boundingBox) part.geometry.computeBoundingBox();
+      _box.union(_partBox.copy(part.geometry.boundingBox!).applyMatrix4(part.local));
+    }
+    this.merger.addKit(model, this.sinkBase(matrix, _box.clone()), color, swatch);
+  }
+
+  /** 밑면이 섬 바닥 높이(±3mm)인 물체: 윗면을 고정하고 세로로 늘려 밑면을 바닥 아래로 (BASE_SINK). 얇은 바닥 무늬는 그대로 */
+  private sinkBase(matrix: THREE.Matrix4, localBox: THREE.Box3): THREE.Matrix4 {
+    _box.copy(localBox).applyMatrix4(matrix);
+    const floor = LobbySpace.CENTER.y;
+    const h = _box.max.y - floor;
+    if (Math.abs(_box.min.y - floor) > 0.003 || h < 0.05) return matrix;
+    const top = _box.max.y;
+    _sink.makeScale(1, (h + BASE_SINK) / h, 1).setPosition(0, top - (top * (h + BASE_SINK)) / h, 0);
+    return _sink.clone().multiply(matrix);
   }
 
   /** 원기둥 (y = 가운데 높이) */
