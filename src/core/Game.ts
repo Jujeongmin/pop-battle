@@ -56,7 +56,9 @@ import {
 import type { MeleeResult } from '../combat/melee';
 import { WeaponSystem, type ShotPrediction, type ShotResult } from '../combat/WeaponSystem';
 import { AudioManager } from '../audio/AudioManager';
-import { CHARACTER, MOVEMENT, RENDER } from '../config/gameConfig';
+import { CAMERA, CHARACTER, MOVEMENT, RENDER } from '../config/gameConfig';
+import { assistTouchLook, type AssistTarget } from '../combat/aimAssist';
+import { areHostile } from '../combat/teams';
 import { MELEE_MOUNT, MELEE_WEAPON, PRIMARY_WEAPONS, RIFLE, RIFLE_MOUNT, SECONDARY_WEAPON, WEAPONS, type WeaponDef } from '../config/weapons';
 import { initRapier, Physics } from '../physics/Physics';
 import type { AttackerInfo, Damageable, HitInfo } from '../physics/Physics';
@@ -214,6 +216,10 @@ export class Game {
   private readonly characterModels = new Map<CharacterId, Promise<LoadedModel>>();
   /** 개발용 CHARACTER DEBUG (개발 서버에서만) */
   private characterDebug: CharacterDebug | null = null;
+  /** 모바일 에임 보정 대상 (적 몸통 중심, 프레임마다 다시 채움 — 할당 없이 재사용) */
+  private readonly assistTargets: AssistTarget[] = [];
+  /** 디버그: 이번 프레임 에임 보정이 걸린 대상 (없으면 null) */
+  aimAssistOn: string | null = null;
   /** 매치 결과 화면 (3D 무대 + 카드). 떠 있는 동안 경기장 대신 결과 무대를 그림 */
   private resultScreen: ResultScreen | null = null;
   /** 킬로그에 이미 올린 사망 (참가자 id, 리스폰하면 지움) → 같은 사망이 두 번 올라가지 않게 */
@@ -672,7 +678,8 @@ export class Game {
       if (this.debugPanel.toggle()) this.input.releaseLock();
     }
 
-    // --- 시점 (렌더 프레임마다 즉시 반영) ---
+    // --- 시점 (렌더 프레임마다 즉시 반영) --- 모바일 터치 회전분에만 약한 에임 보정 (카메라 입력만, 판정 무관)
+    this.applyTouchAimAssist();
     this.tpsCamera.applyLook(input.lookDX, input.lookDY, this.aim.lookSensitivityMultiplier);
 
     // --- 매치 진행 (카운트다운·타이머·시간 종료) ---
@@ -2279,6 +2286,37 @@ export class Game {
       }),
     );
     this.input.releaseLock();
+  }
+
+  /**
+   * 모바일 에임 보정 (combat/aimAssist.ts): 이번 프레임 터치 회전 입력만 바꿈 (마우스 입력은 그대로).
+   * 손가락 입력이 있을 때만, 전투 중·살아 있음·총기일 때. 대상 = 살아 있는 적 몸통 중심 (봇·원격 플레이어), 맵 구조물에 가리면 제외
+   */
+  private applyTouchAimAssist(): void {
+    this.aimAssistOn = null;
+    const t = this.input.touch;
+    const tdx = t.state.lookDX;
+    const tdy = t.state.lookDY;
+    if (!this.input.touchMode || !t.active || (tdx === 0 && tdy === 0)) return;
+    if (!this.match.combatActive || this.dead || this.lobbyShown || this.weapons.weapon.def.kind === 'melee') return;
+    const list = this.assistTargets;
+    const ids: string[] = [];
+    let n = 0;
+    const add = (id: string, fill: (out: THREE.Vector3) => void) => {
+      const slot = (list[n] ??= { point: new THREE.Vector3() });
+      fill(slot.point);
+      ids[n++] = id;
+    };
+    for (const b of this.bots.bots) if (b.targetable && areHostile(this.combatant, b)) add(b.id, (o) => b.avatar.getChestPosition(o));
+    for (const r of this.net?.hostiles() ?? []) if (areHostile(this.combatant, r)) add(r.id, (o) => r.avatar.getChestPosition(o));
+    list.length = n;
+    if (n === 0) return;
+    const out = assistTouchLook(tdx, tdy, this.tpsCamera.camera, list, CAMERA.sensitivity * this.aim.lookSensitivityMultiplier, (a, b) => this.physics.lineClear(a, b));
+    if (out.target < 0) return;
+    this.aimAssistOn = ids[out.target]!;
+    const s = this.input.state;
+    s.lookDX += out.dx - tdx;
+    s.lookDY += out.dy - tdy;
   }
 
   /** 디버그 (콘솔): 봇 목록 */

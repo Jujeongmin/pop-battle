@@ -561,10 +561,10 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .tc-fire { --s: 92px; right: calc(var(--safe-r) + 26px * var(--tu)); bottom: calc(var(--safe-b) + 30px * var(--tu)); background: rgba(255, 92, 120, .85); color: #fff; }
 .tc-fire.down { background: #ff4d6d; }
 .tc-jump { right: calc(var(--safe-r) + 20px * var(--tu)); bottom: calc(var(--safe-b) + (30px + 92px * var(--btn) + 16px) * var(--tu)); }
-.tc-ads { right: calc(var(--safe-r) + (26px + 92px * var(--btn) + 12px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 70px * var(--btn)) * var(--tu)); }
+.tc-ads { --s: 64px; right: calc(var(--safe-r) + (26px + 92px * var(--btn) + 12px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 66px * var(--btn)) * var(--tu)); }
 .tc-ads.on { background: var(--yellow); }
 .tc-slide { right: calc(var(--safe-r) + (26px + 92px * var(--btn) + 22px) * var(--tu)); bottom: calc(var(--safe-b) + 14px * var(--tu)); }
-.tc-reload { --s: 50px; right: calc(var(--safe-r) + (26px + 92px * var(--btn) - 4px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 140px * var(--btn)) * var(--tu)); }
+.tc-reload { --s: 54px; right: calc(var(--safe-r) + (26px + 92px * var(--btn) - 4px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 150px * var(--btn)) * var(--tu)); }
 .tc-reload.busy svg { animation: tc-spin .7s linear infinite; }
 @keyframes tc-spin { to { transform: rotate(360deg); } }
 .touch-layer.melee .tc-ads, .touch-layer.melee .tc-reload { opacity: .35; }
@@ -598,7 +598,8 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .wc-icon.has-img { width: calc(84px * var(--u)); background: #fff6e6; box-shadow: inset 0 calc(-3px * var(--u)) 0 rgba(39,50,92,.12); overflow: hidden; }
 .wc-icon.has-img img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .hud.touch .wc-icon.has-img { width: calc(64px * var(--u)); }
-.hud.touch .slots { bottom: calc(var(--pad-y) + var(--safe-b)); }
+/* 터치: 오른쪽 엄지 버튼 묶음(버튼 크기 설정 최대 140%)과 겹치지 않게 슬롯 바를 가운데보다 조금 왼쪽에 */
+.hud.touch .slots { left: 44%; bottom: calc(var(--pad-y) + var(--safe-b)); }
 /* 조작 중에만 슬롯 바를 터치 레이어 위로 (일시정지 카드 위에 겹치지 않게) */
 .hud.touch.playing .slots { z-index: 9; pointer-events: auto; }
 /* 작은 가로 화면: 시작·일시정지 카드는 스크롤, 카드 자체를 눌러도 시작 */

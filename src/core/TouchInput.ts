@@ -369,6 +369,8 @@ export class TouchInput {
     e.preventDefault();
     e.stopPropagation();
     if (!this.active) return;
+    // 사격 버튼을 이미 다른 손가락이 누르고 있으면 그 손가락이 계속 조준·사격 (두 번째 손가락은 무시 → 시점 튐 없음)
+    if (kind === 'fire' && this.firePointer >= 0) return;
     capture(b, e.pointerId);
     b.classList.add('down');
     switch (kind) {
@@ -400,6 +402,8 @@ export class TouchInput {
 
   private onButtonUp(kind: ButtonKind, b: HTMLButtonElement, e: PointerEvent): void {
     e.stopPropagation();
+    // 무시한 두 번째 사격 손가락이 떨어져도 누르고 있는 손가락의 표시·사격은 그대로
+    if (kind === 'fire' && e.pointerId !== this.firePointer) return;
     b.classList.remove('down');
     if (kind === 'fire' && e.pointerId === this.firePointer) {
       this.firePointer = -1;
