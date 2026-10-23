@@ -637,14 +637,15 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .hud.touch .hp { gap: 5px; padding: 3px 10px 4px 5px; border-width: 2px; border-radius: 14px; background: rgba(255, 253, 248, .8); box-shadow: 0 2px 0 rgba(39, 50, 92, .18); }
 .hud.touch .hp-icon { width: 18px; height: 17px; }
 .hud.touch .hp-main { gap: 2px; }
-.hud.touch .hp-nums { gap: 3px; }
-.hud.touch .hp-text { font-size: 20px; text-shadow: 0 1px 0 #fff; }
+/* 줄 높이 고정: 기기 글꼴(줄 간격)에 따라 체력 카드가 커져 아래 무기 카드와 겹치지 않게 (카드 높이 약 40px) */
+.hud.touch .hp-nums { gap: 3px; line-height: 1; align-items: center; }
+.hud.touch .hp-text { font-size: 20px; line-height: 1; text-shadow: 0 1px 0 #fff; }
 /* 최대 체력(/100)은 막대가 대신 보여 줌 */
 .hud.touch .hp-max { display: none; }
 .hud.touch .hp-bar { width: 92px; height: 7px; }
 .hud.touch .protect-tag { font-size: 10px; padding: 0 6px; }
 .hud.touch .weapon-card {
-  top: calc(var(--pad-y) + var(--safe-t) + 40px); gap: 6px; padding: 3px 10px 3px 4px; border-width: 2px; border-radius: 14px;
+  top: calc(var(--pad-y) + var(--safe-t) + 46px); gap: 6px; padding: 3px 10px 3px 4px; border-width: 2px; border-radius: 14px;
   background: rgba(255, 253, 248, .8); box-shadow: 0 2px 0 rgba(39, 50, 92, .18);
 }
 .hud.touch .wc-icon,
@@ -657,7 +658,8 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .hud.touch .wc-state { min-height: 0; font-size: 11px; line-height: 1.15; }
 .hud.touch .wc-state:empty { display: none; }
 .hud.touch .wc-reload { left: 8px; right: 8px; bottom: 2px; height: 3px; }
-.hud.touch .ads-tag { top: -9px; right: 4px; padding: 0 6px; font-size: 10px; border-width: 1.5px; }
+/* ADS 표시: 무기 카드 오른쪽 옆 (위로 올리면 체력 카드와 겹침) */
+.hud.touch .ads-tag { top: 50%; right: auto; left: calc(100% + 5px); transform: translateY(-50%); padding: 0 6px; font-size: 10px; border-width: 1.5px; }
 .hud.touch .match-bar { gap: 2px; padding: 3px 8px 4px; border-width: 2px; border-radius: 14px; background: rgba(255, 253, 248, .8); box-shadow: 0 2px 0 rgba(39, 50, 92, .18); }
 /* 모드 이름(FREE FOR ALL · BOTS)은 생략: 시간·점수만 */
 .hud.touch .mb-mode { display: none; }
