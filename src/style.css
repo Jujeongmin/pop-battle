@@ -964,3 +964,30 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   .coach.coach-lobby { top: auto; bottom: 10px; }
   .coach-dots { font-size: 11px; }
 }
+
+
+/* ================= 피격 피드백 강화 (2026-10-23) =================
+   가장자리 섬광 진하게 · 방향 쐐기(화면 가운데 둘레, 크게) · 체력 막대 중간색·잔상 강조 */
+.hurt-flash {
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(255, 40, 72, .5) 78%, rgba(255, 30, 60, .85) 100%);
+  box-shadow: inset 0 0 calc(60px * var(--u, 1)) rgba(255, 30, 60, .6);
+}
+.damage-dirs { --dmg-r: min(30vh, 230px); }
+.damage-dir { left: -70px; top: calc(-1 * var(--dmg-r)); width: 140px; height: var(--dmg-r); }
+.damage-dir::before { height: 30px; border-top-width: 9px; border-top-color: rgba(255, 46, 77, .95); filter: drop-shadow(0 0 6px rgba(255, 46, 77, .8)); }
+/* 바깥을 가리키는 쐐기 (공격이 온 쪽) */
+.damage-dir::after {
+  content: ""; position: absolute; left: 50%; top: -20px; width: 0; height: 0; transform: translateX(-50%);
+  border-left: 15px solid transparent; border-right: 15px solid transparent; border-bottom: 20px solid #ff2e4d;
+  filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 6px rgba(255, 46, 77, .8));
+}
+.damage-dir.big::before { border-top-width: 12px; }
+.damage-dir.big::after { border-left-width: 19px; border-right-width: 19px; border-bottom-width: 25px; }
+.hud.touch .damage-dirs { --dmg-r: min(34vh, 150px); }
+.hud.touch .damage-dir { left: -50px; width: 100px; }
+.hud.touch .damage-dir::after { border-left-width: 11px; border-right-width: 11px; border-bottom-width: 15px; top: -15px; }
+/* 체력 막대: 잔상(줄어든 양)은 분홍빛으로 잠깐 남고, 중간 체력은 주황 */
+.hp-lag { background: #ffb3c0; }
+.hp.mid .hp-fill { background: linear-gradient(180deg, #ffd27a, #ff9f2e); }
+.hp.mid .hp-text { color: #ffb84d; }
+@media (prefers-reduced-motion: reduce) { .damage-dir { transition: none; } }

@@ -74,6 +74,8 @@ export class NetGameMode {
   syncFxToInterp = true;
   /** 디버그: 원격 탄 연출 수, 확정 명중·처치 */
   remoteShotsShown = 0;
+  /** 최근 원격 사격 이벤트 (중복 표시 방지, 키 → 받은 시각 ms) */
+  private readonly seenFx = new Map<string, number>();
   confirmedHits = 0;
   confirmedKills = 0;
   private readonly creating = new Set<string>();
@@ -260,7 +262,15 @@ export class NetGameMode {
 
   private remoteShots(account: string, shots: NetShot[]): void {
     const r = this.remotes.get(account);
-    if (!r) return;
+    if (!r || !shots.length) return;
+    // 같은 사격 이벤트가 두 번 와도(재전송·중복 수신) 탄환·궤적은 한 번만: 사수 + 첫 탄 시작·끝 좌표로 1.5초 동안 기억
+    const s0 = shots[0]!;
+    const key = `${account}|${s0.w}|${s0.f.join(',')}|${s0.e.join(',')}|${shots.length}`;
+    const now = performance.now();
+    const seen = this.seenFx.get(key);
+    if (seen !== undefined && now - seen < 1500) return;
+    this.seenFx.set(key, now);
+    if (this.seenFx.size > 128) for (const [k, t] of this.seenFx) if (now - t > 1500) this.seenFx.delete(k);
     const play = () => {
       if (!this.remotes.has(account)) return;
       let flashed = '';

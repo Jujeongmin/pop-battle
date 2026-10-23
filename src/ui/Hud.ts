@@ -187,6 +187,11 @@ export class Hud {
   /** 무기 카드 그림 원본 (실제 무기 모델 옆모습, assets/weaponArt). 게임이 무기 모델을 불러온 뒤 설정 */
   weaponImage: ((weaponId: string) => string | null) | null = null;
   private hitAnim: Animation | null = null;
+  /** 피격 연출 (겹치지 않게 이전 것을 끊고 새로) */
+  private hurtAnim: Animation | null = null;
+  private hpPopAnim: Animation | null = null;
+  private shakeAnim: Animation | null = null;
+  private lastHurtAt = -Infinity;
   private crosshairWeapon = '';
   private crosshairKey = '';
   private spreadShown = 0;
@@ -389,20 +394,49 @@ export class Hud {
     }
   }
 
-  /** 플레이어 피격: 화면 가장자리 빨간 섬광 + 공격 방향 표시 + 체력 카드 흔들림 */
+  /**
+   * 플레이어 피격 (실제로 체력이 줄었을 때만 — 보호 중 0 피해는 표시 안 함):
+   * 화면 가장자리 붉은 섬광 0.32초 (피해량 비례, 연속 피격은 약하게 다시 시작해 화면이 계속 붉지 않게),
+   * 공격 방향 쐐기(최근 공격으로 갱신), 체력 숫자 튐 + 체력 카드 흔들림(연속 피격 땐 생략)
+   */
   showDamage(source: THREE.Vector3 | null, amount: number): void {
-    // 은은하게: 피해량에 따라 0.3~0.6 (큰 한 방도 화면을 덮지 않게)
-    this.hurtFlash.animate([{ opacity: Math.min(0.6, 0.3 + amount / 60) }, { opacity: 0 }], { duration: 420, easing: 'ease-out' });
-    this.hpCard.animate(
-      [{ transform: 'translateX(0)' }, { transform: 'translateX(-5px) rotate(-1.5deg)' }, { transform: 'translateX(4px) rotate(1deg)' }, { transform: 'translateX(-2px)' }, { transform: 'translateX(0)' }],
-      { duration: 280, easing: 'ease-out' },
+    if (amount <= 0) return;
+    const now = performance.now();
+    const repeat = now - this.lastHurtAt < 250;
+    this.lastHurtAt = now;
+    const peak = repeat ? 0.5 : Math.min(0.9, 0.55 + amount / 60);
+    this.hurtAnim?.cancel();
+    this.hurtAnim = this.hurtFlash.animate([{ opacity: peak }, { opacity: 0 }], { duration: 320, easing: 'ease-out' });
+    this.hpPopAnim?.cancel();
+    this.hpPopAnim = this.hpText.animate(
+      [{ transform: 'scale(1.35)', color: '#ff4d6d' }, { transform: 'scale(1)', color: '#ff4d6d', offset: 0.5 }, { transform: 'scale(1)' }],
+      { duration: 380, easing: 'ease-out' },
     );
+    if (!repeat) {
+      this.shakeAnim?.cancel();
+      this.shakeAnim = this.hpCard.animate(
+        [{ transform: 'translateX(0)' }, { transform: 'translateX(-5px) rotate(-1.5deg)' }, { transform: 'translateX(4px) rotate(1deg)' }, { transform: 'translateX(-2px)' }, { transform: 'translateX(0)' }],
+        { duration: 260, easing: 'ease-out' },
+      );
+    }
     if (!source) return;
-    // 같은 방향(가까운 지점) 표시는 갱신, 아니면 가장 오래된 칸 재사용
+    // 같은 방향(가까운 지점) 표시는 갱신, 아니면 가장 오래된 칸 재사용. 피해량이 크면 쐐기도 진하게
     let slot = this.indicators.find((d) => d.life > 0 && d.source.distanceTo(source) < 2);
     if (!slot) slot = this.indicators.reduce((a, b) => (a.life <= b.life ? a : b));
     slot.source.copy(source);
     slot.life = COMBAT.damageIndicatorTime;
+    slot.el.classList.toggle('big', amount >= 30);
+  }
+
+  /** 사망·리스폰·화면 전환: 남은 피격 연출 즉시 끝 */
+  clearDamage(): void {
+    this.hurtAnim?.cancel();
+    this.hpPopAnim?.cancel();
+    this.shakeAnim?.cancel();
+    for (const d of this.indicators) {
+      d.life = 0;
+      d.el.style.opacity = '0';
+    }
   }
 
   /** 화면 위쪽 알림 (입장·퇴장·연결 끊김 등, 약 4초) */
@@ -925,6 +959,10 @@ export class Hud {
       this.hpLag.classList.toggle('instant', !dropped);
       this.hpLag.style.width = pct;
       this.hpCard.classList.toggle('low', f.hp > 0 && f.hp <= f.maxHp * LOW_HP);
+      // 중간 체력(60% 이하): 막대를 주황으로 (낮음 30% 이하는 빨강)
+      this.hpCard.classList.toggle('mid', f.hp > f.maxHp * LOW_HP && f.hp <= f.maxHp * 0.6);
+      // 줄어든 만큼 잔상 바가 잠깐 반짝임
+      if (dropped) this.hpLag.animate([{ filter: 'brightness(1.6)' }, { filter: 'brightness(1)' }], { duration: 300, easing: 'ease-out' });
       // 체력 낮음: 숫자·막대(hp low)와 함께 화면 가장자리도 붉게
       this.root.classList.toggle('low-hp', f.hp > 0 && f.hp <= f.maxHp * LOW_HP);
       this.hpCard.classList.toggle('empty', f.hp <= 0);

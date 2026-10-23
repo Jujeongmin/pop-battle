@@ -69,6 +69,11 @@ export interface SpreadProfile {
   bloomPerShotDeg: number;
   bloomMaxDeg: number;
   bloomRecoveryDegPerSec: number;
+  /**
+   * 조준(ADS) 중에도 남기는 이동·점프·슬라이딩 가산 비율 (0~1). 없으면 ADS 배율 그대로 (기존 무기).
+   * 스나이퍼: 스코프만 열면 뛰면서도 거의 정확하던 것을 막음 (멈춰 서서 조준하면 기본 퍼짐 × ADS 배율 그대로 정밀)
+   */
+  adsMovementKeep?: number;
 }
 
 export interface RecoilProfile {
@@ -619,17 +624,21 @@ export const SNIPER: WeaponDef = {
   moveSpeedMultiplier: 1,
   kind: 'gun',
   slot: 'primary',
-  damage: 80,
+  // 2026-10-23 플레이 테스트 하향 (너무 강함): 몸통 80 → 70 (모든 캐릭터 몸통 2발, 한 발 뒤 라이플 마무리는 1~2발 더),
+  // 헤드샷 배율 1.5 → 1.75 = 122.5 (헤드샷 한 방 대상은 그대로: HP 120 이하 5종, BAM 130은 7.5 남음)
+  damage: 70,
   magazineSize: 5,
   reserveAmmo: 20,
-  rpm: 45,
-  headshotMultiplier: 1.5,
+  // 45 → 40 (발사 간격 1.33 → 1.5초)
+  rpm: 40,
+  headshotMultiplier: 1.75,
   automatic: false,
   pellets: 1,
   range: 300,
   reloadTime: 2.6,
-  // 비조준 사격은 부정확, 스코프(ADS)에서는 거의 0
-  spread: { baseDeg: 3, movingAddDeg: 2.5, airAddDeg: 6, slideAddDeg: 4, bloomPerShotDeg: 0, bloomMaxDeg: 0, bloomRecoveryDegPerSec: 10 },
+  // 비조준 사격은 부정확 (2026-10-23: 기본 3° → 4°, 이동 +2.5° → +3.5°), 스코프(ADS)에서 멈춰 서면 거의 0.
+  // 스코프 중 이동·점프는 가산의 35%를 남김 (이동 1.2° ≈ 50m에서 반지름 1m → 뛰면서 저격은 운에 맡겨야 함)
+  spread: { baseDeg: 4, movingAddDeg: 3.5, airAddDeg: 6, slideAddDeg: 4, bloomPerShotDeg: 0, bloomMaxDeg: 0, bloomRecoveryDegPerSec: 10, adsMovementKeep: 0.35 },
   recoil: { pitchDeg: 5, yawJitterDeg: 0.8, recoveryRatio: 0.5, recoverySharpness: 5, visualKick: 0.12 },
   aim: {
     style: 'scopeOverlay',
@@ -649,8 +658,8 @@ export const SNIPER: WeaponDef = {
     // 볼트액션: 쏘면 스코프가 풀리고, 후딜레이(볼트) 동안은 다시 조준해도 발사 불가
     releaseAfterShot: true,
   },
-  // 일반 연사 간격 60/45 = 1.33초 (후딜레이), 퀵스왑해도 최소 0.8초
-  quickSwap: { minFireInterval: 0.8 },
+  // 발사 간격 60/40 = 1.5초. 2026-10-23: 쏘고 바로 무기를 바꿔 볼트 후딜레이를 줄이던 것(최소 0.8초) 막음 → 바꿔도 1.5초
+  quickSwap: { minFireInterval: 1.5 },
   effects: { flashScale: 1.6, firePitch: 0.55, fireGain: 1.2 },
   // 비조준 상태 작은 십자 (ADS는 기존 스코프 화면, 조준선 숨김)
   crosshair: { style: 'cross', lineLength: 7, lineWidth: 3, dotSize: 3.5, minGap: 3 },

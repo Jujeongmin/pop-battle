@@ -41,6 +41,8 @@ export class TpsCamera {
   private recoilRecover = { pitch: 0, yaw: 0 };
   private recoilRecoverSharpness = 7;
   private shake = 0;
+  /** 피격 흔들림 (0~0.6, 빠르게 줄어듦 — 연속 피격에도 쌓이지 않게 상한) */
+  private hurt = 0;
   /** 0..1 달리기 FOV 보간 (즉시 바꾸면 화면이 튐) */
   private sprintT = 0;
   /**
@@ -81,6 +83,11 @@ export class TpsCamera {
     this.recoilRecover.yaw += yawRad * recoveryRatio;
     this.recoilRecoverSharpness = recoverySharpness;
     this.shake = Math.min(1, this.shake + 0.35);
+  }
+
+  /** 피격 순간 짧은 흔들림 (strength 0~1, 피해량 비례). 상한이 있어 계속 맞아도 화면이 크게 흔들리지 않음 */
+  hurtKick(strength: number): void {
+    this.hurt = Math.min(0.6, Math.max(this.hurt, Math.min(1, strength) * 0.6));
   }
 
   snapBehind(yaw: number, target: THREE.Vector3): void {
@@ -160,6 +167,14 @@ export class TpsCamera {
     this.shake = Math.max(0, this.shake - dt * 6);
     if (this.shake > 0 && f.aimBlend < 0.01) {
       const a = this.shake * 0.006;
+      this.camera.position.x += (Math.random() - 0.5) * a;
+      this.camera.position.y += (Math.random() - 0.5) * a;
+    }
+
+    // 피격 흔들림: 0.25초 안에 사라짐, 스코프 중에는 절반 (조준이 크게 틀어지지 않게)
+    this.hurt = Math.max(0, this.hurt - dt * 2.6);
+    if (this.hurt > 0) {
+      const a = this.hurt * 0.05 * (f.aimBlend > 0.5 ? 0.5 : 1);
       this.camera.position.x += (Math.random() - 0.5) * a;
       this.camera.position.y += (Math.random() - 0.5) * a;
     }

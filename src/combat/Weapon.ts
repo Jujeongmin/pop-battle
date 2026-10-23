@@ -140,11 +140,13 @@ export class Weapon {
   /** 현재 탄퍼짐 반각(도). 점프·슬라이딩 중 정확도 감소, ADS 시 증가. */
   spreadDeg(ctx: SpreadContext): number {
     const s = this.def.spread;
-    let deg = s.baseDeg + this.bloomDeg;
-    if (ctx.moving) deg += s.movingAddDeg;
-    if (ctx.airborne) deg += s.airAddDeg;
-    else if (ctx.sliding) deg += s.slideAddDeg;
-    return deg * ctx.aimMultiplier;
+    let move = 0;
+    if (ctx.moving) move += s.movingAddDeg;
+    if (ctx.airborne) move += s.airAddDeg;
+    else if (ctx.sliding) move += s.slideAddDeg;
+    // 이동 가산은 ADS 배율과 '남기는 비율' 중 큰 쪽 (adsMovementKeep 없는 무기는 기존과 같음)
+    const moveMul = s.adsMovementKeep === undefined ? ctx.aimMultiplier : Math.max(ctx.aimMultiplier, s.adsMovementKeep);
+    return (s.baseDeg + this.bloomDeg) * ctx.aimMultiplier + move * moveMul;
   }
 
   refill(): void {

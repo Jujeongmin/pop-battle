@@ -51,6 +51,7 @@ import { ShotPathDebug } from '../combat/ShotPathDebug';
 import { AimController } from '../combat/AimController';
 import { WeaponEffects } from '../combat/WeaponEffects';
 import { ToyBullets } from '../combat/ToyBullets';
+import { Tracers } from '../combat/Tracers';
 import {
   BULLET_CHARACTER_COLORS,
   BULLET_TEAM_COLORS,
@@ -220,6 +221,7 @@ export class Game {
   private effects!: WeaponEffects;
   /** 시각용 장난감 탄환 (판정과 무관) */
   private bullets!: ToyBullets;
+  private tracers!: Tracers;
   private debugPanel!: DebugPanel;
   /** 매치 일시정지 메뉴 (조작을 놓쳤을 때: ESC·터치 ‖·포인터 잠금 해제) */
   private pauseMenu: PauseMenu | null = null;
@@ -592,6 +594,8 @@ export class Game {
     this.aim = new AimController();
     this.effects = new WeaponEffects(this.scene);
     this.bullets = new ToyBullets(this.scene);
+    this.tracers = new Tracers(this.scene);
+    this.tracers.low = this.bullets.quality === 'low';
     // 판정(WeaponSystem)은 결과만 내보내고, 연출(이펙트·사운드·HUD)은 여기서 결과를 보고 처리
     this.weapons = new WeaponSystem(RIFLE, this.physics, this.aim, this.player.body, () => this.combatant.attacker(this.muzzle), {
       onFire: (muzzle, def) => {
@@ -1079,6 +1083,7 @@ export class Game {
     this.updateSpawnFx();
     this.characterDebug?.update(dt, this.debugPanel.visible);
     this.bullets.update(dt);
+    this.tracers.update(dt);
     this.effects.update(dt);
     this.map.followShadow(this.renderFeet);
     this.map.update?.(dt);
@@ -1255,6 +1260,8 @@ export class Game {
             };
     }
     this.bullets.fire(weaponId, from, end, arrive, color);
+    // 발광 궤적 (총구 → 실제 탄착, 엄폐물에 막히면 그 지점) — 내 탄·봇·원격 플레이어 모두 같은 길
+    this.tracers.add(weaponId, from, point ?? end, color);
   }
 
   /**
@@ -1498,6 +1505,7 @@ export class Game {
   /** 개발용: 탄환 연출 품질 (모바일 기본 low). 콘솔 __game.setVfxQuality('high') */
   setVfxQuality(q: VfxQuality): VfxQuality {
     this.bullets.quality = q;
+    this.tracers.low = q === 'low';
     return q;
   }
 
@@ -2488,6 +2496,8 @@ export class Game {
 
   /** 플레이어 피격: 피해 방향·섬광, 체력 0이면 사망 */
   private onPlayerDamaged(hit: HitInfo, applied: number): void {
+    // 보호 중 등 실제 피해 0이면 화면 효과 없음
+    if (applied > 0) this.tpsCamera.hurtKick(applied / 40);
     this.hud.showDamage(hit.attacker?.position ?? null, applied);
     if (applied > 0 && this.combatant.alive) this.audio.play('hurt');
     if (!this.combatant.alive && !this.dead) this.kill(hit.attacker ?? null, hit, 'weapon');
@@ -2520,6 +2530,8 @@ export class Game {
     this.hud.setCharacter(this.avatar.character.id, true);
     this.match.startCountdown();
     this.dead = false;
+    this.hud.clearDamage();
+    this.tracers.clear();
     this.deathTimer = 0;
     this.respawn();
     // 매치 시작은 카운트다운 동안 모두 정지 → 시작 보호 없음
@@ -2668,6 +2680,8 @@ export class Game {
     // 쓰러진 플레이어는 사격 판정 제외 (이동 캡슐은 바닥 충돌용으로 유지)
     this.combatant.hitboxes.setEnabled(false);
     this.dead = true;
+    // 사망: 남은 피격 섬광·방향 표시 끝 (궤적은 수명이 짧아 그대로 사라짐)
+    this.hud.clearDamage();
     this.deathTimer = MOVEMENT.respawnDelay;
     this.aim.reset('death');
     this.weapons.cancelReaim();
@@ -2748,6 +2762,7 @@ export class Game {
     // 전투 중 부활만 (매치 시작 배치는 입장음)
     if (this.dead && this.match.state === 'PLAYING') this.audio.play('respawn');
     this.dead = false;
+    this.hud.clearDamage();
     this.queueSpawnFx(this.avatar);
     // 멀티 테스트 시작 때만 자리별 고정 스폰 (P1 / P2 서로 다른 곳), 이후 리스폰은 기존 규칙
     this.placeAtSpawn(this.netSpawn ?? this.pickPlayerSpawn());
@@ -2995,9 +3010,11 @@ export class Game {
     for (const b of this.bots.bots) this.match.stats.register({ id: b.id, name: b.name, isLocal: false });
     this.appearanceMode = 'FFA';
     this.teams.clear();
-    // 플레이어 상태 초기화 (사망·체력·조준·재장전·무기)
+    // 플레이어 상태 초기화 (사망·체력·조준·재장전·무기) + 남은 피격·궤적 연출
     this.combatant.active = false;
     this.dead = false;
+    this.hud.clearDamage();
+    this.tracers.clear();
     this.deathTimer = 0;
     this.killedBy = null;
     this.combatant.health.reset(0);
@@ -3261,6 +3278,8 @@ export class Game {
         h.hp = hp;
       },
       localDamaged: (source, amount) => {
+        // 서버가 확정한 내 피해만 (스폰 보호 중 0 피해는 표시 안 함)
+        if (amount > 0) this.tpsCamera.hurtKick(amount / 40);
         this.hud.showDamage(source, amount);
         if (amount > 0 && !this.dead) this.audio.play('hurt');
       },
@@ -3456,6 +3475,7 @@ export class Game {
     this.weaponModels?.dispose();
     this.effects?.dispose();
     this.bullets?.dispose();
+    this.tracers?.dispose();
     this.avatar?.dispose();
     this.map?.dispose();
     this.characterDebug?.dispose();

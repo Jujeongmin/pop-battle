@@ -27,6 +27,11 @@ export interface BulletVfxProfile {
   hitScale: number;
   /** 벽·바닥 탄착 방울 수 */
   impactDroplets: number;
+  /**
+   * 총알 궤적 (combat/Tracers.ts, 발광 줄): width = 굵기(m), life = 보이는 시간(s), glow = 밝기 배율(1 = 탄환 색 그대로),
+   * whiten = 탄환 색을 흰색 쪽으로 섞는 비율(밝은 바닥·하늘에서도 보이게), every = N발마다 하나 (샷건 대표 궤적)
+   */
+  tracer?: { width: number; life: number; glow: number; whiten: number; every: number };
 }
 
 export type BulletVfxId = 'rifle' | 'shotgun' | 'sniper' | 'pistol';
@@ -37,21 +42,29 @@ export const BULLET_VFX: Record<BulletVfxId, BulletVfxProfile> = {
   rifle: {
     length: 0.13, diameter: 0.075, color: '#ffb43c', speed: 75, maxTravelTime: 0.32, trailLength: 0.3, trailOpacity: 0.32,
     impactScale: 1, maxDistance: 90, muzzleDroplets: 2, muzzleScale: 1, hitDroplets: 6, hitScale: 1, impactDroplets: 4,
+    // 얇고 빠르게 사라짐 (연사해도 화면이 복잡하지 않게)
+    tracer: { width: 0.036, life: 0.12, glow: 1, whiten: 0.1, every: 1 },
   },
   // 작은 고무 구슬 여러 개 (펠릿마다 1발): 펠릿마다 방울은 적게, 합치면 풍성
   shotgun: {
     length: 0.055, diameter: 0.05, color: '#ff7aa8', speed: 55, maxTravelTime: 0.3, trailLength: 0.16, trailOpacity: 0.25,
     impactScale: 0.6, maxDistance: 60, muzzleDroplets: 5, muzzleScale: 1.3, hitDroplets: 3, hitScale: 0.75, impactDroplets: 2,
+    // 펠릿 8발 중 3발마다 하나 (가운데·양옆 대표 궤적으로 퍼짐만 보이게)
+    tracer: { width: 0.03, life: 0.13, glow: 1, whiten: 0.08, every: 3 },
   },
   // 크고 길쭉한 묵직한 탄환, 큰 POP
   sniper: {
     length: 0.19, diameter: 0.095, color: '#5fb4ff', speed: 110, maxTravelTime: 0.35, trailLength: 0.5, trailOpacity: 0.35,
     impactScale: 1.4, maxDistance: 140, muzzleDroplets: 4, muzzleScale: 1.5, hitDroplets: 10, hitScale: 1.45, impactDroplets: 6,
+    // 굵고 밝고 오래 (맞은 쪽도 어디서 쐈는지 알 수 있게)
+    tracer: { width: 0.08, life: 0.5, glow: 1.1, whiten: 0.2, every: 1 },
   },
   // 작고 통통, 절제된 파티클
   pistol: {
     length: 0.085, diameter: 0.06, color: '#6fe0b4', speed: 60, maxTravelTime: 0.3, trailLength: 0.2, trailOpacity: 0.28,
     impactScale: 0.8, maxDistance: 70, muzzleDroplets: 1, muzzleScale: 0.8, hitDroplets: 4, hitScale: 0.8, impactDroplets: 3,
+    // 라이플보다 짧고 가볍게
+    tracer: { width: 0.028, life: 0.09, glow: 1, whiten: 0.08, every: 1 },
   },
 };
 
