@@ -1,5 +1,7 @@
 // 결과 화면 3D 무대: 경기장 대신 따로 그리는 작은 장면 (하늘 배경·바닥·시상대·캐릭터 최대 4명·색종이).
-// 캐릭터는 게임이 이미 불러온 GLB 캐시를 복제하고 대기 클립 위에 본 회전으로 승리(만세 점프)·아쉬움(고개 숙임)·무승부(손 흔들기) 자세를 얹는다.
+// 캐릭터는 게임이 이미 불러온 GLB 캐시를 복제하고 대기 클립 위에 본 회전(월드 축 기준)으로 순위별 자세를 얹는다:
+// 1위·TDM 승리 = 짧은 점프 등장 → 한 팔 번쩍 + 반대 손 허리, 2위 = 손 들어 두 번 흔든 뒤 유지, 3위 = 양손 허리,
+// 꼴찌·TDM 패배 = 고개·어깨 떨굼, 무승부 = 대기. 1~2초 안에 자세를 잡고 숨쉬기 정도만 움직임 (반복 점프·팔 휘젓기 없음).
 // 전용 승리/패배 애니메이션 클립은 GLB에 없음 → 클립이 생기면 pose()만 교체.
 // 무대가 떠 있는 동안 게임은 경기장 대신 이 장면을 그리고(Game.loop), 닫으면 무대 전용 리소스를 모두 해제한다 (GLB 캐시는 그대로).
 import * as THREE from 'three';
@@ -13,7 +15,8 @@ import { measureBindHeight } from '../player/PlayerAvatar';
 import { rotateBoneToward, setWorldQuaternion } from '../player/ik';
 import type { ResultData, ResultEntry } from './resultData';
 
-type Pose = 'win' | 'lose' | 'neutral';
+/** champion = 1위·TDM 승리, second = 2위, third = 3위, defeat = 꼴찌·TDM 패배, neutral = 무승부 */
+type Pose = 'champion' | 'second' | 'third' | 'defeat' | 'neutral';
 
 interface Slot {
   entry: ResultEntry;
@@ -43,6 +46,8 @@ interface Figure {
   /** 등장 팝 0..1 */
   pop: number;
   hop: number;
+  /** 대기 자세 실제 최저점(발바닥)을 시상대 윗면에 맞추는 높이 (m, 자리 배율 1 기준) — 모델마다 발끝 위치가 다름 */
+  ground: number;
 }
 
 /** 화면 좌표 (px, 무대 캔버스 기준) — DOM 카드·왕관 배치용 */
@@ -79,6 +84,7 @@ const _h = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _axis = new THREE.Vector3();
 const _out = new THREE.Vector3();
+const _out2 = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _dir2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -112,7 +118,7 @@ function layout(data: ResultData): Array<Omit<Slot, 'bx'>> {
       ...spots[i]!,
       podium: FFA_PODIUM_HEIGHTS[Math.min(3, entry.rank - 1)]!,
       color: FFA_PODIUM_COLORS[Math.min(3, entry.rank - 1)]!,
-      pose: entry.win ? (data.draw ? 'neutral' : 'win') : 'lose',
+      pose: ffaPose(entry.rank, list.length),
       delay: 0.25 + (list.length - 1 - i) * 0.18,
       front: i < 3,
     }));
@@ -137,14 +143,27 @@ function layout(data: ResultData): Array<Omit<Slot, 'bx'>> {
   const win = list.filter((e) => team(e) === data.winnerTeam);
   const lose = list.filter((e) => team(e) !== data.winnerTeam);
   return [
-    ...lose.slice(0, 2).map((entry, i) => ({ entry, x: i === 0 ? -2.6 : 2.6, z: -0.75, scale: 0.82, podium: 0.16, pose: 'lose' as const, delay: 0.25 + i * 0.15, front: false })),
-    ...win.slice(0, 2).map((entry, i) => ({ entry, x: i === 0 ? -0.8 : 0.8, z: 0.35, scale: 1.1, podium: 0.42, pose: 'win' as const, delay: 0.7 + i * 0.15, front: true })),
+    ...lose.slice(0, 2).map((entry, i) => ({ entry, x: i === 0 ? -2.6 : 2.6, z: -0.75, scale: 0.82, podium: 0.16, pose: 'defeat' as const, delay: 0.25 + i * 0.15, front: false })),
+    ...win.slice(0, 2).map((entry, i) => ({ entry, x: i === 0 ? -0.8 : 0.8, z: 0.35, scale: 1.1, podium: 0.42, pose: 'champion' as const, delay: 0.7 + i * 0.15, front: true })),
   ].map((s) => ({ ...s, color: TEAM_PODIUM[team(s.entry)] }));
 }
 
-/** 머리 위 여유 (m): 이름표가 손·점프에 걸리지 않는 높이. 이름표 위치와 카메라 맞춤이 같이 씀 */
+/** FFA 순위 → 자세 (공동 순위는 같은 자세, 혼자면 1위 자세). 마지막 순위는 2명 이상일 때만 패배 자세 */
+function ffaPose(rank: number, count: number): Pose {
+  if (rank === 1) return 'champion';
+  if (rank >= count && count > 1) return 'defeat';
+  return rank === 2 ? 'second' : 'third';
+}
+
+/** 머리 위 여유 (m): 이름표가 올린 손·등장 점프에 걸리지 않는 높이. 이름표 위치와 카메라 맞춤이 같이 씀 */
 function headClearance(s: Slot): number {
-  return (s.pose === 'win' ? 0.38 : 0.12) * s.scale;
+  return ({ champion: 0.34, second: 0.2, third: 0.12, defeat: 0.1, neutral: 0.12 } as const)[s.pose] * s.scale;
+}
+
+/** 0..1 부드럽게 (자세 섞기) */
+function smooth(t: number): number {
+  const u = THREE.MathUtils.clamp(t, 0, 1);
+  return u * u * (3 - 2 * u);
 }
 
 /** 시상대 앞면 순위 숫자 (흰 글자 + 잉크 외곽선, 투명 바탕) */
@@ -275,12 +294,13 @@ export class ResultStage {
       const pop = p <= 0 ? 0 : easeOutBack(p);
       f.root.visible = p > 0;
       f.root.scale.setScalar(Math.max(0.001, s.scale * pop));
-      // 승리: 통통 점프 (등장 뒤)
-      f.hop = s.pose === 'win' && p >= 1 ? Math.abs(Math.sin((t - s.delay) * 3.6 + f.phase)) * 0.16 * s.scale : 0;
-      f.root.position.y = s.podium + f.hop;
+      // 1위: 등장 직후 한 번만 짧게 점프 (0.45초) → 이후 발은 시상대 윗면
+      const lt = t - s.delay - 0.35;
+      f.hop = s.pose === 'champion' && lt > 0 && lt < 0.45 ? Math.sin((lt / 0.45) * Math.PI) * 0.2 * s.scale : 0;
+      f.root.position.y = s.podium + f.ground * s.scale * pop + f.hop;
       f.mixer.update(dt);
       f.root.updateMatrixWorld(true);
-      this.pose(f, t, Math.min(1, Math.max(0, (t - s.delay) / 0.6)));
+      this.pose(f, t - s.delay);
     }
     this.updateConfetti(dt);
   }
@@ -515,9 +535,23 @@ export class ResultStage {
     if (idle) {
       const a = mixer.clipAction(idle);
       a.time = Math.random() * idle.duration;
-      a.timeScale = slot.pose === 'lose' ? 0.7 : 1;
+      a.timeScale = slot.pose === 'defeat' ? 0.7 : 1;
       a.play();
     }
+    // 발 맞춤: 대기 자세 한 프레임에서 스킨 메시 실제 최저점 (정점 일부 표본) → 시상대 윗면에 닿게
+    root.scale.setScalar(slot.scale);
+    mixer.update(0);
+    root.updateMatrixWorld(true);
+    let minY = Infinity;
+    const v = new THREE.Vector3();
+    scene.traverse((o) => {
+      const sk = o as THREE.SkinnedMesh;
+      if (!sk.isSkinnedMesh) return;
+      const pos = sk.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i += 5) minY = Math.min(minY, sk.localToWorld(sk.getVertexPosition(i, v)).y);
+    });
+    const ground = Number.isFinite(minY) ? (slot.podium - minY) / slot.scale : 0;
+    root.scale.setScalar(1);
     return {
       slot,
       root,
@@ -537,6 +571,7 @@ export class ResultStage {
       phase: Math.random() * Math.PI,
       pop: 0,
       hop: 0,
+      ground,
     };
   }
 
@@ -648,44 +683,82 @@ export class ResultStage {
 
   // ---------------------------------------------------------------- 자세
 
-  /** 대기 클립 위에 자세 덧입히기 (월드 축 기준 → 캐릭터마다 본 축이 달라도 같은 모양). w = 자세 섞는 양 */
-  private pose(f: Figure, t: number, w: number): void {
-    if (w <= 0) return;
+  /**
+   * 대기 클립 위에 자세 덧입히기 (월드 축 기준 → 캐릭터마다 본 축이 달라도 같은 모양). lt = 등장 후 시간 (s).
+   * 팔은 몸 바깥·앞쪽으로만 향하게 해 몸통을 뚫지 않음, 몸통은 작은 각도만 (고개는 Spine 가중치라 몸통과 같이 기울어짐)
+   */
+  private pose(f: Figure, lt: number): void {
+    if (lt <= 0) return;
     const b = f.bones;
     const yaw = f.root.rotation.y;
     _fwd.set(Math.sin(yaw), 0, Math.cos(yaw));
     // 앞으로 숙이는 축 (UP × 앞)
     _axis.crossVectors(UP, _fwd).normalize();
-    const tt = t + f.phase;
-    if (f.slot.pose === 'lose') {
-      // 아쉬움: 고개(몸통) 푹 숙이고 천천히 좌우로 흔들림, 팔은 축 늘어짐
-      this.bend(b.spine, _axis, (0.34 + Math.sin(tt * 1.1) * 0.04) * w);
-      this.bend(b.chest, _axis, 0.14 * w);
-      this.bend(b.spine, _fwd, Math.sin(tt * 0.9) * 0.08 * w);
-      for (const side of ['L', 'R'] as const) {
-        this.armOut(side, f);
-        _dir.copy(_out).multiplyScalar(0.12).addScaledVector(UP, -1).addScaledVector(_fwd, 0.22).normalize();
-        this.aimArm(side === 'L' ? b.upperArmL : b.upperArmR, side === 'L' ? b.lowerArmL : b.lowerArmR, side === 'L' ? b.handL : b.handR, _dir, _dir, 0.65 * w);
+    // 화면 바깥쪽 팔 (가운데 1위를 가리지 않게): 화면 왼쪽 자리 = 캐릭터 오른팔
+    const outer: 'L' | 'R' = f.slot.x <= 0 ? 'R' : 'L';
+    const inner: 'L' | 'R' = outer === 'R' ? 'L' : 'R';
+    const lean = outer === 'R' ? 1 : -1;
+    // 숨쉬기 (아주 작게)
+    const breath = Math.sin((lt + f.phase) * 2.1) * 0.012;
+    switch (f.slot.pose) {
+      case 'champion': {
+        // 점프 착지(0.8초) 무렵 자세 완성: 두 팔 V자로 번쩍 + 가슴 펴기, 이후 고정 (흔들지 않음)
+        // 치비 비율(큰 머리·짧은 팔)이라 한 팔만 올리면 머리에 가려 → 양팔을 바깥으로 벌린 V
+        const w = smooth((lt - 0.2) / 0.6);
+        this.bend(b.spine, _axis, (-0.12 + breath) * w);
+        this.bend(b.spine, _fwd, 0.04 * lean * w);
+        this.arm(outer, f, [0.95, 1, 0.3], [0.55, 1, 0.3], w);
+        this.arm(inner, f, [0.95, 1, 0.3], [0.55, 1, 0.3], w);
+        break;
       }
-    } else if (f.slot.pose === 'win') {
-      // 만세: 두 팔 번쩍 + 살짝 젖힌 몸, 팔은 리듬에 맞춰 흔들
-      this.bend(b.spine, _axis, -0.12 * w);
-      for (const side of ['L', 'R'] as const) {
-        this.armOut(side, f);
-        const wave = Math.sin(tt * 7.2 + (side === 'L' ? 0 : Math.PI)) * 0.18;
-        _dir.copy(_out).multiplyScalar(0.95 + wave).addScaledVector(UP, 1).addScaledVector(_fwd, 0.3).normalize();
-        _dir2.copy(_out).multiplyScalar(0.55 + wave).addScaledVector(UP, 1).addScaledVector(_fwd, 0.3).normalize();
-        this.aimArm(side === 'L' ? b.upperArmL : b.upperArmR, side === 'L' ? b.lowerArmL : b.lowerArmR, side === 'L' ? b.handL : b.handR, _dir, _dir2, w);
+      case 'second': {
+        // 손 들어 두 번 흔들기 (1.4초에 멈춤) → 손 든 채 유지, 고개는 손 쪽으로
+        const w = smooth(lt / 0.5);
+        const wave = Math.sin(lt * 9) * 0.5 * (1 - smooth((lt - 0.4) / 1));
+        this.bend(b.spine, _axis, (-0.05 + breath) * w);
+        this.bend(b.spine, _fwd, -0.06 * lean * w);
+        this.arm(outer, f, [0.8, 0.5, 0.35], [-0.1 + wave, 1, 0.3], w);
+        break;
       }
-    } else {
-      // 무승부: 한 손 들어 흔들기
-      this.armOut('R', f);
-      const sway = Math.sin(tt * 5.5) * 0.45;
-      _dir.copy(_out).multiplyScalar(0.75).addScaledVector(UP, 0.8).addScaledVector(_fwd, 0.25).normalize();
-      _dir2.copy(_out).multiplyScalar(sway).addScaledVector(UP, 1).addScaledVector(_fwd, 0.2).normalize();
-      this.aimArm(b.upperArmR, b.lowerArmR, b.handR, _dir, _dir2, w);
-      this.bend(b.spine, _fwd, Math.sin(tt * 1.4) * 0.05 * w);
+      case 'third': {
+        // 양손 허리 + 가슴 펴기
+        const w = smooth(lt / 0.6);
+        this.bend(b.spine, _axis, (-0.08 + breath) * w);
+        this.bend(b.spine, _fwd, 0.05 * lean * w);
+        this.hipHand('L', f, w);
+        this.hipHand('R', f, w);
+        break;
+      }
+      case 'defeat': {
+        // 아쉬움: 고개·몸통 숙이고 어깨 떨굼, 팔은 몸 앞으로 축 (흔들림 없음, 숨쉬기만)
+        const w = smooth(lt / 0.9);
+        this.bend(b.spine, _axis, (0.2 + breath * 2) * w);
+        this.bend(b.chest, _axis, 0.06 * w);
+        this.bend(b.spine, _fwd, 0.05 * lean * w);
+        for (const side of ['L', 'R'] as const) this.arm(side, f, [0.1, -1, 0.25], [0.05, -1, 0.3], 0.7 * w);
+        break;
+      }
+      case 'neutral':
+        // 무승부: 대기 동작 그대로 (숨쉬기만)
+        this.bend(b.spine, _axis, breath);
+        break;
     }
+  }
+
+  /** 한 팔을 [바깥, 위, 앞] 비율 방향으로 (위팔·아래팔 각각, 캐릭터 기준 축) */
+  private arm(side: 'L' | 'R', f: Figure, upper: readonly [number, number, number], lower: readonly [number, number, number], w: number): void {
+    if (w <= 0) return;
+    const b = f.bones;
+    this.armOut(side, f);
+    _out2.copy(_out);
+    _dir.copy(_out2).multiplyScalar(upper[0]).addScaledVector(UP, upper[1]).addScaledVector(_fwd, upper[2]).normalize();
+    _dir2.copy(_out2).multiplyScalar(lower[0]).addScaledVector(UP, lower[1]).addScaledVector(_fwd, lower[2]).normalize();
+    this.aimArm(side === 'L' ? b.upperArmL : b.upperArmR, side === 'L' ? b.lowerArmL : b.lowerArmR, side === 'L' ? b.handL : b.handR, _dir, _dir2, w);
+  }
+
+  /** 손을 허리에: 팔꿈치는 옆으로 벌리고 아래팔은 안쪽 아래로 (몸통 옆면에 손이 닿게) */
+  private hipHand(side: 'L' | 'R', f: Figure, w: number): void {
+    this.arm(side, f, [0.95, -0.45, -0.05], [-0.55, -0.6, 0.35], w);
   }
 
   /** 팔 바깥 방향 (가슴 → 위팔, 수평) → _out */

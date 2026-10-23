@@ -453,7 +453,7 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .ammo .res { font-size: max(11px, calc(15px * var(--u))); opacity: .55; }
 .wc-state { font-size: max(9px, calc(11px * var(--u))); line-height: 1.25; min-height: 1.25em; color: #3b62c4; white-space: nowrap; }
 .wc-reload { display: none; position: absolute; left: calc(14px * var(--u)); right: calc(14px * var(--u)); bottom: calc(5px * var(--u)); height: calc(5px * var(--u)); border-radius: 999px; background: rgba(39, 50, 92, .14); overflow: hidden; }
-.wc-reload div { height: 100%; width: 0; background: var(--yellow); }
+.wc-reload div { height: 100%; width: 100%; background: var(--yellow); transform: scaleX(0); transform-origin: left center; }
 .weapon-card.reloading .wc-reload { display: block; }
 .weapon-card.reloading .ammo { opacity: .45; }
 .weapon-card.low .ammo .mag { color: #ff3d5e; animation: ammo-blink .6s steps(2, start) infinite; }
@@ -468,10 +468,21 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .ads-tag.show { opacity: 1; }
 
 /* --- 중앙: 재장전·ADS·헤드샷·쓰러짐 --- */
-.reload { position: absolute; left: 50%; top: calc(50% + 34px); transform: translateX(-50%); opacity: 0; }
+/* 재장전: 조준선 아래 원형 게이지 + 글자 (조준선·탄 퍼짐 선과 겹치지 않는 거리, 가운데라 모바일 버튼과도 안 겹침) */
+.reload {
+  position: absolute; left: 50%; top: calc(50% + 44px * var(--u)); display: flex; align-items: center; gap: calc(5px * var(--u));
+  padding: calc(2px * var(--u)) calc(10px * var(--u)) calc(2px * var(--u)) calc(2px * var(--u));
+  border-radius: 999px; background: rgba(39, 50, 92, .62); transform: translateX(-50%); opacity: 0; transition: opacity .12s; pointer-events: none;
+}
 .reload.show { opacity: 1; }
-.reload .bar { width: calc(60px * var(--u)); height: 5px; border-radius: 4px; background: rgba(255,255,255,.45); overflow: hidden; box-shadow: 0 0 0 1px rgba(39,50,92,.35); }
-.reload .bar div { height: 100%; width: 0; background: var(--yellow); }
+.rl-ring { width: max(24px, calc(30px * var(--u))); height: max(24px, calc(30px * var(--u))); transform: rotate(-90deg); overflow: visible; }
+.rl-track { fill: rgba(255, 255, 255, .18); stroke: rgba(255, 255, 255, .35); stroke-width: 4; }
+.rl-fill { fill: none; stroke: var(--yellow); stroke-width: 4.5; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; }
+.rl-check { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transform: rotate(90deg); transform-origin: 18px 18px; }
+.rl-label { color: #fff; font-family: 'POP Jua', var(--font); font-size: max(13px, calc(15px * var(--u))); letter-spacing: .5px; white-space: nowrap; text-shadow: 0 1px 0 rgba(39, 50, 92, .5); }
+.reload.done { background: rgba(42, 160, 112, .85); }
+.reload.done .rl-fill { stroke: #a8f0c8; }
+.reload.done .rl-check { opacity: 1; }
 .crosshair.ads .dot { background: var(--yellow); transform: scale(1.25); }
 .crosshair.ads.enemy .dot { background: #ff2e4d; }
 .death {

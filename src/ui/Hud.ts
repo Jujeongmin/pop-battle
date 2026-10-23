@@ -4,6 +4,10 @@ import type { BotLabel } from '../bots/BotManager';
 import { COMBAT } from '../config/combat';
 import type { MatchState } from '../match/Match';
 import { KillFeed, weaponIconSvg, type KillFeedEvent } from './KillFeed';
+import { viewerLang } from '../net/shared/roomTitles';
+
+/** 재장전 표시 글자 (브라우저 언어: 한국어면 한글) */
+const RELOAD_TEXT = viewerLang() === 'ko' ? { busy: '재장전', done: '완료!' } : { busy: 'RELOADING', done: 'READY!' };
 
 /** 매치 정보 (상단 매치 카드·카운트다운) */
 export interface MatchHudInfo {
@@ -162,7 +166,13 @@ export class Hud {
   private readonly weaponState: HTMLDivElement;
   private readonly cardReloadBar: HTMLDivElement;
   private readonly reload: HTMLDivElement;
-  private readonly reloadBar: HTMLDivElement;
+  /** 원형 게이지 채움 (stroke-dashoffset 100 → 0) */
+  private readonly reloadRing: SVGCircleElement;
+  private readonly reloadLabel: HTMLSpanElement;
+  /** 직전 프레임 재장전 상태 (완료 판정: 같은 무기에서 재장전이 끝나며 탄창이 늘었을 때) */
+  private reloadPrev = { on: false, weaponId: '', magazine: 0 };
+  /** 완료 표시 남은 시간 (s) */
+  private reloadDone = 0;
   private readonly adsTag: HTMLDivElement;
   private readonly fps: HTMLDivElement;
   private readonly debug: HTMLPreElement;
@@ -227,7 +237,7 @@ export class Hud {
       <div class="crosshair" data-style="cross"><i class="ring"></i><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
       <div class="blocked-marker"></div>
       <div class="hitmarker"><i></i><i></i><i></i><i></i><b></b></div>
-      <div class="reload"><div class="bar"><div></div></div></div>
+      <div class="reload"><svg class="rl-ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rl-track" cx="18" cy="18" r="14"/><circle class="rl-fill" cx="18" cy="18" r="14" pathLength="100"/><path class="rl-check" d="M11.5 18.5l4.5 4.5 8.5-9"/></svg><span class="rl-label"></span></div>
       <div class="fps">-- FPS</div>
       <pre class="debug-lines"></pre>
       <div class="death"><b>쓰러짐!</b><span></span></div>
@@ -316,7 +326,8 @@ export class Hud {
     this.weaponState = q('.wc-state');
     this.cardReloadBar = q('.wc-reload div');
     this.reload = q('.reload');
-    this.reloadBar = q('.reload .bar div');
+    this.reloadRing = this.root.querySelector('.rl-fill') as SVGCircleElement;
+    this.reloadLabel = q('.rl-label');
     this.adsTag = q('.ads-tag');
     this.fps = q('.fps');
     this.debug = q('.debug-lines');
@@ -713,8 +724,7 @@ export class Hud {
     }
     this.scope.style.display = f.scopeOverlay > 0 ? '' : 'none';
     this.updateWeapon(f);
-    this.reload.classList.toggle('show', f.reloading);
-    this.reloadBar.style.width = `${(f.reloadProgress * 100).toFixed(0)}%`;
+    this.updateReload(f);
     this.adsTag.classList.toggle('show', f.aiming);
     this.death.classList.toggle('show', f.dead);
     if (f.dead) {
@@ -762,6 +772,32 @@ export class Hud {
    * 우측 하단 무기 카드 (아이콘·이름·탄창/예비·재장전·탄약 경고) + 하단 중앙 슬롯 바.
    * 근접무기는 탄약 줄을 숨김. 투척무기는 아직 없어 슬롯·탄약 모두 표시하지 않음
    */
+  /**
+   * 조준선 아래 재장전 표시: 원형 게이지(실제 무기 재장전 시간 기준 진행률) + '재장전'.
+   * 같은 무기에서 재장전이 끝나고 탄창이 늘면 짧게 '완료!'. 취소·무기 교체·사망·경기 종료는 바로 숨김
+   */
+  private updateReload(f: HudFrame): void {
+    const prev = this.reloadPrev;
+    const finished = prev.on && !f.reloading && prev.weaponId === f.weaponId && f.magazine > prev.magazine && !f.dead;
+    if (finished) this.reloadDone = 0.55;
+    // 무기 교체·사망·재장전 다시 시작은 완료 표시를 바로 지움
+    else if (f.dead || f.reloading || prev.weaponId !== f.weaponId) this.reloadDone = 0;
+    else this.reloadDone = Math.max(0, this.reloadDone - f.dt);
+    const busy = f.reloading && !f.dead && !f.melee;
+    const done = !busy && this.reloadDone > 0;
+    this.reload.classList.toggle('show', busy || done);
+    if (this.reload.classList.contains('done') !== done) {
+      this.reload.classList.toggle('done', done);
+      // 완료 순간 한 번 톡 (표시 요소 크기만, 버튼 아님)
+      if (done) this.reload.animate([{ scale: '1.25' }, { scale: '1' }], { duration: 260, easing: 'cubic-bezier(.2,1.6,.4,1)' });
+    }
+    const label = done ? RELOAD_TEXT.done : RELOAD_TEXT.busy;
+    if (this.reloadLabel.textContent !== label) this.reloadLabel.textContent = label;
+    const p = done ? 1 : busy ? f.reloadProgress : 0;
+    this.reloadRing.style.strokeDashoffset = (100 - p * 100).toFixed(2);
+    this.reloadPrev = { on: busy, weaponId: f.weaponId, magazine: f.magazine };
+  }
+
   private updateWeapon(f: HudFrame): void {
     if (f.weaponId !== this.lastWeaponId) {
       this.lastWeaponId = f.weaponId;
@@ -794,7 +830,8 @@ export class Hud {
       this.weaponCard.classList.toggle('low', low);
       this.weaponCard.classList.toggle('empty', empty);
     }
-    this.cardReloadBar.style.width = `${(f.reloadProgress * 100).toFixed(0)}%`;
+    // 무기 카드 막대도 같은 진행률 (탄약 숫자는 완료 프레임에 같이 바뀜 — Weapon.update에서 같은 순간)
+    this.cardReloadBar.style.transform = `scaleX(${f.reloading ? f.reloadProgress.toFixed(3) : 0})`;
 
     const slotsKey = f.slots.map((s) => `${s.key}${s.id}${s.name}`).join('|');
     if (slotsKey !== this.lastSlotsKey) {
