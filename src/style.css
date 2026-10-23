@@ -165,33 +165,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 }
 .countdown.go { color: var(--yellow); -webkit-text-stroke-color: #ff8f3d; }
 
-/* 매치 종료: 전투 HUD 숨김 + 결과 카드 */
+/* 매치 종료: 전투 HUD 숨김 (결과 화면은 ui/result) */
 .match-over .crosshair, .match-over .blocked-marker, .match-over .death, .match-over .reload,
 .match-over .protect-tag, .match-over .scope { display: none !important; }
-.result { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(39, 50, 92, .35); pointer-events: auto; }
-.result.hidden { display: none; }
-.result-card {
-  min-width: min(420px, 92vw); padding: 22px 26px 20px; border-radius: 26px; text-align: center;
-  background: var(--cream); box-shadow: 0 7px 0 rgba(39, 50, 92, .25);
-}
-.res-title { font-size: 46px; font-weight: 900; letter-spacing: -1px; color: var(--blue); -webkit-text-stroke: 1.5px #fff; }
-.res-title[data-outcome="win"] { color: #ff8f3d; }
-.res-title[data-outcome="draw"] { color: #8a7bd9; }
-.res-title[data-outcome="lose"] { color: #6a7499; }
-.res-reason { font-weight: 800; font-size: 14px; opacity: .75; margin: 2px 0 12px; }
-.res-table { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-weight: 800; font-size: 15px; }
-.res-table th { font-size: 11px; opacity: .55; font-weight: 800; padding-bottom: 2px; }
-.res-table td { padding: 7px 10px; background: rgba(39, 50, 92, .06); }
-.res-table td:first-child { border-radius: 12px 0 0 12px; }
-.res-table td:last-child { border-radius: 0 12px 12px 0; }
-.res-table tr.first td { background: rgba(255, 212, 94, .45); }
-.res-table tr.me td { color: var(--blue); background: rgba(91, 140, 255, .16); }
-.res-table tr.me.first td { background: rgba(255, 212, 94, .55); }
-.res-replay {
-  margin-top: 14px; padding: 11px 30px; border: 0; border-radius: 16px; cursor: pointer;
-  background: var(--blue); color: #fff; font: 900 18px var(--font); box-shadow: 0 4px 0 #3b62c4;
-}
-.res-replay:active { transform: translateY(2px); box-shadow: 0 2px 0 #3b62c4; }
 /* CHARACTER DEBUG (개발용) */
 .dp-select { grid-column: 2 / 4; font-size: 12px; padding: 2px; }
 .dp-char-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 4px 0; }
@@ -338,10 +314,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 .mp-team { display: inline-block; font-weight: 900; font-size: 11px; padding: 1px 8px; border-radius: 10px; width: fit-content; grid-column: 2; }
 .mp-team.blue { background: rgba(61, 139, 255, .18); color: #2a63c9; }
 .mp-team.red { background: rgba(255, 75, 75, .18); color: #c93030; }
-.mp-outcome { font-size: 40px; font-weight: 900; text-align: center; letter-spacing: 2px; }
-.mp-outcome.win { color: #2f9e6e; }
-.mp-outcome.lose { color: #c2386a; }
-.mp-outcome.draw { color: var(--orange); }
 .mp-final { display: flex; gap: 8px; justify-content: center; align-items: center; font-size: 22px; font-weight: 900; }
 .mp-final .mp-team { font-size: 20px; padding: 3px 12px; }
 .mp-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border-radius: 12px; overflow: hidden; }
@@ -522,15 +494,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 .mp-spinner { width: 26px; height: 26px; border-radius: 50%; border: 4px solid rgba(91, 140, 255, .25); border-top-color: var(--blue); animation: mp-spin .8s linear infinite; }
 @keyframes mp-spin { to { transform: rotate(360deg); } }
 
-/* 결과 화면 (싱글·멀티 공통 톤): VICTORY / DEFEAT / DRAW */
-.res-title { font-size: 50px; letter-spacing: 2px; -webkit-text-stroke: 2px #fff; paint-order: stroke fill; text-shadow: 0 4px 0 rgba(39, 50, 92, .2); }
-.res-title[data-outcome="win"] { color: #ffb02e; }
-.res-title[data-outcome="draw"] { color: #8a7bd9; }
-.res-title[data-outcome="lose"] { color: #6a7499; }
-.mp-outcome { font-size: 48px; letter-spacing: 3px; -webkit-text-stroke: 2px #fff; paint-order: stroke fill; text-shadow: 0 4px 0 rgba(39, 50, 92, .2); }
-.mp-outcome.win { color: #ffb02e; }
-.mp-outcome.lose { color: #6a7499; }
-.mp-outcome.draw { color: #8a7bd9; }
 .mp-final { gap: 10px; }
 .mp-final .mp-team { font-size: 22px; padding: 6px 16px; border-radius: 16px; color: #fff; box-shadow: inset 0 -3px 0 rgba(0,0,0,.15); }
 .mp-final .mp-team.blue { background: #3d8bff; }
@@ -683,9 +646,3 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; fon
 .hud.in-lobby .lock-overlay, .hud.in-lobby .hp, .hud.in-lobby .slots, .hud.in-lobby .weapon-card, .hud.in-lobby .crosshair,
 .hud.in-lobby .labels, .hud.in-lobby .killfeed, .hud.in-lobby .match-bar, .hud.in-lobby .hud-notice, .hud.in-lobby .reload,
 .hud.in-lobby .death, .hud.in-lobby .scope, .hud.in-lobby .countdown { display: none !important; }
-/* 결과 카드: 다시 플레이 + 메인 로비 */
-.res-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-.res-lobby { margin-top: 14px; padding: 11px 22px; border: 0; border-radius: 16px; cursor: pointer; background: #fff; color: var(--ink); font: 900 18px var(--font); box-shadow: 0 4px 0 rgba(39, 50, 92, .25); }
-.res-lobby:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(39, 50, 92, .25); }
-/* 낮은 화면: 결과 카드가 잘리지 않게 스크롤 */
-.result-card { max-height: calc(100% - 16px); overflow-y: auto; }

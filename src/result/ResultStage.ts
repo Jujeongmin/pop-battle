@@ -1,0 +1,568 @@
+// 결과 화면 3D 무대: 경기장 대신 따로 그리는 작은 장면 (하늘 배경·바닥·시상대·캐릭터 최대 4명·색종이).
+// 캐릭터는 게임이 이미 불러온 GLB 캐시를 복제하고 대기 클립 위에 본 회전으로 승리(만세 점프)·아쉬움(고개 숙임)·무승부(손 흔들기) 자세를 얹는다.
+// 전용 승리/패배 애니메이션 클립은 GLB에 없음 → 클립이 생기면 pose()만 교체.
+// 무대가 떠 있는 동안 게임은 경기장 대신 이 장면을 그리고(Game.loop), 닫으면 무대 전용 리소스를 모두 해제한다 (GLB 캐시는 그대로).
+import * as THREE from 'three';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import type { LoadedModel } from '../assets/loadAssets';
+import { CHARACTERS, type CharacterId } from '../config/characters';
+import { CHARACTER } from '../config/gameConfig';
+import { CharacterAppearance, loadTeamMask } from '../player/CharacterAppearance';
+import { measureBindHeight } from '../player/PlayerAvatar';
+import { rotateBoneToward, setWorldQuaternion } from '../player/ik';
+import type { ResultData, ResultEntry } from './resultData';
+
+type Pose = 'win' | 'lose' | 'neutral';
+
+interface Slot {
+  entry: ResultEntry;
+  /** 실제 x (화면이 낮으면 카드가 겹치지 않게 기본 배치 bx보다 넓힘) */
+  x: number;
+  bx: number;
+  z: number;
+  scale: number;
+  /** 시상대 높이 (m) */
+  podium: number;
+  color: number;
+  pose: Pose;
+  /** 등장 순서 지연 (s) */
+  delay: number;
+  /** 앞줄 (이긴 팀·1~3위) — 카드 크기 */
+  front: boolean;
+}
+
+interface Figure {
+  slot: Slot;
+  root: THREE.Group;
+  mixer: THREE.AnimationMixer;
+  bones: Record<'hips' | 'spine' | 'chest' | 'upperArmL' | 'lowerArmL' | 'handL' | 'upperArmR' | 'lowerArmR' | 'handR', THREE.Bone>;
+  /** 서 있는 키 (m, 무대 배율 전) */
+  height: number;
+  phase: number;
+  /** 등장 팝 0..1 */
+  pop: number;
+  hop: number;
+}
+
+/** 화면 좌표 (px, 무대 캔버스 기준) — DOM 카드·왕관 배치용 */
+export interface StageAnchor {
+  entry: ResultEntry;
+  front: boolean;
+  /** 등장 정도 0..1 (카드도 같이 나타남) */
+  shown: number;
+  headX: number;
+  headY: number;
+  footX: number;
+  footY: number;
+}
+
+const UP = new THREE.Vector3(0, 1, 0);
+const PODIUM_R = 0.5;
+const FFA_PODIUM_COLORS = [0xffd45e, 0xbcd3ff, 0xffb27a, 0xe2e5ee];
+const TEAM_PODIUM: Record<'BLUE' | 'RED', number> = { BLUE: 0x8fb6ff, RED: 0xff9aa6 };
+const CONFETTI_COLORS = [0xffd45e, 0xff8fb4, 0x6f9bff, 0x68cfac, 0xffb27a, 0xffffff];
+const CONFETTI_COUNT = 70;
+
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
+const _c = new THREE.Vector3();
+const _h = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
+const _axis = new THREE.Vector3();
+const _out = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+const _dir2 = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _qa = new THREE.Quaternion();
+const _m = new THREE.Matrix4();
+const _e = new THREE.Euler();
+const _s = new THREE.Vector3();
+
+function easeOutBack(t: number): number {
+  const c = 1.9;
+  const u = t - 1;
+  return 1 + (c + 1) * u * u * u + c * u * u;
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+/** 배치: FFA = 1위 가운데·2위 왼쪽·3위 오른쪽·4위 오른쪽 바깥, TDM = 이긴 팀 앞 가운데·진 팀 뒤 양옆 (무승부는 팀별 좌우) */
+function layout(data: ResultData): Array<Omit<Slot, 'bx'>> {
+  const list = data.entries.slice(0, 4);
+  if (data.layout === 'ffa') {
+    const spots = [
+      { x: 0, z: 0.35, scale: 1.12 },
+      { x: -1.55, z: 0, scale: 1 },
+      { x: 1.55, z: 0, scale: 1 },
+      { x: 2.95, z: -0.55, scale: 0.84 },
+    ];
+    const heights = [0.55, 0.36, 0.22, 0.1];
+    return list.map((entry, i) => ({
+      entry,
+      ...spots[i]!,
+      podium: heights[Math.min(3, entry.rank - 1)]!,
+      color: FFA_PODIUM_COLORS[Math.min(3, entry.rank - 1)]!,
+      pose: entry.win ? (data.draw ? 'neutral' : 'win') : 'lose',
+      delay: 0.25 + (list.length - 1 - i) * 0.18,
+      front: i < 3,
+    }));
+  }
+  const team = (e: ResultEntry) => e.team ?? 'BLUE';
+  if (data.draw || !data.winnerTeam) {
+    const blue = list.filter((e) => team(e) === 'BLUE');
+    const red = list.filter((e) => team(e) !== 'BLUE');
+    const xs = [-2.15, -0.8, 0.8, 2.15];
+    return [...blue.slice(0, 2).map((e, i) => ({ e, x: xs[1 - i]! })), ...red.slice(0, 2).map((e, i) => ({ e, x: xs[2 + i]! }))].map(({ e, x }, i) => ({
+      entry: e,
+      x,
+      z: 0,
+      scale: 1,
+      podium: 0.18,
+      color: TEAM_PODIUM[team(e)],
+      pose: 'neutral' as const,
+      delay: 0.25 + i * 0.15,
+      front: true,
+    }));
+  }
+  const win = list.filter((e) => team(e) === data.winnerTeam);
+  const lose = list.filter((e) => team(e) !== data.winnerTeam);
+  return [
+    ...lose.slice(0, 2).map((entry, i) => ({ entry, x: i === 0 ? -2.6 : 2.6, z: -0.75, scale: 0.82, podium: 0.06, pose: 'lose' as const, delay: 0.25 + i * 0.15, front: false })),
+    ...win.slice(0, 2).map((entry, i) => ({ entry, x: i === 0 ? -0.8 : 0.8, z: 0.35, scale: 1.1, podium: 0.32, pose: 'win' as const, delay: 0.7 + i * 0.15, front: true })),
+  ].map((s) => ({ ...s, color: TEAM_PODIUM[team(s.entry)] }));
+}
+
+export class ResultStage {
+  readonly scene = new THREE.Scene();
+  readonly camera = new THREE.PerspectiveCamera(28, 16 / 9, 0.1, 80);
+  private slots: Slot[] = [];
+  private figures: Figure[] = [];
+  /** 자리별 시상대 묶음 (가로 간격을 바꿀 때 같이 옮김) */
+  private podiums = new Map<Slot, THREE.Group>();
+  /** 무대 전용 리소스 (닫을 때 해제). 캐릭터 GLB 지오메트리·텍스처는 캐시 공유라 넣지 않음 */
+  private disposables: Array<{ dispose(): void }> = [];
+  private confetti: THREE.InstancedMesh | null = null;
+  private confettiState: Float32Array = new Float32Array(0);
+  private time = 0;
+  private token = 0;
+  private aspect = 16 / 9;
+  private readonly camFrom = new THREE.Vector3();
+  private readonly camTo = new THREE.Vector3();
+  private readonly lookAt = new THREE.Vector3();
+  /** 캐릭터가 들어갈 화면 세로 구간 (px, 제목 아래 ~ 카드 위). 없으면 화면 가운데 절반 */
+  private band: { top: number; bottom: number; height: number; gap: number } | null = null;
+
+  constructor(private readonly loadCharacter: (id: CharacterId) => Promise<LoadedModel>) {}
+
+  /** 무대 만들기 (캐릭터 불러오기 포함). 도중에 clear·다시 build되면 false */
+  async build(data: ResultData): Promise<boolean> {
+    this.clear();
+    const token = ++this.token;
+    const slots = layout(data).map((s) => ({ ...s, bx: s.x }));
+    const tdm = data.layout === 'tdm';
+    const loaded = await Promise.all(
+      slots.map(async (slot) => {
+        try {
+          const def = CHARACTERS[slot.entry.char];
+          const [model, mask] = await Promise.all([this.loadCharacter(slot.entry.char), tdm ? loadTeamMask(def) : Promise.resolve(null)]);
+          return { slot, model, mask };
+        } catch (err) {
+          // 캐릭터 하나가 실패해도 나머지 무대는 그대로 (카드는 표시)
+          console.warn('[result] 캐릭터를 불러오지 못함', slot.entry.char, err);
+          return null;
+        }
+      }),
+    );
+    if (token !== this.token) return false;
+    this.slots = slots;
+    this.buildSet(slots);
+    for (const l of loaded) if (l) this.figures.push(this.makeFigure(l.slot, l.model, l.mask, tdm));
+    // 1위·이긴 쪽이 있으면 색종이
+    if (data.entries.some((e) => e.win)) this.makeConfetti();
+    this.time = 0;
+    this.fitCamera();
+    this.update(0);
+    return true;
+  }
+
+  /** 무대 비우기: 캐릭터·시상대·배경·색종이 해제 (GLB 캐시는 남김) */
+  clear(): void {
+    this.token++;
+    for (const f of this.figures) {
+      f.mixer.stopAllAction();
+      f.mixer.uncacheRoot(f.root);
+    }
+    this.figures = [];
+    this.slots = [];
+    this.podiums.clear();
+    this.confetti = null;
+    this.scene.clear();
+    this.scene.background = null;
+    for (const d of this.disposables) d.dispose();
+    this.disposables = [];
+  }
+
+  resize(width: number, height: number): void {
+    this.aspect = width / Math.max(1, height);
+    this.camera.aspect = this.aspect;
+    this.camera.updateProjectionMatrix();
+    if (this.slots.length > 0) this.fitCamera();
+  }
+
+  /** 캐릭터(시상대 바닥 ~ 머리 위 왕관 자리)를 화면의 이 세로 구간에 맞춤 (DOM 제목·카드·버튼 실측값) */
+  setBand(top: number, bottom: number, height: number, gap: number): void {
+    this.band = { top, bottom: Math.max(top + 40, bottom), height, gap };
+    if (this.slots.length > 0) this.fitCamera();
+  }
+
+  update(dt: number): void {
+    this.time += dt;
+    const t = this.time;
+    // 카메라: 살짝 멀리·위에서 다가오며 자리 잡기
+    const k = easeOutCubic(Math.min(1, t / 1.3));
+    this.camera.position.lerpVectors(this.camFrom, this.camTo, k);
+    this.camera.lookAt(this.lookAt);
+    this.camera.updateMatrixWorld();
+    for (const f of this.figures) {
+      const s = f.slot;
+      const p = THREE.MathUtils.clamp((t - s.delay) / 0.5, 0, 1);
+      f.pop = p;
+      const pop = p <= 0 ? 0 : easeOutBack(p);
+      f.root.visible = p > 0;
+      f.root.scale.setScalar(Math.max(0.001, s.scale * pop));
+      // 승리: 통통 점프 (등장 뒤)
+      f.hop = s.pose === 'win' && p >= 1 ? Math.abs(Math.sin((t - s.delay) * 3.6 + f.phase)) * 0.16 * s.scale : 0;
+      f.root.position.y = s.podium + f.hop;
+      f.mixer.update(dt);
+      f.root.updateMatrixWorld(true);
+      this.pose(f, t, Math.min(1, Math.max(0, (t - s.delay) / 0.6)));
+    }
+    this.updateConfetti(dt);
+  }
+
+  /** 참가자별 화면 좌표 (px). 카드·왕관·MVP 표시용 (캐릭터를 못 불러온 자리도 시상대 기준으로) */
+  anchors(width: number, height: number): StageAnchor[] {
+    const out: StageAnchor[] = [];
+    for (const s of this.slots) {
+      const f = this.figures.find((x) => x.slot === s);
+      const shown = f ? f.pop : THREE.MathUtils.clamp((this.time - s.delay) / 0.5, 0, 1);
+      const pop = shown <= 0 ? 0 : easeOutBack(shown);
+      const h = (f?.height ?? CHARACTER.scale) * s.scale * pop;
+      _a.set(s.x, s.podium + (f?.hop ?? 0) + h + 0.08, s.z).project(this.camera);
+      _b.set(s.x, 0, s.z + PODIUM_R * 1.04 * s.scale).project(this.camera);
+      out.push({
+        entry: s.entry,
+        front: s.front,
+        shown,
+        headX: ((_a.x + 1) / 2) * width,
+        headY: ((1 - _a.y) / 2) * height,
+        footX: ((_b.x + 1) / 2) * width,
+        footY: ((1 - _b.y) / 2) * height,
+      });
+    }
+    return out;
+  }
+
+  render(renderer: THREE.WebGLRenderer): void {
+    renderer.render(this.scene, this.camera);
+  }
+
+  dispose(): void {
+    this.clear();
+  }
+
+  // ---------------------------------------------------------------- 무대 만들기
+
+  private own<T extends { dispose(): void }>(x: T): T {
+    this.disposables.push(x);
+    return x;
+  }
+
+  private buildSet(slots: readonly Slot[]): void {
+    const scene = this.scene;
+    // 하늘 그라데이션 (작은 캔버스 텍스처)
+    const c = document.createElement('canvas');
+    c.width = 2;
+    c.height = 256;
+    const g = c.getContext('2d')!;
+    const grad = g.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#9fd2ff');
+    grad.addColorStop(0.55, '#d6ecff');
+    grad.addColorStop(1, '#fff3dc');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 2, 256);
+    const sky = this.own(new THREE.CanvasTexture(c));
+    sky.colorSpace = THREE.SRGBColorSpace;
+    scene.background = sky;
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xb9c2e6, 2.2));
+    const key = new THREE.DirectionalLight(0xffffff, 2.0);
+    key.position.set(2.5, 6, 6);
+    scene.add(key);
+    const rim = new THREE.DirectionalLight(0xfff1dc, 0.9);
+    rim.position.set(-3, 3, -4);
+    scene.add(rim);
+
+    // 바닥 원판 + 바깥 고리 (장난감 매트)
+    const floor = new THREE.Mesh(this.own(new THREE.CircleGeometry(16, 64)), this.own(new THREE.MeshStandardMaterial({ color: 0xffe6bf, roughness: 0.85 })));
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+    const ring = new THREE.Mesh(this.own(new THREE.RingGeometry(4.4, 4.75, 64)), this.own(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 })));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.004;
+    scene.add(ring);
+
+    // 뒤쪽 파스텔 풍선 (깊이감, 낮은 분할)
+    const ball = this.own(new THREE.SphereGeometry(1, 20, 14));
+    const balls: Array<[number, number, number, number, number]> = [
+      [-6.4, 1.2, -6, 0.8, 0xffc7dc],
+      [-4.6, 2.9, -9, 0.65, 0xffe08a],
+      [4.8, 2.6, -8.5, 0.7, 0xc6f0dc],
+      [6.6, 1.0, -6.5, 0.85, 0xffd2b0],
+    ];
+    for (const [x, y, z, r, color] of balls) {
+      const m = new THREE.Mesh(ball, this.own(new THREE.MeshStandardMaterial({ color, roughness: 0.5 })));
+      m.position.set(x, y, z);
+      m.scale.setScalar(r);
+      scene.add(m);
+    }
+
+    // 시상대 (둥근 원통 + 흰 윗면) · 둥근 그림자
+    const podium = this.own(new THREE.CylinderGeometry(PODIUM_R, PODIUM_R * 1.06, 1, 40));
+    const cap = this.own(new THREE.CylinderGeometry(PODIUM_R * 1.03, PODIUM_R * 1.03, 0.05, 40));
+    const capMat = this.own(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 }));
+    const blob = this.own(new THREE.CircleGeometry(0.36, 28));
+    const blobMat = this.own(new THREE.MeshBasicMaterial({ color: 0x27325c, transparent: true, opacity: 0.16, depthWrite: false }));
+    const mats = new Map<number, THREE.Material>();
+    for (const s of slots) {
+      let mat = mats.get(s.color);
+      if (!mat) {
+        mat = this.own(new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.45 }));
+        mats.set(s.color, mat);
+      }
+      const h = Math.max(0.04, s.podium);
+      const group = new THREE.Group();
+      group.position.set(s.x, 0, s.z);
+      const p = new THREE.Mesh(podium, mat);
+      p.scale.set(s.scale, h, s.scale);
+      p.position.y = h / 2;
+      const top = new THREE.Mesh(cap, capMat);
+      top.scale.set(s.scale, 1, s.scale);
+      top.position.y = h;
+      const sh = new THREE.Mesh(blob, blobMat);
+      sh.rotation.x = -Math.PI / 2;
+      sh.scale.setScalar(s.scale);
+      sh.position.y = h + 0.03;
+      group.add(p, top, sh);
+      scene.add(group);
+      this.podiums.set(s, group);
+    }
+  }
+
+  private makeFigure(slot: Slot, model: LoadedModel, mask: THREE.Texture | null, tdm: boolean): Figure {
+    const def = CHARACTERS[slot.entry.char];
+    const scene = SkeletonUtils.clone(model.scene);
+    const meshes: THREE.Mesh[] = [];
+    scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      // 공유 지오메트리에 사망 눈 모프가 붙어 있으면 복제 메시에도 영향도 배열 필요 (없으면 렌더러 오류)
+      if (!mesh.morphTargetInfluences && mesh.geometry.morphAttributes.position?.length) mesh.updateMorphTargets();
+      mesh.frustumCulled = false;
+      if (tdm) {
+        // 팀 색 셰이더는 머티리얼에 붙으므로 복제본에만 (캐시 원본·게임 아바타에 영향 없음)
+        mesh.material = this.own((mesh.material as THREE.Material).clone());
+        meshes.push(mesh);
+      }
+    });
+    if (tdm && mask && slot.entry.team) new CharacterAppearance(meshes, slot.entry.char, mask).apply({ mode: 'TDM', team: slot.entry.team });
+    const bodyScale = (CHARACTER.scale * def.body.height) / measureBindHeight(scene);
+    scene.scale.setScalar(bodyScale);
+    scene.rotation.y = CHARACTER.modelYawOffset;
+    const root = new THREE.Group();
+    root.add(scene);
+    root.position.set(slot.x, slot.podium, slot.z);
+    // 카메라 쪽을 보되 가운데로 살짝 돌림
+    root.rotation.y = -slot.x * 0.09;
+    root.visible = false;
+    this.scene.add(root);
+
+    const bone = (name: string) => scene.getObjectByName(name) as THREE.Bone;
+    const B = CHARACTER.bones;
+    const mixer = new THREE.AnimationMixer(scene);
+    const idle = model.clips.find((c) => c.name === CHARACTER.clips.idle);
+    if (idle) {
+      const a = mixer.clipAction(idle);
+      a.time = Math.random() * idle.duration;
+      a.timeScale = slot.pose === 'lose' ? 0.7 : 1;
+      a.play();
+    }
+    return {
+      slot,
+      root,
+      mixer,
+      bones: {
+        hips: bone(B.hips),
+        spine: bone(B.spine),
+        chest: bone(B.chest),
+        upperArmL: bone(B.upperArmL),
+        lowerArmL: bone(B.lowerArmL),
+        handL: bone(B.handL),
+        upperArmR: bone(B.upperArmR),
+        lowerArmR: bone(B.lowerArmR),
+        handR: bone(B.handR),
+      },
+      height: CHARACTER.scale * def.body.height,
+      phase: Math.random() * Math.PI,
+      pop: 0,
+      hop: 0,
+    };
+  }
+
+  private makeConfetti(): void {
+    const geo = this.own(new THREE.PlaneGeometry(0.07, 0.11));
+    const mat = this.own(new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+    const mesh = new THREE.InstancedMesh(geo, mat, CONFETTI_COUNT);
+    this.own({ dispose: () => mesh.dispose() });
+    const color = new THREE.Color();
+    // x, y, z, 낙하 속도, 회전 속도, 흔들림 위상
+    const st = new Float32Array(CONFETTI_COUNT * 6);
+    for (let i = 0; i < CONFETTI_COUNT; i++) {
+      st.set([(Math.random() - 0.5) * 7, 2 + Math.random() * 4.5, (Math.random() - 0.5) * 2.5 + 0.4, 0.7 + Math.random() * 0.7, 2 + Math.random() * 5, Math.random() * 6.28], i * 6);
+      mesh.setColorAt(i, color.setHex(CONFETTI_COLORS[i % CONFETTI_COLORS.length]!));
+    }
+    mesh.frustumCulled = false;
+    this.confetti = mesh;
+    this.confettiState = st;
+    this.scene.add(mesh);
+  }
+
+  private updateConfetti(dt: number): void {
+    const mesh = this.confetti;
+    if (!mesh) return;
+    const st = this.confettiState;
+    const t = this.time;
+    // 승자 등장 뒤부터 떨어짐
+    const live = t > 0.9;
+    for (let i = 0; i < CONFETTI_COUNT; i++) {
+      const o = i * 6;
+      if (live) st[o + 1] = st[o + 1]! - st[o + 3]! * dt;
+      if (st[o + 1]! < -0.1) st[o + 1] = 4.5 + Math.random() * 1.5;
+      const y = live ? st[o + 1]! : 99;
+      _e.set(t * st[o + 4]!, t * st[o + 4]! * 0.6, st[o + 5]!);
+      _q.setFromEuler(_e);
+      _a.set(st[o]! + Math.sin(t * 1.7 + st[o + 5]!) * 0.18, y, st[o + 2]!);
+      mesh.setMatrixAt(i, _m.compose(_a, _q, _s.set(1, 1, 1)));
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /**
+   * 등장 인원·화면 비율에 맞춰 카메라: 가로는 양끝 캐릭터, 세로는 캐릭터 무리(바닥~머리+점프)가 band 구간에 들어가게.
+   * 둘 중 더 먼 거리를 쓰고, 무리 가운데가 band 가운데에 오도록 바라보는 높이를 옮김
+   */
+  private fitCamera(): void {
+    const top = Math.max(...this.slots.map((s) => s.podium + CHARACTER.scale * 1.1 * s.scale)) + 0.2;
+    const vHalf = THREE.MathUtils.degToRad(this.camera.fov / 2);
+    const tanH = Math.tan(vHalf) * this.aspect;
+    const band = this.band ?? { top: 0.25, bottom: 0.75, height: 1, gap: 0 };
+    const frac = THREE.MathUtils.clamp((band.bottom - band.top) / band.height, 0.2, 0.9);
+    const halfWidth = (spread: number) => Math.max(2.2, ...this.slots.map((s) => Math.abs(s.bx) * spread + 0.7 * s.scale));
+    // 앞줄 시상대 앞면이 더 가까워 아래로 퍼지는 몫 (약 10%) 여유
+    const distH = (top * 1.1) / frac / (2 * Math.tan(vHalf));
+    // 세로가 기준이면(낮은 화면) 남는 가로 폭만큼 자리 간격을 넓혀 카드(gap px)가 겹치지 않게
+    const xs = [...new Set(this.slots.map((s) => s.bx))].sort((a, b) => a - b);
+    let minStep = Infinity;
+    for (let i = 1; i < xs.length; i++) minStep = Math.min(minStep, xs[i]! - xs[i - 1]!);
+    const pxPerM = band.height / (2 * distH * Math.tan(vHalf));
+    let spread = Number.isFinite(minStep) && band.gap > 0 ? Math.max(1, band.gap / (minStep * pxPerM)) : 1;
+    // 화면 가로를 넘지 않는 만큼만
+    spread = Math.min(spread, Math.max(1, (distH * tanH - 0.7) / Math.max(...this.slots.map((s) => Math.abs(s.bx)), 0.01)));
+    const dist = Math.max(distH, halfWidth(spread) / tanH);
+    for (const s of this.slots) {
+      s.x = s.bx * spread;
+      this.podiums.get(s)?.position.setX(s.x);
+    }
+    for (const f of this.figures) {
+      f.root.position.x = f.slot.x;
+      f.root.rotation.y = -f.slot.x * 0.09;
+    }
+    const visH = 2 * dist * Math.tan(vHalf);
+    const bandCenter = (band.top + band.bottom) / 2 / band.height;
+    const lookY = top / 2 + (bandCenter - 0.5) * visH;
+    this.lookAt.set(0, lookY, 0);
+    this.camTo.set(0, lookY + dist * 0.08, dist);
+    this.camFrom.set(0, lookY + dist * 0.2, dist * 1.18);
+  }
+
+  // ---------------------------------------------------------------- 자세
+
+  /** 대기 클립 위에 자세 덧입히기 (월드 축 기준 → 캐릭터마다 본 축이 달라도 같은 모양). w = 자세 섞는 양 */
+  private pose(f: Figure, t: number, w: number): void {
+    if (w <= 0) return;
+    const b = f.bones;
+    const yaw = f.root.rotation.y;
+    _fwd.set(Math.sin(yaw), 0, Math.cos(yaw));
+    // 앞으로 숙이는 축 (UP × 앞)
+    _axis.crossVectors(UP, _fwd).normalize();
+    const tt = t + f.phase;
+    if (f.slot.pose === 'lose') {
+      // 아쉬움: 고개(몸통) 푹 숙이고 천천히 좌우로 흔들림, 팔은 축 늘어짐
+      this.bend(b.spine, _axis, (0.34 + Math.sin(tt * 1.1) * 0.04) * w);
+      this.bend(b.chest, _axis, 0.14 * w);
+      this.bend(b.spine, _fwd, Math.sin(tt * 0.9) * 0.08 * w);
+      for (const side of ['L', 'R'] as const) {
+        this.armOut(side, f);
+        _dir.copy(_out).multiplyScalar(0.12).addScaledVector(UP, -1).addScaledVector(_fwd, 0.22).normalize();
+        this.aimArm(side === 'L' ? b.upperArmL : b.upperArmR, side === 'L' ? b.lowerArmL : b.lowerArmR, side === 'L' ? b.handL : b.handR, _dir, _dir, 0.65 * w);
+      }
+    } else if (f.slot.pose === 'win') {
+      // 만세: 두 팔 번쩍 + 살짝 젖힌 몸, 팔은 리듬에 맞춰 흔들
+      this.bend(b.spine, _axis, -0.12 * w);
+      for (const side of ['L', 'R'] as const) {
+        this.armOut(side, f);
+        const wave = Math.sin(tt * 7.2 + (side === 'L' ? 0 : Math.PI)) * 0.18;
+        _dir.copy(_out).multiplyScalar(0.95 + wave).addScaledVector(UP, 1).addScaledVector(_fwd, 0.3).normalize();
+        _dir2.copy(_out).multiplyScalar(0.55 + wave).addScaledVector(UP, 1).addScaledVector(_fwd, 0.3).normalize();
+        this.aimArm(side === 'L' ? b.upperArmL : b.upperArmR, side === 'L' ? b.lowerArmL : b.lowerArmR, side === 'L' ? b.handL : b.handR, _dir, _dir2, w);
+      }
+    } else {
+      // 무승부: 한 손 들어 흔들기
+      this.armOut('R', f);
+      const sway = Math.sin(tt * 5.5) * 0.45;
+      _dir.copy(_out).multiplyScalar(0.75).addScaledVector(UP, 0.8).addScaledVector(_fwd, 0.25).normalize();
+      _dir2.copy(_out).multiplyScalar(sway).addScaledVector(UP, 1).addScaledVector(_fwd, 0.2).normalize();
+      this.aimArm(b.upperArmR, b.lowerArmR, b.handR, _dir, _dir2, w);
+      this.bend(b.spine, _fwd, Math.sin(tt * 1.4) * 0.05 * w);
+    }
+  }
+
+  /** 팔 바깥 방향 (가슴 → 위팔, 수평) → _out */
+  private armOut(side: 'L' | 'R', f: Figure): void {
+    const b = f.bones;
+    (side === 'L' ? b.upperArmL : b.upperArmR).getWorldPosition(_a);
+    b.chest.getWorldPosition(_b);
+    _out.subVectors(_a, _b).setY(0);
+    if (_out.lengthSq() < 1e-8) _out.set(side === 'L' ? 1 : -1, 0, 0);
+    _out.normalize();
+  }
+
+  private bend(bone: THREE.Bone, axis: THREE.Vector3, angle: number): void {
+    if (Math.abs(angle) < 1e-5) return;
+    bone.getWorldQuaternion(_q);
+    _q.premultiply(_qa.setFromAxisAngle(axis, angle));
+    setWorldQuaternion(bone, _q);
+  }
+
+  /** 위팔·아래팔을 각각 주어진 월드 방향으로 */
+  private aimArm(upper: THREE.Bone, lower: THREE.Bone, hand: THREE.Bone, dirUpper: THREE.Vector3, dirLower: THREE.Vector3, w: number): void {
+    upper.getWorldPosition(_a);
+    lower.getWorldPosition(_b);
+    rotateBoneToward(upper, _a, _b, _c.copy(_a).add(dirUpper), w);
+    lower.getWorldPosition(_b);
+    hand.getWorldPosition(_h);
+    rotateBoneToward(lower, _b, _h, _c.copy(_b).add(dirLower), w);
+  }
+}

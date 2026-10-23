@@ -86,6 +86,9 @@ import { LobbyHub, type HubStatus } from '../net/LobbyHub';
 import { LobbyPeers } from '../net/LobbyPeers';
 import { displayCode } from '../net/NetSession';
 import type { NetRoomSummary } from '../net/shared/protocol';
+import { fromNetResult, fromPracticeResult } from '../result/resultData';
+import { ResultStage } from '../result/ResultStage';
+import { ResultScreen } from '../ui/result/ResultScreen';
 import { GameInput } from './GameInput';
 import { JoystickAutoSprint } from './JoystickAutoSprint';
 
@@ -203,6 +206,8 @@ export class Game {
   private readonly characterModels = new Map<CharacterId, Promise<LoadedModel>>();
   /** 개발용 CHARACTER DEBUG (개발 서버에서만) */
   private characterDebug: CharacterDebug | null = null;
+  /** 매치 결과 화면 (3D 무대 + 카드). 떠 있는 동안 경기장 대신 결과 무대를 그림 */
+  private resultScreen: ResultScreen | null = null;
   /** 킬로그에 이미 올린 사망 (참가자 id, 리스폰하면 지움) → 같은 사망이 두 번 올라가지 않게 */
   private readonly feedDead = new Set<string>();
   /** 시작 화면 캐릭터 선택 순번 (불러오는 중 여러 번 누르면 마지막만 반영) */
@@ -405,6 +410,15 @@ export class Game {
     // 무기 그림 (킬로그 실루엣·정비소·상점): 같은 모델을 게임 렌더러로 한 번 그려 이미지로
     this.weaponArt = new WeaponArt(this.renderer, this.weaponModels, WEAPONS);
     this.characterArt = new CharacterArt(this.renderer, (id) => this.loadCharacter(id as CharacterId));
+    this.resultScreen = new ResultScreen(this.container, new ResultStage((id) => this.loadCharacter(id)), {
+      replay: () => this.replay(),
+      toRoom: async () => {
+        const s = this.net?.session;
+        if (!s?.inRoom) return false;
+        return (await s.toLobby()).ok;
+      },
+      toMainLobby: () => this.returnToLobby(),
+    });
     // 킬로그 무기 아이콘 = 실제 모델 실루엣 (처음 처치 때 멈칫하지 않게 미리 그림)
     for (const id of Object.keys(WEAPONS)) this.weaponArt.silhouette(id);
     setKillFeedWeaponIcons((id) => this.weaponArt.silhouette(id));
@@ -506,7 +520,6 @@ export class Game {
     for (const b of this.bots.bots) this.match.stats.register({ id: b.id, name: b.name, isLocal: false });
     if (this.match.stats.count !== rules.players) console.warn(`[match] 참가자 ${this.match.stats.count}명 (규칙 ${rules.players}명)`);
     this.bots.hold = true;
-    this.hud.onReplay = () => this.replay();
 
     // 외형: 캐릭터별 팀 마스크(캐릭터당 1장) + 인스턴스별 머티리얼 패치. FFA는 원래 색
     onProgress('캐릭터 외형…');
@@ -576,8 +589,6 @@ export class Game {
     this.hud.setCharacter(this.avatar.character.id, false);
     this.hud.setLoadoutOptions(PRIMARY_WEAPONS.map((w) => ({ id: w.id, name: w.name })), (id) => this.selectPrimary(id));
     this.hud.setLoadout(this.primary.id, false);
-    // 결과 화면 "메인 로비": 새로고침 없이 로비로
-    this.hud.onLobby = () => void this.returnToLobby();
 
     // 사용자 설정 적용 + 메인 로비 (?net=1로 멀티 메뉴를 바로 열면 메뉴가 먼저 보임)
     this.audio.setVolume(this.userSettings.volume);
@@ -618,7 +629,12 @@ export class Game {
     const dt = Math.min(this.timer.getDelta(), 0.1);
     this.update(dt);
     this.drawWeaponPreviews();
-    this.renderer.render(this.scene, this.tpsCamera.camera);
+    // 결과 화면: 경기장 대신 결과 무대만 (경기장 장면은 그리지 않음)
+    const result = this.resultScreen;
+    if (result?.stageOn) {
+      result.update(dt);
+      result.stage.render(this.renderer);
+    } else this.renderer.render(this.scene, this.tpsCamera.camera);
   };
 
   /** 정비소 실시간 무기 미리보기: 각도·무기가 바뀐 미리보기만 이번 프레임에 한 번 그림 (메인 장면 직전, 같은 렌더러) */
@@ -2166,7 +2182,8 @@ export class Game {
     this.combatant.health.protection = 0;
     this.bots.resetForMatch();
     for (const id of this.appearances.keys()) this.applyAppearance(id);
-    this.hud.hideResult();
+    this.resultScreen?.close();
+    this.hud.setMatchOver(false);
     this.hud.clearKillFeed();
   }
 
@@ -2243,7 +2260,14 @@ export class Game {
     this.aim.reset('death');
     this.weapons.cancelReaim();
     this.weapons.weapon.cancelReload();
-    this.hud.showResult(result, this.match.rules);
+    this.hud.setMatchOver(true);
+    this.resultScreen?.show(
+      fromPracticeResult(result, this.match.rules, this.match.round, (id) => {
+        if (id === this.combatant.id) return { nick: this.nick ?? '플레이어', char: this.avatar.character.id };
+        const bot = this.bots.bots.find((b) => b.id === id);
+        return { nick: bot?.name ?? id, char: bot?.avatar.character.id ?? 'blue' };
+      }),
+    );
     this.input.releaseLock();
   }
 
@@ -2393,9 +2417,7 @@ export class Game {
         const r = await this.ensureNet().session.switchTeam();
         if (!r.ok) this.mpMenu?.setNotice(`팀 변경 실패: ${this.netReason(r.reason)}`);
       },
-      toLobby: async () => {
-        await this.ensureNet().session.toLobby();
-      },
+      resultOpen: () => !!this.resultScreen?.open,
       join: (code) =>
         this.withHubPaused(async () => {
           const net = this.ensureNet();
@@ -2604,7 +2626,9 @@ export class Game {
       this.appearances.get(id)?.setDead(false);
       this.applyAppearance(id);
     }
-    this.hud.hideResult();
+    this.resultScreen?.close();
+    this.resultScreen?.forgetSeen();
+    this.hud.setMatchOver(false);
     this.hud.clearKillFeed();
     this.hud.setCharacter(this.avatar.character.id, false);
     this.hud.setLoadout(this.primary.id, false);
@@ -2627,6 +2651,9 @@ export class Game {
       if (s.inMatch && this.match.state === 'WAITING') this.beginNetMatch();
       else if (s.matchPhase === 'result' && (this.match.state === 'COUNTDOWN' || this.match.state === 'PLAYING')) this.endNetMatch();
       else if (s.matchPhase === 'lobby' && this.match.state !== 'WAITING') this.resetNetMatch();
+      // 서버가 확정한 결과 (모두 같은 값). 같은 결과는 한 번만 — 재접속·주기 갱신으로 다시 오면 그대로,
+      // 다른 사람이 먼저 대기실로 가도 내 결과 화면은 직접 닫을 때까지 유지 (새 매치 시작 때 닫힘)
+      if (s.matchPhase === 'result' && s.result && s.roomId) this.resultScreen?.show(fromNetResult(s.result, s.me, s.roomId, this.nick));
     }
     this.mpMenu?.refresh();
     this.hud.setMultiplayerCovered(!!this.mpMenu?.covering);
@@ -2740,6 +2767,7 @@ export class Game {
   /** 서버 매치 종료(결과) → 로컬 전투 정지, 결과 화면을 위해 포인터 잠금 해제 */
   private endNetMatch(): void {
     this.match.endExternally();
+    this.hud.setMatchOver(true);
     this.aim.reset('death');
     this.weapons.cancelReaim();
     this.weapons.weapon.cancelReload();
@@ -2779,6 +2807,9 @@ export class Game {
   private beginNetMatch(): void {
     const s = this.net?.session;
     if (!s || this.match.state !== 'WAITING') return;
+    // 결과 화면을 보던 중 방장이 새 매치를 시작 → 결과를 닫고 경기장으로
+    this.resultScreen?.close();
+    this.hud.setMatchOver(false);
     this.applyNetMode();
     const { teamA, teamB } = this.map.spawns;
     const myTeam = s.players[s.me]?.team ?? null;
@@ -2987,6 +3018,7 @@ export class Game {
     if (w === 0 || h === 0) return;
     this.renderer.setSize(w, h, false);
     this.tpsCamera?.setAspect(w / Math.max(1, h));
+    this.resultScreen?.resize(w, h);
   }
 
   dispose(): void {
@@ -3004,6 +3036,7 @@ export class Game {
     this.netPanel?.dispose();
     this.netHud?.dispose();
     this.mpMenu?.dispose();
+    this.resultScreen?.dispose();
     this.net?.dispose();
     this.timer.dispose();
     this.resizeObserver.disconnect();

@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import type { CrosshairDef } from '../config/weapons';
 import type { BotLabel } from '../bots/BotManager';
 import { COMBAT } from '../config/combat';
-import type { MatchRules } from '../config/match';
-import type { MatchResult, MatchState } from '../match/Match';
+import type { MatchState } from '../match/Match';
 import { KillFeed, weaponIconSvg, type KillFeedEvent } from './KillFeed';
 
 /** 매치 정보 (상단 매치 카드·카운트다운) */
@@ -203,17 +202,12 @@ export class Hud {
   private lastActiveSlot = '';
   private readonly matchBar: HTMLDivElement;
   private readonly countdownEl: HTMLDivElement;
-  private readonly resultEl: HTMLDivElement;
   private readonly noticeEl: HTMLDivElement;
   private noticeTimer = 0;
   private lastMatchKey = '';
   private lastCountdown = '';
   private lastScale = '';
   private locked = false;
-  /** 결과 화면 "다시 플레이" 버튼 */
-  onReplay: (() => void) | null = null;
-  /** 결과 화면 "메인 로비" 버튼 */
-  onLobby: (() => void) | null = null;
   /** 시작 카드 "Multiplayer" 버튼 */
   onMultiplayer: (() => void) | null = null;
   /** 터치 모드: 무기 슬롯을 눌렀을 때 (0부터) */
@@ -273,14 +267,6 @@ export class Hud {
       </div>
       <div class="countdown"></div>
       <div class="hud-notice"></div>
-      <div class="result hidden">
-        <div class="result-card">
-          <div class="res-title"></div>
-          <div class="res-reason"></div>
-          <table class="res-table"><thead><tr><th>순위</th><th>이름</th><th>킬</th><th>데스</th></tr></thead><tbody></tbody></table>
-          <div class="res-btns"><button type="button" class="res-replay">다시 플레이</button><button type="button" class="res-lobby">메인 로비</button></div>
-        </div>
-      </div>
       <div class="lock-overlay">
         <div class="lock-card">
           <h1>POP! BATTLE</h1>
@@ -351,7 +337,6 @@ export class Hud {
     this.labelHost = q('.labels');
     this.matchBar = q('.match-bar');
     this.countdownEl = q('.countdown');
-    this.resultEl = q('.result');
     this.noticeEl = q('.hud-notice');
     q<HTMLButtonElement>('.mp-open').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -366,14 +351,6 @@ export class Hud {
     q<HTMLButtonElement>('.touch-settings-open').addEventListener('click', (e) => {
       e.stopPropagation();
       this.onTouchSettings?.();
-    });
-    q<HTMLButtonElement>('.res-replay').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.onReplay?.();
-    });
-    q<HTMLButtonElement>('.res-lobby').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.onLobby?.();
     });
     this.killFeed = new KillFeed(this.root);
     const dirs = q<HTMLDivElement>('.damage-dirs');
@@ -532,35 +509,9 @@ export class Hud {
     this.lastCountdown = '';
   }
 
-  /** 싱글플레이 매치 결과: VICTORY / DEFEAT / DRAW, 종료 사유, 순위표(내 기록 강조), 다시 플레이 */
-  showResult(r: MatchResult, rules: MatchRules): void {
-    const title = this.resultEl.querySelector<HTMLDivElement>('.res-title')!;
-    title.textContent = { win: 'VICTORY', draw: 'DRAW', lose: 'DEFEAT' }[r.localOutcome];
-    title.dataset.outcome = r.localOutcome;
-    const reason = r.reason === 'score' ? `${rules.scoreToWin}킬 달성으로 종료` : '시간 종료';
-    const draw = r.draw ? ' · 공동 1위' : '';
-    this.resultEl.querySelector('.res-reason')!.textContent = `${rules.label} · ${reason}${draw}`;
-    const body = this.resultEl.querySelector('tbody')!;
-    body.textContent = '';
-    for (const s of r.standings) {
-      const tr = document.createElement('tr');
-      tr.classList.toggle('me', s.isLocal);
-      tr.classList.toggle('first', r.winners.includes(s.id));
-      for (const v of [`${s.rank}`, s.name, String(s.kills), String(s.deaths)]) {
-        const td = document.createElement('td');
-        td.textContent = v;
-        tr.appendChild(td);
-      }
-      body.appendChild(tr);
-    }
-    this.resultEl.classList.remove('hidden');
-    this.root.classList.add('match-over');
-    this.setLocked(this.locked);
-  }
-
-  hideResult(): void {
-    this.resultEl.classList.add('hidden');
-    this.root.classList.remove('match-over');
+  /** 매치 종료 (결과 화면은 ResultScreen): 조준선·체력·무기 카드 등 전투 HUD 숨김 */
+  setMatchOver(on: boolean): void {
+    this.root.classList.toggle('match-over', on);
     this.setLocked(this.locked);
   }
 

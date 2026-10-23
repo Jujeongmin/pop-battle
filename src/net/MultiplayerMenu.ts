@@ -36,7 +36,8 @@ export interface MultiplayerMenuHost {
   start(timeLimitSec?: number): Promise<void>;
   /** 새로고침 전에 있던 룸 코드 (같은 탭) */
   lastRoomCode(): string | null;
-  toLobby(): Promise<void>;
+  /** 매치 결과 화면(ResultScreen)이 떠 있음 → 메뉴는 재접속·밀려남 안내만 */
+  resultOpen(): boolean;
   leave(): Promise<void>;
   rejoin(): Promise<void>;
   /** 자동 재접속 취소 */
@@ -149,9 +150,11 @@ export class MultiplayerMenu {
   }
 
   private visible(v: View): boolean {
-    // 매치 중 조작을 놓침 → 정식 일시정지 메뉴(PauseMenu)가 대신 뜸
-    if (v === 'paused') return false;
-    if (v === 'left' || v === 'result' || v === 'reconnecting') return true;
+    // 매치 중 조작을 놓침 → 정식 일시정지 메뉴(PauseMenu)가 대신 뜸. 결과는 결과 화면(ResultScreen)이 보여 줌
+    if (v === 'paused' || v === 'result') return false;
+    if (v === 'left' || v === 'reconnecting') return true;
+    // 결과 화면을 보는 동안(다른 사람이 먼저 대기실로 가도) 대기실 메뉴는 결과를 닫은 뒤에
+    if (this.host.resultOpen()) return false;
     return this.opened || this.host.netGame();
   }
 
@@ -192,7 +195,6 @@ export class MultiplayerMenu {
     if (v === 'home') return this.renderHome(c, s);
     if (v === 'left') return this.renderLeft(c, s);
     if (!s) return;
-    if (v === 'result') return this.renderResult(c, s);
     this.renderRoom(c, s, v);
   }
 
@@ -392,50 +394,6 @@ export class MultiplayerMenu {
     row.append(swatch, copy, connection);
     if (v === 'paused') row.append(el('span', 'lb-mp-stats', `HP ${Math.round(entry.p.hp)}/${entry.p.max}${entry.p.dead ? ' · 사망' : ''} · K${entry.p.k}/D${entry.p.d}`));
     return row;
-  }
-
-  /** 결과 화면: 서버가 확정한 결과 그대로 (모든 플레이어 같은 값) */
-  private renderResult(c: HTMLElement, s: NetSession): void {
-    const r = s.result!;
-    const mine = r.winners.includes(s.me);
-    const outcome = r.draw ? (r.mode === 'tdm' || mine ? 'draw' : 'lose') : mine ? 'win' : 'lose';
-    c.append(el('div', `lb-mp-outcome lb-mp-${outcome}`, { win: '승리', lose: '패배', draw: '무승부' }[outcome]));
-    const why = r.reason === 'score' ? `${NET_MODE_RULES[r.mode].scoreToWin}킬 달성` : '시간 종료';
-    if (r.mode === 'tdm') {
-      const sc = el('div', 'lb-mp-final');
-      sc.append(
-        el('span', `lb-mp-team lb-mp-blue${r.winnerTeam === 'BLUE' ? ' lb-mp-winner' : ''}`, `BLUE ${r.teamScore.BLUE}`),
-        el('span', '', ':'),
-        el('span', `lb-mp-team lb-mp-red${r.winnerTeam === 'RED' ? ' lb-mp-winner' : ''}`, `${r.teamScore.RED} RED`),
-      );
-      c.append(sc, el('p', 'lb-mp-hint', `${NET_MODE_RULES[r.mode].label} · ${why}${r.winnerTeam ? ` · ${r.winnerTeam} 승리` : ' · 무승부'}`));
-    } else {
-      c.append(el('p', 'lb-mp-hint', `${NET_MODE_RULES[r.mode].label} · ${why}${r.draw ? ' · 공동 1위 무승부' : ''}`));
-    }
-    const table = el('table', 'lb-mp-table');
-    const head = el('tr');
-    for (const h of ['순위', '플레이어', r.mode === 'tdm' ? '팀' : '캐릭터', '킬', '데스']) head.append(el('th', '', h));
-    table.append(head);
-    let rank = 0;
-    let prev = '';
-    r.standings.forEach((p, i) => {
-      const k = `${p.k}:${p.d}`;
-      if (k !== prev) rank = i + 1;
-      prev = k;
-      const tr = el('tr', p.account === s.me ? 'lb-mp-me' : '');
-      // TDM: 팀 색 줄, FFA: 1위(공동 포함) 강조. 나간 사람은 흐리게
-      if (r.mode === 'tdm' && p.team) tr.classList.add(p.team === 'BLUE' ? 'lb-mp-row-blue' : 'lb-mp-row-red');
-      if (r.mode !== 'tdm' && r.winners.includes(p.account)) tr.classList.add('lb-mp-first');
-      if (p.left) tr.classList.add('lb-mp-left');
-      const team = r.mode === 'tdm' ? (p.team ?? '-') : this.host.characterLabel(p.char);
-      const playerLabel = p.account === s.me ? `${p.nick ?? '나'} (나)` : p.nick ?? `P${p.slot + 1}`;
-      const cells = [String(rank), `${playerLabel}${p.left ? (p.quit ? ' (나감)' : ' (끊김)') : ''}`, team, String(p.k), String(p.d)];
-      cells.forEach((v, i) => tr.append(el('td', i === 0 ? 'lb-mp-rank' : '', v)));
-      table.append(tr);
-    });
-    c.append(table);
-    c.append(this.button('대기실로 돌아가기', 'lb-mp-primary', () => this.run(() => this.host.toLobby())));
-    c.append(this.button('방 나가기', 'lb-mp-ghost', () => this.run(() => this.host.leave())));
   }
 
   /** 개발 빌드 전용: 시간 종료·무승부 확인용 짧은 제한 시간 (기본 규칙 3분은 그대로) */

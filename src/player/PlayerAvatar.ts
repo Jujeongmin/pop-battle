@@ -96,7 +96,7 @@ function weaponIdOf(mount: WeaponMount): string | undefined {
 }
 
 /** 스킨 메시 바인드 포즈 최고점 높이 (GLB 단위, 발 = 0) */
-function measureBindHeight(scene: THREE.Object3D): number {
+export function measureBindHeight(scene: THREE.Object3D): number {
   let top = 0;
   const v = new THREE.Vector3();
   scene.traverse((o) => {
