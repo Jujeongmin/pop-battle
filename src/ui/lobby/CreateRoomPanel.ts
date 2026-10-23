@@ -1,6 +1,6 @@
 // 새 방 만들기: 서버 규칙을 그대로 보여 주고 선택한 모드로 대기실을 연다.
 import { NET_MODE_RULES, type NetMode } from '../../net/shared/protocol';
-import { button, el, ICON, type LobbyHost, type LobbyPanel } from './lobbyDom';
+import { button, el, ICON, markRadios, radioGroup, type LobbyHost, type LobbyPanel } from './lobbyDom';
 
 export class CreateRoomPanel implements LobbyPanel {
   readonly id = 'create';
@@ -12,16 +12,16 @@ export class CreateRoomPanel implements LobbyPanel {
   render(body: HTMLElement): void {
     body.append(el('p', 'lb-panel-lead', '게임 모드를 고르면 새 방을 만들고 대기실로 이동해요.'));
     const choices = el('div', 'lb-create-grid');
+    radioGroup(choices, '게임 모드');
     const modes: NetMode[] = import.meta.env.DEV ? ['tdm', 'ffa', 'test'] : ['tdm', 'ffa'];
     const cards: HTMLButtonElement[] = [];
     const mark = () => {
-      for (const card of cards) {
-        const on = card.dataset.mode === this.selected;
-        card.classList.toggle('lb-selected', on);
-        card.setAttribute('aria-pressed', String(on));
-      }
+      for (const card of cards) card.classList.toggle('lb-selected', card.dataset.mode === this.selected);
+      markRadios(cards, (card) => card.dataset.mode === this.selected);
       rule.textContent = this.ruleText(this.selected);
       create.textContent = `${this.modeName(this.selected)} 방 만들기`;
+      // 만들기 버튼 색 = 고른 모드 색 (screens.css)
+      create.dataset.mode = this.selected;
     };
     for (const mode of modes) {
       const rule = NET_MODE_RULES[mode];

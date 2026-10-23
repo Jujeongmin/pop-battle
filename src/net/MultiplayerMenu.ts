@@ -2,6 +2,7 @@
 // 대기실(팀·방장 시작) · 진행 중 일시정지 · 결과 화면 · 연결 끊김. 서버에는 준비 상태가 없다.
 // 표시는 전부 서버가 확인한 상태(NetSession)만 읽는다 — 클라이언트가 임의로 성공·결과를 만들지 않음.
 import { levelBadge } from '../ui/popgun';
+import { markRadios, radioGroup } from '../ui/lobby/lobbyDom';
 import { displayCode, type NetSession } from './NetSession';
 import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEST_TIME_LIMIT_SEC, teamSeats, type NetMode, type NetPlayerRecord, type NetTeam } from './shared/protocol';
 import '../ui/lobby/room.css';
@@ -202,12 +203,21 @@ export class MultiplayerMenu {
 
   private modePicker(current: NetMode, onPick: (m: NetMode) => void, disabled = false): HTMLElement {
     const row = el('div', 'lb-mp-modes');
+    radioGroup(row, '게임 모드');
+    const items: HTMLButtonElement[] = [];
     for (const m of MODES) {
-      const b = this.button(NET_MODE_RULES[m].short, `lb-mp-mode${m === current ? ' lb-mp-on' : ''}`, () => onPick(m));
+      const b = this.button(NET_MODE_RULES[m].short, `lb-mp-mode lb-mp-mode-${m}${m === current ? ' lb-mp-on' : ''}`, () => {
+        onPick(m);
+        // 다시 그려진 화면에서 고른 모드에 포커스 유지 (키보드 사용자)
+        this.card.querySelector<HTMLElement>('.lb-mp-mode[aria-checked="true"]')?.focus();
+      });
       b.disabled = disabled;
       b.title = NET_MODE_RULES[m].label;
+      b.dataset.mode = m;
+      items.push(b);
       row.appendChild(b);
     }
+    markRadios(items, (b) => b.dataset.mode === current);
     return row;
   }
 

@@ -45,6 +45,13 @@ export function createInputState(): InputState {
  */
 const BLOCKED_KEYS = new Set(['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyR', 'Tab']);
 
+/**
+ * 포인터 잠금이 마지막으로 풀린(또는 못 잡은) 이유.
+ * esc = 사용자가 ESC · blur = 창·iframe 포커스를 잃음 · hidden = 탭이 숨겨짐 · script = 게임이 직접 풂 ·
+ * error = 브라우저가 요청을 거부 (pointerlockerror: ESC 직후 1초 제한, 포커스 없음, iframe 권한 없음 등) · none = 아직 잡은 적 없음
+ */
+export type UnlockReason = 'esc' | 'blur' | 'hidden' | 'script' | 'error' | 'none';
+
 export class KeyboardMouseInput {
   readonly state = createInputState();
   private readonly keys = new Set<string>();
@@ -65,6 +72,16 @@ export class KeyboardMouseInput {
   private cursorKeys = false;
   /** 포인터 잠금 재시도 타이머 (requestLock) */
   private retryTimer: number | null = null;
+  /** 마지막으로 잠금이 풀린 이유 (일시정지 화면 종류를 정함) */
+  lastUnlock: UnlockReason = 'none';
+  /** 이번 잠금 시도에서 연속으로 거부된 횟수 (잡히면 0) */
+  lockErrors = 0;
+  /** 브라우저가 잠금 요청을 거부함 (pointerlockerror) */
+  onLockError: (() => void) | null = null;
+  /** releaseLock으로 게임이 직접 푸는 중 */
+  private releasing = false;
+  /** 마지막 창 포커스 잃음 시각 (ms) */
+  private blurAt = -Infinity;
 
   constructor(private readonly element: HTMLElement) {
     const opts = { signal: this.abort.signal };
@@ -78,6 +95,26 @@ export class KeyboardMouseInput {
     // 우클릭 ADS 토글 시 브라우저 컨텍스트 메뉴 차단
     window.addEventListener('contextmenu', (e) => e.preventDefault(), opts);
     document.addEventListener('pointerlockchange', this.onPointerLockChange, opts);
+    document.addEventListener('pointerlockerror', this.onPointerLockError, opts);
+    document.addEventListener('visibilitychange', this.onVisibility, opts);
+  }
+
+  /** 이 환경의 포인터 잠금 지원: embedded = iframe 안, policy = iframe allow 정책 (알 수 없으면 null, sandbox는 페이지에서 못 읽음) */
+  lockSupport(): { embedded: boolean; policy: boolean | null } {
+    let embedded = false;
+    try {
+      embedded = window.self !== window.top;
+    } catch {
+      embedded = true;
+    }
+    const fp = (document as Document & { featurePolicy?: { allowsFeature(f: string): boolean } }).featurePolicy;
+    let policy: boolean | null = null;
+    try {
+      policy = fp ? fp.allowsFeature('pointer-lock') : null;
+    } catch {
+      policy = null;
+    }
+    return { embedded, policy };
   }
 
   get isLocked(): boolean {
@@ -109,7 +146,9 @@ export class KeyboardMouseInput {
   }
 
   releaseLock(): void {
-    if (this.locked) document.exitPointerLock();
+    if (!this.locked) return;
+    this.releasing = true;
+    document.exitPointerLock();
   }
 
   /** 프레임마다 게임이 상태를 읽은 뒤 호출해 엣지 입력과 마우스 델타를 비운다. */
@@ -183,6 +222,7 @@ export class KeyboardMouseInput {
   };
 
   private readonly onBlur = (): void => {
+    this.blurAt = performance.now();
     this.keys.clear();
     this.sprintLatched = false;
     this.wReleasedAt = -Infinity;
@@ -234,14 +274,33 @@ export class KeyboardMouseInput {
   };
 
   private readonly onPointerLockChange = (): void => {
+    const was = this.locked;
     this.locked = document.pointerLockElement === this.element;
     if (this.locked && this.retryTimer !== null) {
       window.clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
+    if (this.locked) this.lockErrors = 0;
+    if (was && !this.locked) {
+      // 풀린 이유: 게임이 직접 · 탭 숨김 · 방금 포커스 잃음 · 그 외 = ESC (브라우저가 이유를 알려 주지 않아 순서대로 추정)
+      const lostFocus = performance.now() - this.blurAt < 500 || !document.hasFocus();
+      this.lastUnlock = this.releasing ? 'script' : document.hidden ? 'hidden' : lostFocus ? 'blur' : 'esc';
+    }
+    this.releasing = false;
     if (!this.locked) this.onBlur();
     this.state.fireHeld = this.locked && this.mouseLeft;
     this.onLockChange?.(this.locked);
+  };
+
+  private readonly onPointerLockError = (): void => {
+    this.lockErrors++;
+    if (!this.locked) this.lastUnlock = 'error';
+    this.onLockError?.();
+  };
+
+  /** 탭이 숨겨지면 눌린 키를 비움 (잠금 해제 자체는 pointerlockchange에서 'hidden'으로) */
+  private readonly onVisibility = (): void => {
+    if (document.hidden) this.onBlur();
   };
 }
 

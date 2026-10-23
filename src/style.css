@@ -955,3 +955,12 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   }
 }
 :root.pop-rotated .hud .portrait-hint { display: none !important; }
+
+/* 첫 플레이 안내: 로비 화면(z 20)·방 목록보다 위 — 건너뛰기 클릭이 로비에 먹히던 문제. 로비에서는 아래 가운데(캐릭터·광장 쪽) */
+.coach { z-index: 25; }
+.coach.coach-lobby { top: auto; bottom: max(18px, 4%); }
+.coach-dots { color: #ffd45e; font-size: 12px; font-weight: 900; letter-spacing: 0; }
+@media (max-height: 460px) {
+  .coach.coach-lobby { top: auto; bottom: 10px; }
+  .coach-dots { font-size: 11px; }
+}

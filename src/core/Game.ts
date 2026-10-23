@@ -1,4 +1,4 @@
-import { withFullscreenOffer } from '../ui/FullscreenPrompt';
+import { fullscreenAvailable, isExpanded, setExpanded, withFullscreenOffer } from '../ui/FullscreenPrompt';
 import { CoachMarks, type CoachStep } from '../ui/CoachMarks';
 import type { RankingResult } from '../net/shared/ranking';
 import { levelInfo } from '../net/shared/progression';
@@ -173,15 +173,15 @@ function lobbyWeapon(w: WeaponDef): LobbyWeapon {
 
 /** 첫 플레이 안내 단계 (로비) */
 const LOBBY_COACH: CoachStep[] = [
-  { id: 'move', pc: 'WASD로 걸어 보세요', touch: '왼쪽 화면을 끌어 걸어 보세요' },
-  { id: 'jump', pc: 'Space로 점프!', touch: '점프 버튼을 눌러 보세요' },
+  { id: 'move', label: '이동', pc: 'WASD로 걸어 보세요', touch: '왼쪽 화면을 끌어 걸어 보세요' },
+  { id: 'jump', label: '점프', pc: 'Space로 점프해 보세요', touch: '점프 버튼을 눌러 보세요' },
 ];
 /** 첫 플레이 안내 단계 (첫 매치) */
 const MATCH_COACH: CoachStep[] = [
-  { id: 'move', pc: 'WASD로 이동', touch: '왼쪽 화면을 끌어 이동' },
-  { id: 'look', pc: '마우스로 둘러보기', touch: '오른쪽 화면을 끌어 둘러보기' },
-  { id: 'fire', pc: '좌클릭으로 사격', touch: '사격 버튼으로 사격' },
-  { id: 'switch', pc: '1 · 2 · 3으로 무기 바꾸기', touch: '아래 무기 칸을 눌러 바꾸기' },
+  { id: 'move', label: '이동', pc: 'WASD로 이동해 보세요', touch: '왼쪽 화면을 끌어 이동해 보세요' },
+  { id: 'look', label: '시점', pc: '마우스로 시점을 움직여 보세요', touch: '오른쪽 화면을 끌어 시점을 움직여 보세요' },
+  { id: 'fire', label: '사격', pc: '좌클릭으로 사격', touch: '사격 버튼으로 사격' },
+  { id: 'switch', label: '무기', pc: '1 · 2 · 3으로 무기 바꾸기', touch: '아래 무기 칸을 눌러 바꾸기' },
 ];
 
 export class Game {
@@ -221,6 +221,10 @@ export class Game {
   private pauseMenu: PauseMenu | null = null;
   /** 일시정지 조건이 처음 맞은 시각 (ms, -1 = 아님) */
   private pauseWantSince = -1;
+  /** 이번 매치에서 포인터 잠금을 한 번이라도 잡았는지 (못 잡았으면 일시정지 대신 마우스 고정 안내) */
+  private matchLockSeen = false;
+  /** 마지막으로 포인터 잠금을 잡은 시각 (잡자마자 풀리면 실패로 봄) */
+  private lockedAt = -Infinity;
   /** 개발용 총구 표시 (개발 서버에서만 생성, 기본 꺼짐) */
   private muzzleDebug: MuzzleDebug | null = null;
   private shotDebug: ShotPathDebug | null = null;
@@ -282,6 +286,10 @@ export class Game {
   /** 몸 정면 (근접 판정 방향) */
   private readonly bodyForward = new THREE.Vector3(0, 0, 1);
   private readonly renderFeet = new THREE.Vector3();
+  /** 안내 '이동' 단계: 입력이 있는 동안 실제로 움직인 거리 (키만 누르고 벽에 막힌 것은 아님) */
+  private coachMoved = 0;
+  private readonly coachLastFeet = new THREE.Vector3();
+  private coachStepKey: string | null = null;
   private dead = false;
   private deathTimer = 0;
   private fpsFrames = 0;
@@ -407,8 +415,17 @@ export class Game {
     this.hud.onMatchBarTap = () => this.scoreboard.setOpen(!this.scoreboard.open && this.scoreboardAllowed);
     window.addEventListener('keyup', this.onScoreboardKeyUp, { signal: this.abort.signal, capture: true });
     window.addEventListener('blur', () => this.scoreboard.setOpen(false), { signal: this.abort.signal });
+    this.input.kbm.onLockError = () => this.onLockFailed();
     this.input.onLockChange = (locked) => {
       this.hud.setLocked(locked);
+      if (locked && !this.inLobby) {
+        this.matchLockSeen = true;
+        this.lockedAt = performance.now();
+      } else if (!locked && !this.inLobby && !this.input.touchMode && performance.now() - this.lockedAt < 1500 && this.input.kbm.lastUnlock !== 'esc') {
+        // 잡자마자(1.5초 안) ESC가 아닌 이유로 풀림 → 같은 일시정지가 반복되지 않게 실패로 보고 안내 화면으로
+        this.input.kbm.lockErrors++;
+        this.onLockFailed();
+      }
       // 브라우저 자동 재생 정책: 사용자 클릭(포인터 잠금) 뒤에 오디오 시작
       if (locked) this.audio.unlock();
       // 로비는 포인터 잠금을 쓰지 않음 (커서 보이는 자유 이동). 매치는 기존처럼 잠금 = 시작
@@ -1741,17 +1758,33 @@ export class Game {
    */
   private updateCoach(dt: number): void {
     const c = this.coach;
-    const lobbyFree = this.lobbyShown && !this.lobbyMenuOpen && !this.resultScreen?.open && !!this.nick;
+    // 로비: 메뉴 패널·멀티 창·닉네임 창·확장 화면 질문이 위에 있으면 잠깐 숨김 (흐름은 유지)
+    const overlay = this.lobbyMenuOpen || !!this.mpMenu?.isOpen || !!this.container.querySelector('.fs-offer, .lb-nickname-modal:not([aria-hidden="true"])');
+    const lobbyFree = this.lobbyShown && !this.resultScreen?.open && !!this.nick;
     const fighting = !this.lobbyShown && this.match.state === 'PLAYING' && this.input.isLocked && !this.dead && !this.resultScreen?.open && !this.pauseMenu?.visible;
     const want = lobbyFree ? 'lobby' : fighting ? 'match' : null;
     if (c.active && c.active !== want) c.stop();
     if (want === 'lobby') c.start('lobby', LOBBY_COACH);
     else if (want === 'match') c.start('match', MATCH_COACH);
     if (!want) return;
+    c.setPlace(want);
+    if (want === 'lobby' && overlay) return c.hold();
+    // 이동 단계: 단계가 바뀌면 거리 0부터, 이동 입력이 있는 동안 실제 위치 변화만 셈
+    const key = c.step;
+    if (key !== this.coachStepKey) {
+      this.coachStepKey = key;
+      this.coachMoved = 0;
+      this.coachLastFeet.copy(this.renderFeet);
+    }
     const s = this.input.state;
+    const moving = s.moveX !== 0 || s.moveY !== 0;
+    const dx = this.renderFeet.x - this.coachLastFeet.x;
+    const dz = this.renderFeet.z - this.coachLastFeet.z;
+    if (moving) this.coachMoved += Math.min(Math.hypot(dx, dz), 2);
+    this.coachLastFeet.copy(this.renderFeet);
     c.update(dt, this.input.touchMode, (id) =>
       id === 'move'
-        ? s.moveX !== 0 || s.moveY !== 0
+        ? moving && this.coachMoved >= 1.2
         : id === 'look'
           ? s.lookDX !== 0 || s.lookDY !== 0
           : id === 'fire'
@@ -1797,6 +1830,7 @@ export class Game {
     const pm = this.pauseMenu;
     if (!pm) return;
     const running = this.matchRunning;
+    if (this.inLobby) this.matchLockSeen = false;
     const want = running && !this.inLobby && !this.input.isLocked && !this.debugPanel.visible;
     // 매치 시작 직후 포인터 잠금이 잡히는 사이(몇 프레임)에는 열지 않음 → 0.15초 넘게 조작이 없을 때만
     const now = performance.now();
@@ -1804,12 +1838,45 @@ export class Game {
     else if (this.pauseWantSince < 0) this.pauseWantSince = now;
     const open = want && now - this.pauseWantSince >= 150;
     if (open && !pm.visible) {
-      pm.show();
+      const kind = this.pauseKind();
+      pm.show(kind.kind, kind.note);
+      if (kind.kind === 'lock') pm.showLock(this.lockInfo());
       this.sounds.ui('uiOpen');
     } else if (!want && pm.visible) {
       pm.hide();
       this.sounds.ui('uiClose');
     }
+  }
+
+  /**
+   * 일시정지 화면 종류: 이번 매치에서 아직 마우스를 고정한 적 없음·브라우저 거부 → 마우스 고정 안내,
+   * ESC → 일반 일시정지, 창·iframe 포커스 잃음 / 탭 숨김 → 일반 일시정지 + 이유 한 줄. 터치는 항상 일반
+   */
+  private pauseKind(): { kind: 'pause' | 'lock'; note: string } {
+    if (this.input.touchMode) return { kind: 'pause', note: '' };
+    const why = this.input.kbm.lastUnlock;
+    if (!this.matchLockSeen || why === 'error' || why === 'none') return { kind: 'lock', note: '' };
+    if (why === 'blur') return { kind: 'pause', note: '게임 화면 밖을 눌러서 멈췄어요' };
+    if (why === 'hidden') return { kind: 'pause', note: '다른 탭·창으로 이동해서 멈췄어요' };
+    return { kind: 'pause', note: '' };
+  }
+
+  /** 마우스 고정 안내 내용: 거부 횟수, 임베드에서 계속 거부되면 확장 화면 권유 (한 화면 안의 버튼으로만, 반복 팝업 없음) */
+  private lockInfo(): { errors: number; suggestFullscreen: boolean; blocked: boolean } {
+    const errors = this.input.kbm.lockErrors;
+    const { embedded, policy } = this.input.kbm.lockSupport();
+    const blocked = policy === false;
+    const canExpand = fullscreenAvailable() && !isExpanded();
+    // 수동 테스트용 기록 (토큰·계정 정보 없음): 거부 횟수·임베드·정책
+    if (errors > 0) console.info('[pointer-lock]', { errors, embedded, policy, lastUnlock: this.input.kbm.lastUnlock });
+    return { errors, blocked, suggestFullscreen: canExpand && (blocked || (embedded && errors >= 2)) };
+  }
+
+  /** 브라우저가 포인터 잠금을 거부했거나 잡자마자 풀림: 매치 중이면 마우스 고정 안내 (이미 열려 있으면 내용만 갱신) */
+  private onLockFailed(): void {
+    if (this.inLobby || this.input.touchMode) return;
+    const pm = this.pauseMenu;
+    if (pm?.visible) pm.showLock(this.lockInfo());
   }
 
   /** 일시정지 메뉴가 게임에 요청하는 동작 */
@@ -1829,6 +1896,8 @@ export class Game {
         await this.returnToLobby();
         this.pauseMenu?.hide();
       },
+      // 확장 화면: 고른 것으로 기억 (설정 스위치와 같은 값), 전환 뒤 '게임 화면 활성화'로 고정
+      fullscreen: () => void setExpanded(true),
     };
   }
 

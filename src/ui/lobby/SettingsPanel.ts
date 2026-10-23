@@ -1,5 +1,5 @@
 // SETTINGS: 실제로 적용되는 항목만 슬라이더 (사운드 크기·마우스 감도·모바일 터치), 그래픽은 준비 중. 값은 이 기기에 저장
-import { fullscreenAvailable, fullscreenPreferred, setFullscreenPreferred } from '../FullscreenPrompt';
+import { fullscreenAvailable, isExpanded, onExpandChange, setExpanded } from '../FullscreenPrompt';
 import { button, el, slider, type LobbyHost, type LobbyPanel } from './lobbyDom';
 import { nicknameEditor } from './nicknameUi';
 
@@ -121,23 +121,62 @@ export class SettingsPanel implements LobbyPanel {
     right.appendChild(keys);
     touchCol.appendChild(el('div', 'lb-section', '모바일 터치'));
     for (const x of s.touch) touchCol.appendChild(slider(x));
-    // 확장 화면: 처음 매치 때 물어본 선택을 여기서 바꿈 (켜면 바로 확장, 끄면 원래 화면)
+    // 확장 화면: 스위치 = 실제 상태 (Verse8 바깥 확장 포함), 누르면 바로 전환·선택 기억, 안 되면 이유 한 줄
     left.appendChild(el('div', 'lb-section', '화면'));
-    left.appendChild(
-      slider({
-        label: '확장 화면으로 플레이',
-        min: 0,
-        max: 1,
-        step: 1,
-        toggle: true,
-        get: () => (fullscreenPreferred() ? 1 : 0),
-        set: (v) => setFullscreenPreferred(v >= 0.5),
-        format: (v) => (v >= 0.5 ? '켬' : '끔'),
-        ...(fullscreenAvailable() ? {} : { disabled: '지원 안 됨' }),
-      }),
-    );
-    // 그래픽 설정은 아직 없음 → 큰 비활성 카드 대신 짧은 보조 문구
-    left.appendChild(el('p', 'lb-settings-note', '그래픽 품질 설정은 준비 중이에요.'));
+    const expandNote = el('p', 'lb-settings-note lb-expand-note');
+    expandNote.setAttribute('role', 'status');
+    let refresh: (() => void) | null = null;
+    const row = slider({
+      label: '확장 화면으로 플레이',
+      min: 0,
+      max: 1,
+      step: 1,
+      toggle: true,
+      get: () => (isExpanded() ? 1 : 0),
+      set: (v) => {
+        expandNote.textContent = '';
+        void setExpanded(v >= 0.5).then((msg) => {
+          expandNote.textContent = msg;
+          refresh?.();
+        });
+      },
+      format: (v) => (v >= 0.5 ? '켬' : '끔'),
+      bind: (r) => (refresh = r),
+    });
+    // 바깥에서 확장·해제하면 스위치도 즉시 (패널이 다시 그려져 떨어지면 해제)
+    const off = onExpandChange(() => {
+      if (!row.isConnected) return off();
+      expandNote.textContent = '';
+      refresh?.();
+    });
+    left.append(row, expandNote);
+    if (!fullscreenAvailable()) expandNote.textContent = '게임 안 확장은 이 화면에서 지원되지 않아요 · Verse8 화면의 확장 버튼을 써 주세요';
+    // 그래픽 설정은 아직 없음 → 작은 비활성 줄 (슬라이더 줄과 같은 모양, 조작 불가)
+    const gfx = el('div', 'lb-slider lb-slider-off lb-set-soon');
+    gfx.setAttribute('aria-disabled', 'true');
+    gfx.append(el('span', 'lb-slider-label', '그래픽 품질'), el('span', 'lb-set-soon-text', '다음 업데이트'), el('span', 'lb-slider-val', '준비 중'));
+    left.appendChild(gfx);
+    this.groupGeneral(left);
     select(this.tab);
+  }
+
+  /** 일반 탭: 제목(lb-section)마다 카드로 묶고 넓은 화면에서 2열 (닉네임·화면 | 사운드) */
+  private groupGeneral(page: HTMLElement): void {
+    const groups = new Map<string, HTMLElement>();
+    let cur: HTMLElement | null = null;
+    for (const child of [...page.children]) {
+      if (child.classList.contains('lb-section')) {
+        cur = el('section', 'lb-set-group');
+        groups.set(child.textContent ?? '', cur);
+      }
+      cur?.append(child);
+    }
+    const a = el('div', 'lb-set-stack');
+    const b = el('div', 'lb-set-stack');
+    for (const k of ['닉네임', '화면']) if (groups.has(k)) a.append(groups.get(k)!);
+    for (const [k, g] of groups) if (k !== '닉네임' && k !== '화면') b.append(g);
+    page.textContent = '';
+    page.classList.add('lb-settings-general');
+    page.append(a, b);
   }
 }

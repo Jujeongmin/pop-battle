@@ -1,7 +1,7 @@
 // CHARACTER (전체 화면): 왼쪽 큰 3D 전신(게임 쇼케이스) + 오른쪽 6종 카드. 카드마다 전신 이미지·이름·HP·이동속도 게이지를 늘 보여
 // 한눈에 비교한다 (게이지는 6종 중 가장 큰 값을 기준으로 같은 스케일, 값은 캐릭터 데이터 그대로).
 // 카드를 누르면 3D 미리보기만 바뀌고(장착과 별개), 아래 장착 버튼으로 장착한다. 잠긴 캐릭터는 미리보기·능력치만.
-import { button, el, ICON, type LobbyCharacter, type LobbyHost, type LobbyPanel } from './lobbyDom';
+import { button, el, ICON, markRadios, radioGroup, type LobbyCharacter, type LobbyHost, type LobbyPanel } from './lobbyDom';
 
 export class CharacterPanel implements LobbyPanel {
   readonly id = 'character';
@@ -32,6 +32,7 @@ export class CharacterPanel implements LobbyPanel {
     const speedMax = Math.max(...this.characters.map((c) => c.speed));
 
     const grid = el('div', 'lb-char-grid lb-char-compare');
+    radioGroup(grid, '캐릭터 미리보기');
     this.cards = this.characters.map((character) => {
       const card = button('', 'lb-char-card lb-portrait-loading', () => this.show(character, true));
       card.dataset.id = character.id;
@@ -52,8 +53,14 @@ export class CharacterPanel implements LobbyPanel {
         card.append(lock);
       }
       card.classList.toggle('lb-locked', character.locked);
-      card.setAttribute('aria-pressed', 'false');
       card.title = character.locked ? `${character.name} · 잠김 · 미리보기` : `${character.name} 미리보기`;
+      // 잠긴 캐릭터: 미리보기는 되지만 장착 불가 → 이유를 화면 읽기에도 연결
+      if (character.locked) {
+        const why = el('span', 'lb-sr-only', '잠긴 캐릭터 · 미리보기만 가능, 장착하려면 해제가 필요해요');
+        why.id = `lb-char-lock-${character.id}`;
+        card.append(why);
+        card.setAttribute('aria-describedby', why.id);
+      }
       grid.appendChild(card);
       void this.loadFigure(card, character, version);
       return card;
@@ -222,7 +229,7 @@ export class CharacterPanel implements LobbyPanel {
       const isPreview = card.dataset.id === this.preview;
       card.classList.toggle('lb-equipped', isEquipped);
       card.classList.toggle('lb-preview', isPreview);
-      card.setAttribute('aria-pressed', String(isPreview));
     }
+    markRadios(this.cards, (card) => card.dataset.id === this.preview);
   }
 }

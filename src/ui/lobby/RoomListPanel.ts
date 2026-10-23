@@ -6,6 +6,17 @@ import { NET_MODE_RULES } from '../../net/shared/protocol';
 import { roomTitle, viewerLang } from '../../net/shared/roomTitles';
 import { button, el, ICON, type LobbyHost, type LobbyPanel, type LobbyRoomInfo } from './lobbyDom';
 
+/** 접은 상태 기억 (이 기기) */
+const COLLAPSE_KEY = 'popbattle.roomsCollapsed';
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 /** 제목 번호가 없는 방(이 기능 전에 만들어진 방)의 대체 제목 = 모드 이름 */
 const MODE_TITLE: Record<LobbyRoomInfo['mode'], string> = { tdm: '팀 데스매치', ffa: '개인전', test: '자유 테스트' };
 
@@ -41,6 +52,10 @@ export class RoomListPanel implements LobbyPanel {
   private loading = false;
   private loadedOnce = false;
   private readonly openCreate: () => void;
+  /** 목록·코드 입력을 접음 (머리 줄의 빠른 시작·연습전·방 만들기는 그대로) → 캐릭터·광장이 더 보이게 */
+  private collapsed = readCollapsed();
+  private collapseButton: HTMLButtonElement | null = null;
+  private countLabel: HTMLElement | null = null;
 
   constructor(private readonly host: LobbyHost, openCreate: () => void) {
     this.openCreate = openCreate;
@@ -55,7 +70,10 @@ export class RoomListPanel implements LobbyPanel {
     body.textContent = '';
     const tools = el('div', 'lb-room-tools');
     const copy = el('div', 'lb-room-tools-copy');
-    copy.append(el('b', '', '방 목록'));
+    this.countLabel = el('span', 'lb-room-count-label');
+    this.collapseButton = button('', 'lb-room-collapse', () => this.setCollapsed(!this.collapsed));
+    this.collapseButton.setAttribute('aria-controls', 'lb-room-list');
+    copy.append(el('b', '', '방 목록'), this.countLabel, this.collapseButton);
     this.refreshButton = button('', 'lb-room-refresh', () => void this.load(), `${ICON.refresh}<span>새로고침</span>`);
     this.refreshButton.setAttribute('aria-label', '방 목록 새로고침');
     const actions = el('div', 'lb-room-actions');
@@ -72,12 +90,37 @@ export class RoomListPanel implements LobbyPanel {
     this.rows.clear();
     this.stateBox = null;
     this.list = el('div', 'lb-room-list');
+    this.list.id = 'lb-room-list';
     this.list.setAttribute('role', 'listbox');
     this.list.setAttribute('aria-label', '열려 있는 방');
     body.append(tools, this.list, this.codeJoin());
+    this.setCollapsed(this.collapsed);
     if (this.loadedOnce && this.rooms.length) this.drawRooms(this.rooms);
     else this.drawLoading();
     if (this.active) void this.load();
+  }
+
+  /** 접기/펼치기 (기억). 접혀도 머리 줄(빠른 시작 등)은 남음 */
+  private setCollapsed(on: boolean): void {
+    this.collapsed = on;
+    try {
+      localStorage.setItem(COLLAPSE_KEY, on ? '1' : '0');
+    } catch {
+      // 저장 못 해도 이번에는 그대로
+    }
+    this.body?.classList.toggle('lb-rooms-collapsed', on);
+    const b = this.collapseButton;
+    if (b) {
+      b.innerHTML = on ? '<span aria-hidden="true">▾</span> 펼치기' : '<span aria-hidden="true">▴</span> 접기';
+      b.setAttribute('aria-expanded', String(!on));
+      b.setAttribute('aria-label', on ? '방 목록 펼치기' : '방 목록 접기');
+    }
+    this.updateCount();
+  }
+
+  /** 머리 줄 방 개수 (접혔을 때도 몇 개 열려 있는지 보이게) */
+  private updateCount(): void {
+    if (this.countLabel) this.countLabel.textContent = this.loadedOnce ? `열린 방 ${this.rooms.length}개` : '';
   }
 
   activate(): void {
@@ -140,12 +183,15 @@ export class RoomListPanel implements LobbyPanel {
     state.append(el('i', 'lb-room-spinner'), el('b', '', this.loadedOnce ? '방 목록을 불러오는 중…' : '서버에 연결하는 중…'));
   }
 
+  /** 방 없음: 큰 빈 칸 대신 한 줄 안내 (목록 칸 높이도 한 줄로 줄어듦, screens.css) */
   private drawEmpty(): void {
     this.rooms = [];
     this.selected = null;
     const state = this.clearList();
     if (!state) return;
-    state.append(el('b', '', '현재 생성된 방이 없습니다'), el('p', '', '방을 만들거나 빠른 시작으로 바로 들어가 보세요'));
+    state.classList.add('lb-room-empty');
+    state.append(el('b', '', '열린 방이 없어요'), el('p', '', '빠른 시작을 누르면 바로 매칭돼요 · 방을 만들어 친구를 불러도 좋아요'));
+    this.updateCount();
   }
 
   /**
@@ -176,6 +222,7 @@ export class RoomListPanel implements LobbyPanel {
    */
   private drawRooms(rooms: LobbyRoomInfo[]): void {
     this.rooms = rooms;
+    this.updateCount();
     if (this.selected && !rooms.some((r) => r.code === this.selected)) this.selected = null;
     const list = this.list;
     if (!list) return;

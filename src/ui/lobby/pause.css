@@ -206,3 +206,23 @@
   .lb-pause-cancel,
   .lb-pause-confirm-leave { font-size: 16px; }
 }
+
+/* 마우스 고정 안내 (일시정지와 구분: 조준 표시 원 · 설명 · 거부 이유) */
+.lb-pause.lb-pause-lockview .lb-pause-backdrop { cursor: pointer; }
+.lb-pause-lock-icon {
+  display: grid; width: 40px; height: 40px; flex: 0 0 auto; place-items: center; border: 3px solid #27325c; border-radius: 50%;
+  background: #ffd45e; color: #27325c; font-size: 22px; line-height: 1; box-shadow: 0 3px 0 #27325c;
+}
+.lb-pause-lock-title { font-size: 21px; line-height: 1.25; }
+.lb-pause-lock-desc { margin: 0; color: #4c5a7c; font-size: 14px; font-weight: 800; line-height: 1.45; }
+.lb-pause-lock-error { margin: 0; padding: 8px 10px; border: 2px solid #f0a4b4; border-radius: 10px; background: #fff0f3; color: #9e3650; font-size: 13px; font-weight: 800; line-height: 1.45; }
+.lb-pause-reason { color: #4c5a7c; }
+@media (max-height: 520px) {
+  .lb-pause-lock-icon { width: 30px; height: 30px; font-size: 16px; border-width: 2px; }
+  .lb-pause-lock-title { font-size: 16px; }
+  .lb-pause-lock-desc, .lb-pause-lock-error { font-size: 12px; }
+}
+
+
+/* 패널 통일: 일시정지 카드 모서리 14px · 네이비 외곽선 · 아래 입체 그림자 */
+.lb-pause-card { border-radius: 14px; }

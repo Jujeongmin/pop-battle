@@ -1027,3 +1027,154 @@
     .lb-mp-player:not(.lb-mp-empty) .lb-mp-connection { justify-self: center; }
   }
 }
+
+
+/* ================= 위쪽 방 목록 다듬기 (2026-10-23) ================= */
+/* 머리: 방 목록 · 열린 방 N개 · 접기 */
+.lb-lobby .lb-room-dock .lb-room-tools-copy { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.lb-lobby .lb-room-dock .lb-room-count-label { color: var(--lb-ink2); font-size: 12px; font-weight: 800; white-space: nowrap; }
+.lb-lobby .lb-room-dock .lb-room-count-label:empty { display: none; }
+.lb-lobby .lb-room-dock .lb-room-collapse {
+  display: inline-flex; width: auto; min-width: 0; min-height: 30px; align-items: center; gap: 3px; padding: 0 10px;
+  border: 2px solid var(--lb-ink); border-image: none; border-radius: 999px; background: #fff; color: var(--lb-ink);
+  box-shadow: 0 2px 0 var(--lb-ink); font-size: 12px; font-weight: 900; white-space: nowrap; cursor: pointer;
+}
+.lb-lobby .lb-room-dock .lb-room-collapse:focus-visible { outline: 3px solid #2a6ee8; outline-offset: 2px; }
+/* 접힘: 목록·코드 입력 숨김, 머리 줄(빠른 시작·연습전·방 만들기)만 */
+.lb-lobby .lb-room-dock.lb-rooms-collapsed .lb-room-list,
+.lb-lobby .lb-room-dock.lb-rooms-collapsed .lb-code-join { display: none; }
+/* 방 없음·불러오는 중·오류: 큰 빈 칸 대신 한 줄 높이 */
+.lb-lobby .lb-room-dock .lb-room-list:has(> .lb-room-state) { height: auto; grid-auto-rows: auto; }
+.lb-lobby .lb-room-dock .lb-room-list > .lb-room-state { grid-row: auto; }
+.lb-lobby .lb-room-dock .lb-room-state.lb-room-empty {
+  display: flex; min-height: 0; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 10px; padding: 8px 10px; text-align: center;
+}
+.lb-lobby .lb-room-dock .lb-room-state.lb-room-empty b { font-size: 15px; }
+.lb-lobby .lb-room-dock .lb-room-state.lb-room-empty p { margin: 0; color: var(--lb-ink2); font-size: 12px; }
+@media (max-height: 520px) {
+  .lb-lobby .lb-room-dock .lb-room-count-label { display: none; }
+  .lb-lobby .lb-room-dock .lb-room-collapse { min-height: 26px; padding: 0 8px; font-size: 11px; }
+  .lb-lobby .lb-room-dock .lb-room-state.lb-room-empty { padding: 4px 8px; }
+  .lb-lobby .lb-room-dock .lb-room-state.lb-room-empty b { font-size: 13px; }
+  .lb-lobby .lb-room-dock .lb-room-state.lb-room-empty p { font-size: 11px; }
+}
+
+/* 랭킹 빈 상태: 머리줄 숨기고 가운데 카드 (내 캐릭터 + 트로피 · 제목 · 설명 · 빠른 시작 · 로비로) */
+.lb-rank-panel-empty .lb-rank-head { display: none; }
+.lb-rank-panel-empty .lb-rank-list { display: grid; place-items: center; }
+.lb-rank-empty { display: grid; max-width: 440px; justify-items: center; gap: 8px; padding: 14px 16px; text-align: center; }
+.lb-rank-empty-art { position: relative; display: grid; width: 96px; height: 96px; place-items: center; border: 3px solid var(--lb-ink); border-radius: 50%; background: radial-gradient(circle at 40% 35%, #fffbe6, #ffe48a); box-shadow: 0 3px 0 var(--lb-ink); overflow: visible; }
+.lb-rank-empty-art img { width: 86px; height: 86px; object-fit: contain; border-radius: 50%; }
+.lb-rank-empty-trophy { position: absolute; right: -8px; bottom: -6px; display: grid; width: 36px; height: 36px; place-items: center; border: 2px solid var(--lb-ink); border-radius: 50%; background: #fff; font-size: 20px; line-height: 1; }
+.lb-rank-empty-title { color: var(--lb-ink); font-family: var(--lb-display-font); font-size: 22px; font-weight: 400; }
+.lb-rank-empty-desc { margin: 0; color: var(--lb-ink2); font-size: 14px; font-weight: 800; line-height: 1.45; }
+.lb-rank-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.lb-lobby .lb-rank-empty-quick,
+.lb-lobby .lb-rank-empty-back {
+  display: inline-flex; min-width: 120px; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 0 18px;
+  border: 3px solid var(--lb-ink); border-image: none; border-radius: 12px; box-shadow: 0 3px 0 var(--lb-ink); font-family: var(--lb-display-font); font-size: 17px; font-weight: 400; cursor: pointer;
+}
+.lb-lobby .lb-rank-empty-quick { background: linear-gradient(180deg, #6aa6ff, #2f6cf0); color: #fff; }
+.lb-lobby .lb-rank-empty-quick svg { width: 18px; height: 18px; }
+.lb-lobby .lb-rank-empty-back { background: #fff; color: var(--lb-ink); }
+.lb-lobby .lb-rank-empty-quick:focus-visible,
+.lb-lobby .lb-rank-empty-back:focus-visible { outline: 3px solid #2a6ee8; outline-offset: 2px; }
+.lb-rank-empty-note { color: var(--lb-ink2); font-size: 12px; font-weight: 800; }
+/* 내 랭킹(순위 없음): 이유를 팀전·개인전 칸에 걸쳐 */
+.lb-rank-mine-why { grid-column: span 2; color: var(--lb-ink2); font-size: 12px; font-weight: 800; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 760px), (max-height: 460px) {
+  .lb-rank-empty { gap: 4px; padding: 6px 10px; }
+  .lb-rank-empty-art { width: 60px; height: 60px; border-width: 2px; }
+  .lb-rank-empty-art img { width: 54px; height: 54px; }
+  .lb-rank-empty-trophy { width: 26px; height: 26px; font-size: 14px; }
+  .lb-rank-empty-title { font-size: 17px; }
+  .lb-rank-empty-desc { font-size: 12px; }
+  .lb-lobby .lb-rank-empty-quick, .lb-lobby .lb-rank-empty-back { min-width: 100px; min-height: 36px; font-size: 14px; }
+  .lb-rank-empty-note, .lb-rank-mine-why { font-size: 11px; }
+}
+
+/* 설정: 내용 가운데 정렬 · 일반 탭은 카드 2열 (넓은 화면) · 패널 안에서만 스크롤 · 탭 고정 */
+.lb-lobby .lb-settings-cols.lb-settings-tabbed > .lb-settings-col { width: 100%; max-width: 680px; margin-inline: auto; }
+.lb-lobby .lb-settings-cols.lb-settings-tabbed > .lb-settings-general { max-width: 1000px; }
+.lb-lobby .lb-settings-tabs { justify-content: center; }
+.lb-lobby .lb-set-stack { display: grid; min-width: 0; align-content: start; gap: 10px; }
+.lb-lobby .lb-set-group { display: grid; gap: 6px; padding: 8px 12px 10px; border: 2px solid var(--lb-ink); border-radius: 12px; background: #fffdf6; box-shadow: 0 3px 0 var(--lb-ink); }
+.lb-lobby .lb-set-group > .lb-section { margin: 0; }
+.lb-lobby .lb-set-group .lb-slider { margin: 0; }
+.lb-lobby .lb-set-group .lb-settings-note { margin: 0 2px; }
+.lb-lobby .lb-set-soon { opacity: .75; }
+.lb-lobby .lb-set-soon .lb-set-soon-text { color: var(--lb-ink2); font-size: 12px; font-weight: 800; }
+@media (min-width: 900px) {
+  .lb-lobby .lb-settings-general:not([hidden]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; }
+}
+@media (max-height: 520px) {
+  .lb-lobby .lb-set-stack { gap: 6px; }
+  .lb-lobby .lb-set-group { gap: 4px; padding: 5px 8px 6px; border-radius: 10px; }
+}
+
+/* 화면 읽기 전용 설명 (잠긴 이유 등) */
+.lb-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.lb-lobby [role="radio"]:focus-visible, .lb-mp-overlay [role="radio"]:focus-visible { outline: 3px solid #2a6ee8; outline-offset: 2px; }
+/* 준비 중 상점 탭 말풍선 (누르거나 포커스하면 잠깐) */
+.lb-lobby .lb-topbar .lb-soon-tip {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 5; display: block; width: max-content; max-width: 220px; padding: 6px 10px;
+  border: 2px solid var(--lb-ink); border-radius: 10px; background: #fffdf6; color: var(--lb-ink); box-shadow: 0 3px 0 var(--lb-ink);
+  font-family: var(--font); font-size: 12px; font-weight: 800; line-height: 1.35; white-space: normal; text-align: left;
+  opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .15s, transform .15s, visibility .15s; pointer-events: none;
+}
+.lb-lobby .lb-topbar .lb-soon-tip.lb-on { opacity: 1; visibility: visible; transform: none; }
+.lb-lobby .lb-topbar .lb-top-icon-btn.lb-nav-soon:has(.lb-soon-tip.lb-on) { filter: none; opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .lb-lobby .lb-topbar .lb-soon-tip { transition: none; } }
+
+
+/* 장비: 수치 설명 ⓘ (마우스 올림·포커스 때 말풍선) · 장착 주무기 대비 증감 · 모바일은 선택 목록을 먼저(왼쪽) */
+.lb-lobby .lb-weapon-stats .lb-gauge { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.lb-lobby .lb-gauge-label { display: inline-flex; align-items: center; gap: 3px; }
+.lb-lobby .lb-stat-info { position: relative; display: inline-grid; width: 16px; height: 16px; place-items: center; border-radius: 50%; color: var(--lb-ink2); font-size: 12px; font-style: normal; line-height: 1; cursor: help; }
+.lb-lobby .lb-stat-info:focus-visible { outline: 2px solid #2a6ee8; outline-offset: 1px; }
+.lb-lobby .lb-stat-info::after {
+  content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; z-index: 4; width: max-content; max-width: 200px; padding: 5px 8px;
+  border: 2px solid var(--lb-ink); border-radius: 8px; background: #fffdf6; color: var(--lb-ink); box-shadow: 0 2px 0 var(--lb-ink);
+  font-family: var(--font); font-size: 12px; font-weight: 800; line-height: 1.35; white-space: normal; text-align: left;
+  opacity: 0; visibility: hidden; transform: translateX(-30%); pointer-events: none;
+}
+.lb-lobby .lb-stat-info:hover::after, .lb-lobby .lb-stat-info:focus-visible::after { opacity: 1; visibility: visible; }
+.lb-lobby .lb-weapon-compare { margin: 2px 0 0; color: var(--lb-ink2); font-size: 12px; font-weight: 800; }
+.lb-lobby .lb-weapon-compare:empty { display: none; }
+@media (max-height: 520px) {
+  .lb-lobby .lb-panel-body:has(> .lb-weapon-preview) { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); }
+  .lb-lobby .lb-panel-body:has(> .lb-weapon-preview) > .lb-weapon-preview { grid-column: 2; }
+  .lb-lobby .lb-panel-body:has(> .lb-weapon-preview) > :not(.lb-weapon-preview) { grid-column: 1; }
+  .lb-lobby .lb-weapon-compare { font-size: 11px; }
+}
+
+/* ================= 패널 통일 (방 만들기 · 일시정지 · 랭킹 빈 상태) =================
+   모서리 14px · 안쪽 카드 10px · 네이비 외곽선 + 아래 입체 그림자 유지 · 제목 앞 작은 물방울 모티프 (움직임 없음) */
+.lb-lobby .lb-create-card { border-radius: 10px; }
+.lb-lobby .lb-create-rule { border-radius: 10px; }
+.lb-pause-title::before,
+.lb-lobby .lb-panel-title::before,
+.lb-rank-empty-title::before {
+  content: ''; display: inline-block; width: 14px; height: 14px; margin-right: 6px; vertical-align: -1px;
+  background: radial-gradient(circle at 30% 30%, #fff 0 18%, transparent 20%), radial-gradient(circle, #8fd0ff 0 58%, #27325c 60% 70%, transparent 72%);
+  border-radius: 50%;
+}
+.lb-pause-lock-title::before { display: none; }
+/* 방 모드 카드: 팀 데스매치 = BLUE·RED, 개인전 = 노랑·핑크 중립색 (선택하면 진하게) */
+.lb-lobby .lb-create-card.lb-create-tdm { background: linear-gradient(90deg, #e3ecff 0 50%, #ffe3e8 50% 100%); }
+.lb-lobby .lb-create-card.lb-create-tdm.lb-selected { background: linear-gradient(90deg, #b9cfff 0 50%, #ffc2cc 50% 100%); }
+.lb-lobby .lb-create-card.lb-create-ffa { background: linear-gradient(135deg, #fff4c4, #ffe0ee); }
+.lb-lobby .lb-create-card.lb-create-ffa.lb-selected { background: linear-gradient(135deg, #ffe48a, #ffc0dc); }
+.lb-lobby .lb-create-tdm .lb-create-icon { background: linear-gradient(90deg, #5b8cff 0 50%, #ec4a5a 50% 100%); color: #fff; }
+.lb-lobby .lb-create-ffa .lb-create-icon { background: linear-gradient(135deg, #ffc531, #f2649a); color: #fff; }
+/* 만들기 버튼 = 고른 모드 색 */
+.lb-lobby .lb-create-submit[data-mode="tdm"] { border-image: none; border: 3px solid var(--lb-ink); border-radius: 12px; background: linear-gradient(90deg, #4f84f5, #e9506a); color: #fff; box-shadow: 0 4px 0 var(--lb-ink); }
+.lb-lobby .lb-create-submit[data-mode="ffa"] { border-image: none; border: 3px solid var(--lb-ink); border-radius: 12px; background: linear-gradient(90deg, #ffc531, #f2649a); color: #3d2600; box-shadow: 0 4px 0 var(--lb-ink); }
+/* 멀티 메뉴 모드 고르기도 같은 색 */
+.lb-mp-overlay .lb-mp-mode-tdm.lb-mp-on { background: linear-gradient(90deg, #6f9bff 0 50%, #ff8a95 50% 100%); color: #fff; }
+.lb-mp-overlay .lb-mp-mode-ffa.lb-mp-on { background: linear-gradient(135deg, #ffc531, #f2649a); color: #3d2600; }
+/* 모드 카드는 Kenney 판(가운데 채움) 대신 네이비 외곽선 → 팀·중립 색이 보이게. 선택 = 노랑 테두리 링 */
+.lb-lobby .lb-create-card.lb-create-tdm,
+.lb-lobby .lb-create-card.lb-create-ffa { border: 3px solid var(--lb-ink); border-image: none; border-radius: 10px; box-shadow: 0 3px 0 var(--lb-ink); }
+.lb-lobby .lb-create-card.lb-create-tdm.lb-selected,
+.lb-lobby .lb-create-card.lb-create-ffa.lb-selected { box-shadow: 0 0 0 3px #ffd45e, 0 4px 0 var(--lb-ink); }

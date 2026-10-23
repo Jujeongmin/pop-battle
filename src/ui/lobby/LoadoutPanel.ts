@@ -1,6 +1,6 @@
 // LOADOUT: 주무기 선택 (라이플·샷건·스나이퍼, 고르면 가운데 캐릭터가 바로 들고 있음) + 고정 보조·근접무기. 스킨은 준비 중
 import { toGame } from '../../core/screenRotation';
-import { button, comingSoon, el, type LobbyHost, type LobbyPanel, type LobbyWeapon } from './lobbyDom';
+import { button, comingSoon, el, markRadios, radioGroup, type LobbyHost, type LobbyPanel, type LobbyWeapon } from './lobbyDom';
 
 export class LoadoutPanel implements LobbyPanel {
   readonly id = 'loadout';
@@ -28,14 +28,12 @@ export class LoadoutPanel implements LobbyPanel {
 
     body.appendChild(el('div', 'lb-section', '1 · 주무기'));
     const grid = el('div', 'lb-weapon-grid');
+    radioGroup(grid, '주무기');
     const cards: HTMLButtonElement[] = [];
     const mark = () => {
       const cur = this.host.currentPrimary();
-      for (const card of cards) {
-        const isSelected = card.dataset.id === cur;
-        card.classList.toggle('lb-selected', isSelected);
-        card.setAttribute('aria-pressed', String(isSelected));
-      }
+      for (const card of cards) card.classList.toggle('lb-selected', card.dataset.id === cur);
+      markRadios(cards, (card) => card.dataset.id === cur);
     };
     for (const weapon of primaryWeapons) {
       const card = button('', 'lb-weapon', () => {
@@ -45,7 +43,6 @@ export class LoadoutPanel implements LobbyPanel {
       });
       card.appendChild(this.weaponContent(weapon));
       card.dataset.id = weapon.id;
-      card.setAttribute('aria-pressed', 'false');
       cards.push(card);
       grid.appendChild(card);
     }
@@ -99,30 +96,51 @@ export class LoadoutPanel implements LobbyPanel {
     return fragment;
   }
 
-  /** 성능 게이지 (위력 = 한 발 × 탄 수, 연사 = 분당, 사거리 m). 길이는 다섯 무기 중 최고값 기준 */
+  /**
+   * 성능 게이지 (위력 = 한 발 × 탄 수, 연사 = 분당, 사거리 m). 길이는 다섯 무기 중 최고값 기준.
+   * 수치 이름 옆 ⓘ = 설명 말풍선(포커스 가능), 보는 무기가 장착 주무기와 다르면 증감 (+4 · -120/분 · +30m)
+   */
   private weaponStats(all: LobbyWeapon[]): { element: HTMLElement; show: (weapon: LobbyWeapon) => void } {
+    type S = NonNullable<LobbyWeapon['stats']>;
     const element = el('div', 'lb-weapon-stats');
-    const max = (f: (s: NonNullable<LobbyWeapon['stats']>) => number) => Math.max(1, ...all.map((w) => (w.stats ? f(w.stats) : 0)));
+    const max = (f: (s: S) => number) => Math.max(1, ...all.map((w) => (w.stats ? f(w.stats) : 0)));
+    const compare = el('p', 'lb-weapon-compare');
     const rows = [
-      { label: '위력', cls: 'lb-g-power', value: (s: NonNullable<LobbyWeapon['stats']>) => s.damage * s.pellets, text: (s: NonNullable<LobbyWeapon['stats']>) => (s.pellets > 1 ? `${s.damage}×${s.pellets}` : `${s.damage}`) },
-      { label: '연사', cls: 'lb-g-rate', value: (s: NonNullable<LobbyWeapon['stats']>) => s.rpm, text: (s: NonNullable<LobbyWeapon['stats']>) => `${Math.round(s.rpm)}/분` },
-      { label: '사거리', cls: 'lb-g-range', value: (s: NonNullable<LobbyWeapon['stats']>) => s.range, text: (s: NonNullable<LobbyWeapon['stats']>) => `${Math.round(s.range * 10) / 10}m` },
+      { label: '위력', help: '한 발 피해 × 한 번에 나가는 탄 수', cls: 'lb-g-power', value: (s: S) => s.damage * s.pellets, text: (s: S) => (s.pellets > 1 ? `${s.damage}×${s.pellets}` : `${s.damage}`), unit: '' },
+      { label: '연사', help: '1분에 쏠 수 있는 발 수', cls: 'lb-g-rate', value: (s: S) => s.rpm, text: (s: S) => `${Math.round(s.rpm)}/분`, unit: '/분' },
+      { label: '사거리', help: '탄이 닿는 최대 거리 (m)', cls: 'lb-g-range', value: (s: S) => s.range, text: (s: S) => `${Math.round(s.range * 10) / 10}m`, unit: 'm' },
     ].map((r) => {
       const gauge = el('div', `lb-gauge ${r.cls}`);
       const fill = el('i', 'lb-gauge-fill');
       const track = el('span', 'lb-gauge-track');
+      track.title = '막대 길이 = 무기 5종 중 가장 높은 값 기준';
       track.append(fill);
       const out = el('b', 'lb-gauge-value');
-      gauge.append(el('span', 'lb-gauge-label', r.label), track, out);
+      const delta = el('em', 'lb-gauge-delta');
+      const label = el('span', 'lb-gauge-label');
+      const info = el('span', 'lb-stat-info', 'ⓘ');
+      info.tabIndex = 0;
+      info.setAttribute('role', 'img');
+      info.setAttribute('aria-label', `${r.label}: ${r.help}`);
+      info.dataset.tip = r.help;
+      label.append(r.label, info);
+      gauge.append(label, track, out, delta);
       element.append(gauge);
-      return { ...r, top: max(r.value), fill, out };
+      return { ...r, top: max(r.value), fill, out, delta };
     });
+    element.append(compare);
     const show = (weapon: LobbyWeapon) => {
       element.hidden = !weapon.stats;
       if (!weapon.stats) return;
+      const base = all.find((w) => w.id === this.host.currentPrimary());
+      const diff = !!base?.stats && base.id !== weapon.id;
+      compare.textContent = diff ? `장착 중인 ${base!.name} 대비` : '';
       for (const r of rows) {
         r.fill.style.width = `${Math.max(4, Math.min(100, (r.value(weapon.stats) / r.top) * 100))}%`;
         r.out.textContent = r.text(weapon.stats);
+        const d = diff ? Math.round(r.value(weapon.stats) - r.value(base!.stats!)) : 0;
+        r.delta.textContent = d ? `${d > 0 ? '+' : ''}${d}${r.unit}` : '';
+        r.delta.className = `lb-gauge-delta${d > 0 ? ' lb-up' : d < 0 ? ' lb-down' : ''}`;
       }
     };
     return { element, show };
@@ -140,7 +158,6 @@ export class LoadoutPanel implements LobbyPanel {
     const type = el('span', 'lb-weapon-preview-type', initial?.type ?? '');
     const stats = this.weaponStats(all);
     if (initial) stats.show(initial);
-    stats.element.append(el('p', 'lb-weapon-legend', '위력 = 한 발 피해 × 탄 수 · 연사 = 분당 발사 수 · 사거리 = 탄이 닿는 최대 거리 · 막대 = 5종 중 최고 기준'));
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', initial ? `${initial.name} 3D 미리보기` : '무기 3D 미리보기');
     stage.append(canvas, el('span', 'lb-weapon-preview-hint', '드래그해서 돌려 보기'));

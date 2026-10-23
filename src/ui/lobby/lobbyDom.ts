@@ -37,6 +37,8 @@ export interface LobbySlider {
   disabled?: string;
   /** 켜기/끄기 스위치 (값 0 = 끔, 1 = 켬; 음소거 등) */
   toggle?: boolean;
+  /** 바깥에서 값이 바뀔 수 있는 스위치: 다시 그리기 함수를 받아 둠 (확장 화면 상태 등) */
+  bind?(refresh: () => void): void;
 }
 
 /** 로비 → 게임 요청 (Game이 구현). 실제 기능이 있는 것만 둔다 */
@@ -261,6 +263,7 @@ function toggleRow(s: LobbySlider): HTMLElement {
     show();
   });
   show();
+  s.bind?.(show);
   row.append(el('span', 'lb-slider-label', s.label), sw, val);
   return row;
 }
@@ -316,6 +319,51 @@ export interface PauseHost {
   multiplayer(): boolean;
   /** 매치 나가기 (확인 뒤 호출): 서버 퇴장 → 새로고침 없이 로비로 */
   leaveMatch(): Promise<void>;
+  /** 확장(전체) 화면 요청 (버튼 클릭 안에서 호출) — 임베드 화면에서 마우스 고정이 막혔을 때 안내용 */
+  fullscreen(): void;
+}
+
+/** 마우스 고정(포인터 잠금) 안내 화면 내용 (게임이 상황에 맞게 채움) */
+export interface PauseLockInfo {
+  /** 브라우저가 연속으로 거부한 횟수 */
+  errors: number;
+  /** 확장 화면 전환을 권할지 (확장 가능 · 아직 확장 아님 · 권한 없음이거나 임베드에서 두 번 넘게 거부) */
+  suggestFullscreen: boolean;
+  /** 페이지(iframe allow 정책)가 마우스 고정을 허용하지 않음 — 다시 눌러도 안 됨 */
+  blocked: boolean;
+}
+
+/**
+ * 한 번에 하나만 고르는 카드 묶음 (캐릭터·주무기·방 모드): radiogroup / radio.
+ * 방향키 = 같은 묶음 안에서 포커스 이동, Space·Enter = 선택(버튼 클릭), Tab = 고른 카드 하나로만 들어옴 (markRadios가 맞춤)
+ */
+export function radioGroup(group: HTMLElement, label: string): void {
+  group.setAttribute('role', 'radiogroup');
+  group.setAttribute('aria-label', label);
+  group.addEventListener('keydown', (e) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    const items = [...group.querySelectorAll<HTMLElement>('[role="radio"]')];
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    if (i < 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    items[(i + step + items.length) % items.length]!.focus();
+  });
+}
+
+/** 묶음 안 카드들의 선택 표시 (aria-checked) + 고른 카드만 Tab 순서에 (없으면 첫 카드) */
+export function markRadios(items: HTMLElement[], isChecked: (item: HTMLElement) => boolean): void {
+  let any = false;
+  for (const it of items) {
+    const on = isChecked(it);
+    it.setAttribute('role', 'radio');
+    it.setAttribute('aria-checked', String(on));
+    it.removeAttribute('aria-pressed');
+    it.tabIndex = on ? 0 : -1;
+    any ||= on;
+  }
+  if (!any && items[0]) items[0].tabIndex = 0;
 }
 
 /** 모달 안에서만 Tab 이동 (열린 동안 뒤 화면으로 포커스가 빠지지 않게) */
