@@ -745,3 +745,68 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .hud.in-lobby .lock-overlay, .hud.in-lobby .hp, .hud.in-lobby .slots, .hud.in-lobby .weapon-card, .hud.in-lobby .crosshair,
 .hud.in-lobby .labels, .hud.in-lobby .killfeed, .hud.in-lobby .match-bar, .hud.in-lobby .hud-notice, .hud.in-lobby .reload,
 .hud.in-lobby .death, .hud.in-lobby .scope, .hud.in-lobby .countdown { display: none !important; }
+
+/* ================= 인게임 실시간 상황판 (ui/Scoreboard.ts) =================
+   화면 가운데 반투명 판 · PC는 Tab 누르는 동안(조작에 끼어들지 않게 포인터 없음), 터치는 판을 누르면 닫힘.
+   TDM = RED 왼쪽 · BLUE 오른쪽, FFA = 1~8위 한 줄. 닉네임은 굵은 고딕(길면 줄임, 킬·데스 칸과 안 겹침) */
+.scoreboard { position: absolute; inset: 0; z-index: 12; display: grid; place-items: center; pointer-events: none; }
+.scoreboard.hidden { display: none; }
+.touch-mode .scoreboard { pointer-events: auto; }
+.sb-card {
+  display: grid; width: min(460px, 92vw); max-height: 94%; gap: 8px; padding: 12px 14px 14px; overflow: hidden;
+  border: 3px solid #fff; border-radius: 20px; background: rgba(255, 252, 245, .9); color: var(--ink);
+  box-shadow: 0 5px 0 rgba(39, 50, 92, .18), 0 12px 30px rgba(39, 50, 92, .16); font-family: var(--font); font-weight: 900;
+}
+.sb-card.sb-tdm { width: min(720px, 94vw); }
+.sb-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sb-mode { color: #5b6582; font-size: 14px; white-space: nowrap; }
+.sb-score { display: flex; margin-right: auto; align-items: baseline; gap: 6px; font-size: 20px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sb-score i { color: #9aa3bd; font-style: normal; }
+.sb-red-text { color: #e0404f; }
+.sb-blue-text { color: #2f6cf0; }
+.sb-time { padding: 2px 10px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 16px; font-variant-numeric: tabular-nums; }
+.sb-close { display: none; padding: 3px 10px; border: 2px solid rgba(39, 50, 92, .15); border-radius: 10px; background: #fff; font-size: 12px; }
+.touch-mode .sb-close { display: inline-block; }
+.sb-teams { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.sb-team { display: grid; align-content: start; gap: 3px; padding: 6px; border-radius: 14px; }
+.sb-team-red { background: rgba(255, 138, 149, .16); }
+.sb-team-blue { background: rgba(111, 155, 255, .16); }
+.sb-team-title { display: flex; align-items: center; justify-content: space-between; padding: 3px 10px; border-radius: 10px; color: #fff; font-size: 13px; letter-spacing: .5px; }
+.sb-team-title b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.sb-team-red .sb-team-title { background: linear-gradient(180deg, #ff8a95, #ec4a5a); }
+.sb-team-blue .sb-team-title { background: linear-gradient(180deg, #6f9bff, #2f6cf0); }
+.sb-list { display: grid; gap: 3px; }
+.sb-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 34px 34px; align-items: center; gap: 6px; min-height: 30px; padding: 0 8px; border-radius: 10px; font-size: 15px; }
+.sb-row.sb-no-rank { grid-template-columns: minmax(0, 1fr) 34px 34px; }
+.sb-row-head { min-height: 18px; color: #8a93ad; font-size: 11px; }
+.sb-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-name em { margin-left: 5px; color: #9e3650; font-size: 10px; font-style: normal; }
+.sb-k, .sb-d { text-align: center; font-variant-numeric: tabular-nums; }
+.sb-row:not(.sb-row-head) .sb-d { color: #5b6582; }
+.sb-rank { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: #e2e5ee; font-size: 12px; }
+.sb-rank-1 { background: #ffd45e; }
+.sb-rank-2 { background: #cfd9ef; }
+.sb-rank-3 { background: #ffc4a3; }
+/* 내 줄: 은은한 노랑 */
+.sb-me { background: rgba(255, 212, 94, .38); }
+.sb-left { opacity: .5; }
+/* 모바일 가로 (667×375): 글자·간격을 줄여 8명이 한 화면에 */
+@media (max-height: 460px) {
+  .sb-card { gap: 5px; padding: 8px 10px 10px; border-width: 2px; border-radius: 16px; }
+  .sb-head { gap: 8px; }
+  .sb-mode { font-size: 11px; }
+  .sb-score { font-size: 16px; }
+  .sb-time { padding: 1px 8px; font-size: 13px; }
+  .sb-teams { gap: 8px; }
+  .sb-team { gap: 2px; padding: 4px; }
+  .sb-team-title { padding: 2px 8px; font-size: 11px; }
+  .sb-team-title b { font-size: 15px; }
+  .sb-list { gap: 2px; }
+  .sb-row { grid-template-columns: 20px minmax(0, 1fr) 28px 28px; gap: 5px; min-height: 24px; padding: 0 6px; font-size: 13px; }
+  .sb-row.sb-no-rank { grid-template-columns: minmax(0, 1fr) 28px 28px; }
+  .sb-row-head { min-height: 14px; font-size: 10px; }
+  .sb-rank { width: 18px; height: 18px; font-size: 11px; }
+}
+/* 터치: 상단 점수판을 누르면 상황판 (조작 중에만 터치 레이어 위로) */
+.hud.touch.playing .match-bar { z-index: 9; pointer-events: auto; touch-action: none; cursor: pointer; }
+

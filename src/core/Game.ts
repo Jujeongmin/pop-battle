@@ -55,6 +55,7 @@ import {
 import type { MeleeResult } from '../combat/melee';
 import { WeaponSystem, type ShotPrediction, type ShotResult } from '../combat/WeaponSystem';
 import { AudioManager } from '../audio/AudioManager';
+import { Scoreboard, type ScoreRow } from '../ui/Scoreboard';
 import { GameSounds, type SoundActor } from '../audio/GameSounds';
 import { FIRE_SOUND, MIX, type MusicId } from '../config/audio';
 import { CAMERA, CHARACTER, MOVEMENT, RENDER } from '../config/gameConfig';
@@ -178,6 +179,8 @@ export class Game {
   /** 결과 화면 배경음 (배너 동안 null = 조용히, 카드가 뜨면 승리·패배) */
   private resultMusic: MusicId | null = null;
   private readonly soundActors: SoundActor[] = [];
+  /** 인게임 실시간 상황판 (PC Tab 누르는 동안 / 모바일 점수판 터치) */
+  private scoreboard!: Scoreboard;
   private readonly resizeObserver = new ResizeObserver(() => this.resize());
   /** 모바일 조이스틱 자동 달리기 (입력 장치가 조이스틱일 때만) */
   private readonly autoSprint = new JoystickAutoSprint();
@@ -374,6 +377,11 @@ export class Game {
     // 소리: 첫 사용자 입력(클릭·터치·키)에서 오디오 시작 (모바일 자동 재생 제한), UI 클릭음은 화면 전체 위임
     this.audio.attachUnlock(window);
     this.sounds = new GameSounds(this.audio, container);
+    this.scoreboard = new Scoreboard(container);
+    this.scoreboard.onClose = () => this.scoreboard.setOpen(false);
+    this.hud.onMatchBarTap = () => this.scoreboard.setOpen(!this.scoreboard.open && this.scoreboardAllowed);
+    window.addEventListener('keyup', this.onScoreboardKeyUp, { signal: this.abort.signal, capture: true });
+    window.addEventListener('blur', () => this.scoreboard.setOpen(false), { signal: this.abort.signal });
     this.input.onLockChange = (locked) => {
       this.hud.setLocked(locked);
       // 브라우저 자동 재생 정책: 사용자 클릭(포인터 잠금) 뒤에 오디오 시작
@@ -392,14 +400,65 @@ export class Game {
   }
 
   private readonly onLobbyKey = (e: KeyboardEvent): void => {
-    if (e.code !== 'Tab' || !this.lobbyShown || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.code !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey) return;
     const t = e.target as HTMLElement | null;
     const typing =
       !!t && (t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button'].includes((t as HTMLInputElement).type)));
     if (typing) return;
+    // 매치 중: Tab을 누르는 동안 상황판 (브라우저 포커스 이동 막음, 반복 입력은 무시 → 깜빡임 없음)
+    if (!this.lobbyShown) {
+      if (!this.scoreboardAllowed) return;
+      e.preventDefault();
+      if (!e.repeat) this.scoreboard.setOpen(true);
+      return;
+    }
     e.preventDefault();
     if (!e.repeat) this.lobby!.toggleMenu();
   };
+
+  private readonly onScoreboardKeyUp = (e: KeyboardEvent): void => {
+    if (e.code !== 'Tab' || !this.scoreboard.open) return;
+    e.preventDefault();
+    this.scoreboard.setOpen(false);
+  };
+
+  /** 상황판을 열 수 있음: 매치 진행 중(카운트다운·전투), 일시정지·결과 화면·로비가 아닐 때 */
+  private get scoreboardAllowed(): boolean {
+    return this.matchRunning && !this.lobbyShown && !this.pauseMenu?.visible && !this.resultScreen?.open && this.match.state !== 'FINISHED';
+  }
+
+  /** 상황판 데이터 (열려 있을 때 매 프레임): 멀티 = 서버 기록(나간 사람 포함, 결과 화면과 같은 값), 연습전 = 로컬 기록 */
+  private updateScoreboard(): void {
+    const sb = this.scoreboard;
+    if (!sb.open) return;
+    if (!this.scoreboardAllowed) {
+      sb.setOpen(false);
+      return;
+    }
+    const s = this.net?.session;
+    if (this.netGame && s) {
+      const rule = NET_MODE_RULES[s.mode];
+      const myName = s.nickOf(s.me) ?? this.nick ?? '나';
+      const rows: ScoreRow[] = [
+        ...Object.entries(s.players).map(([acc, p]) => ({ id: acc, name: acc === s.me ? myName : s.displayName(acc), k: p.k, d: p.d, me: acc === s.me, team: p.team ?? null, left: false, order: p.slot })),
+        ...Object.values(s.gone).map((g) => ({ id: g.account, name: s.displayName(g.account), k: g.k, d: g.d, me: false, team: g.team ?? null, left: true, order: g.slot + 100 })),
+      ];
+      sb.update({ teams: rule.teams, label: rule.short, timeLeft: this.netScoreHud()?.timeLeft ?? null, blue: s.teamScore.BLUE, red: s.teamScore.RED, goal: rule.scoreToWin, rows });
+      return;
+    }
+    const m = this.match;
+    const rows: ScoreRow[] = m.stats.standings().map((st, i) => ({
+      id: st.id,
+      name: st.isLocal ? (this.nick ?? '나') : (this.bots.bots.find((b) => b.id === st.id)?.name ?? st.name),
+      k: st.kills,
+      d: st.deaths,
+      me: st.isLocal,
+      team: null,
+      left: false,
+      order: i,
+    }));
+    sb.update({ teams: false, label: '연습전 · 개인전', timeLeft: m.timeLeft, blue: 0, red: 0, goal: m.rules.scoreToWin, rows });
+  }
 
   async init(onProgress: (text: string) => void): Promise<void> {
     onProgress('물리 엔진 초기화…');
@@ -1026,6 +1085,7 @@ export class Game {
     // 멀티 측정 패널: F9 네트워크 디버그를 열었을 때만 (정식 HUD와 겹치지 않게)
     this.netHud?.update(dt, this.netGame && !!this.netPanel?.isOpen);
     this.updateSounds();
+    this.updateScoreboard();
     this.mpRefreshTimer -= dt;
     if (this.mpRefreshTimer <= 0 && this.mpMenu) {
       this.mpRefreshTimer = 0.25;

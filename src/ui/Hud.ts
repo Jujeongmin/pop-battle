@@ -226,6 +226,8 @@ export class Hud {
   onTouchSettings: (() => void) | null = null;
   /** 터치 모드: 시작 카드 자체(버튼 밖)를 눌러 시작·재개 (작은 화면에서 카드가 화면을 거의 덮음) */
   onTouchStart: (() => void) | null = null;
+  /** 터치 모드: 상단 점수판(시간·점수)을 눌렀을 때 (상황판 열기·닫기) */
+  onMatchBarTap: (() => void) | null = null;
   /** 우측 상단 실시간 킬로그 */
   private readonly killFeed: KillFeed;
 
@@ -347,6 +349,13 @@ export class Hud {
     this.hurtFlash = q('.hurt-flash');
     this.labelHost = q('.labels');
     this.matchBar = q('.match-bar');
+    // 터치: 점수판 누르기 → 상황판 (아래 시점 회전·사격으로 내려가지 않게)
+    this.matchBar.addEventListener('pointerdown', (e) => {
+      if (!this.root.classList.contains('touch')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.onMatchBarTap?.();
+    });
     this.countdownEl = q('.countdown');
     this.noticeEl = q('.hud-notice');
     q<HTMLButtonElement>('.mp-open').addEventListener('click', (e) => {
