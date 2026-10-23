@@ -61,15 +61,15 @@
 }
 .pb-res-cover .pb-res-wipe { clip-path: circle(75% at 50% 50%); }
 
-/* ---------- 제목·점수 ---------- */
+/* ---------- 위: 제목 · 한 줄 설명 · 스코어보드 ---------- */
 .pb-res-head {
   position: absolute;
   left: 50%;
-  top: clamp(8px, 3vh, 26px);
+  top: clamp(6px, 2vh, 20px);
   display: grid;
   justify-items: center;
   gap: 4px;
-  width: min(92vw, 640px);
+  width: min(96vw, 980px);
   transform: translateX(-50%);
   opacity: 0;
 }
@@ -80,7 +80,7 @@
 }
 .pb-res-title {
   font-family: var(--res-font);
-  font-size: clamp(34px, 9vh, 68px);
+  font-size: clamp(34px, 8vh, 64px);
   line-height: 1;
   letter-spacing: 1.5px;
   color: #ffd45e;
@@ -91,117 +91,133 @@
 .pb-res-o-lose .pb-res-title { color: #bcd3ff; -webkit-text-stroke-color: #3f5fae; text-shadow: 0 5px 0 #3f5fae, 0 10px 22px rgba(39, 50, 92, .3); }
 .pb-res-o-draw .pb-res-title { color: #a8ecd2; -webkit-text-stroke-color: #2a8a68; text-shadow: 0 5px 0 #2a8a68, 0 10px 22px rgba(20, 80, 60, .3); }
 .pb-res-sub {
-  padding: 3px 12px;
+  padding: 2px 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, .82);
-  box-shadow: 0 2px 0 rgba(39, 50, 92, .15);
-  font-size: clamp(11px, 2.4vh, 14px);
+  color: var(--ink);
+  font-size: 13px;
   font-weight: 800;
   white-space: nowrap;
 }
-.pb-res-score { display: flex; align-items: center; gap: 10px; }
-.pb-res-vs { font-family: var(--res-font); font-size: clamp(22px, 5vh, 34px); color: #fff; -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; }
-.pb-res-team {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 12px;
-  border-radius: 16px;
-  color: #fff;
-  box-shadow: 0 4px 0 rgba(39, 50, 92, .25);
-}
-.pb-res-team-blue { background: linear-gradient(180deg, #6f9bff, #2f6cf0); }
-.pb-res-team-red { flex-direction: row-reverse; background: linear-gradient(180deg, #ff8a95, #ec4a5a); }
-.pb-res-team-name { font-family: var(--res-font); font-size: clamp(11px, 2.6vh, 15px); letter-spacing: .5px; }
-.pb-res-team-score { font-family: var(--res-font); font-size: clamp(24px, 6vh, 40px); font-weight: 400; line-height: 1; }
-.pb-res-team-win { outline: 3px solid #ffd45e; outline-offset: 1px; }
 
-/* ---------- 참가자 카드 (캐릭터 발밑, 위치는 JS) ---------- */
-.pb-res-cards { position: absolute; inset: 0; }
-.pb-res-card {
-  position: absolute;
-  left: 0;
-  top: 0;
-  display: grid;
-  justify-items: center;
-  gap: 1px;
-  width: 132px;
-  padding: 5px 8px 7px;
+/* 스코어보드: Kenney 흰 판 하나를 칸으로 나눔 (작은 카드 여러 장 대신) */
+.pb-res-board {
+  display: flex;
+  max-width: 100%;
+  align-items: stretch;
+  margin-top: 2px;
   border-style: solid;
   border-color: transparent;
-  border-width: 5px 5px 7px;
-  border-image-source: var(--k-white);
-  border-image-slice: var(--k-slice);
-  border-image-width: var(--k-width);
-  opacity: 0;
-  /* 위치는 JS가 translate로 (발밑 x · 카드 줄 y), 가운데 맞춤·등장 크기는 위쪽 가운데 기준 */
-  transform: translateX(-50%);
-  transform-origin: 0 0;
-  scale: .6;
-  transition: opacity .2s ease, scale .32s cubic-bezier(.2, 1.5, .35, 1);
+  border-width: 6px 6px 9px;
+  border-image: var(--k-white) var(--k-slice) / 6px 6px 9px 6px stretch;
+  background: #fffdf6;
+  background-clip: padding-box;
+  pointer-events: auto;
 }
-.pb-res-card.pb-res-in { opacity: 1; scale: 1; }
-.pb-res-card.pb-res-back { width: 112px; }
-.pb-res-card.pb-res-back.pb-res-in { scale: .9; }
-.pb-res-card.pb-res-me { border-image-source: var(--k-selected); }
-.pb-res-card-top { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 4px; max-width: 100%; }
-.pb-res-card-top .pb-res-nick { min-width: 0; }
-.pb-res-nick { overflow: hidden; font-family: var(--res-font); font-size: 15px; font-weight: 400; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
-.pb-res-you { flex: 0 0 auto; padding: 0 5px; border-radius: 6px; background: #ffd45e; color: #6b4500; font-size: 10px; font-weight: 900; line-height: 16px; }
-.pb-res-char { color: rgba(39, 50, 92, .6); font-size: 10px; font-weight: 850; letter-spacing: .4px; white-space: nowrap; }
-.pb-res-kd { display: flex; gap: 6px; }
-.pb-res-kd span { padding: 0 6px; border-radius: 7px; font-family: var(--res-font); font-size: 14px; line-height: 19px; }
+.pb-res-cell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  flex: 1 1 0;
+  align-content: center;
+  gap: 3px;
+  padding: 5px 14px;
+}
+.pb-res-board-ffa .pb-res-cell { width: 200px; }
+.pb-res-cell + .pb-res-cell { border-left: 2px dashed rgba(39, 50, 92, .14); }
+.pb-res-cell.pb-res-first { background: linear-gradient(180deg, #fff2bf, #ffe48a); }
+.pb-res-cell.pb-res-me { box-shadow: inset 0 0 0 3px #ffd45e; }
+.pb-res-cell.pb-res-first.pb-res-me { box-shadow: inset 0 0 0 3px #f2a623; }
+.pb-res-cell.pb-res-left { filter: grayscale(.6); opacity: .75; }
+.pb-res-cell-top { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.pb-res-cell-bottom { display: flex; align-items: center; gap: 5px; padding-left: 32px; white-space: nowrap; }
+.pb-res-nick { min-width: 0; overflow: hidden; color: var(--ink); font-size: 16px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.pb-res-nick.pb-res-nick-long { display: -webkit-box; font-size: 14px; letter-spacing: -.4px; line-height: 1.1; white-space: normal; word-break: break-all; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.pb-res-k,
+.pb-res-d { padding: 0 6px; border-radius: 7px; font-family: var(--res-font); font-size: 16px; line-height: 21px; }
 .pb-res-k { background: #ffe9a8; color: #7a4e00; }
 .pb-res-d { background: #e6ecff; color: #3f5fae; }
-.pb-res-rank {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #e2e5ee;
-  font-family: var(--res-font);
-  font-size: 13px;
-  line-height: 1;
-}
-.pb-res-rank-1 { background: #ffd45e; color: #6b4500; }
-.pb-res-rank-2 { background: #bcd3ff; color: #27407e; }
-.pb-res-rank-3 { background: #ffb27a; color: #6b3200; }
-.pb-res-card-blue .pb-res-nick { color: #2f6cf0; }
-.pb-res-card-red .pb-res-nick { color: #e0404f; }
-.pb-res-left { filter: grayscale(.6); }
-.pb-res-left.pb-res-in { opacity: .75; }
-
-/* MVP: 카드 위 리본 + 반짝임 테두리 */
+.pb-res-you { padding: 0 5px; border-radius: 6px; background: #ffd45e; color: #6b4500; font-size: 11px; font-weight: 900; line-height: 18px; }
+.pb-res-gone { color: #9e3650; font-size: 11px; font-weight: 900; }
 .pb-res-mvp-tag {
-  position: absolute;
-  top: -22px;
-  left: 50%;
-  padding: 1px 10px;
+  padding: 0 7px;
   border: 2px solid #fff;
-  border-radius: 10px;
+  border-radius: 9px;
   background: linear-gradient(180deg, #ff9fc1, #f2649a);
   color: #fff;
   font-family: var(--res-font);
   font-size: 13px;
-  letter-spacing: 1px;
-  line-height: 16px;
-  box-shadow: 0 3px 0 rgba(140, 30, 80, .35);
-  transform: translateX(-50%);
+  letter-spacing: .8px;
+  line-height: 17px;
+  box-shadow: 0 2px 0 rgba(140, 30, 80, .3);
 }
-.pb-res-mvp.pb-res-in .pb-res-mvp-tag { animation: pb-res-mvp 1.6s ease-in-out infinite; }
-@keyframes pb-res-mvp {
-  0%, 100% { transform: translateX(-50%) scale(1); }
-  50% { transform: translateX(-50%) scale(1.1); }
+/* 순위 메달 */
+.pb-res-medal {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: #e2e5ee;
+  color: var(--ink);
+  font-family: var(--res-font);
+  font-size: 15px;
+  line-height: 1;
 }
+.pb-res-medal-1 { background: radial-gradient(circle at 35% 30%, #fff6c8, #ffc531 70%); color: #6b4500; }
+.pb-res-medal-2 { background: radial-gradient(circle at 35% 30%, #ffffff, #b9c8e6 70%); }
+.pb-res-medal-3 { background: radial-gradient(circle at 35% 30%, #ffe3cf, #ff9f6e 70%); color: #6b3200; }
 
-/* 1위 왕관 (머리 위, 위치는 JS) */
+/* TDM: [BLUE 점수 · 두 명] : [두 명 · RED 점수] */
+.pb-res-side { display: flex; min-width: 0; flex: 1 1 0; align-items: stretch; }
+.pb-res-side .pb-res-cell { width: 170px; }
+.pb-res-side-score { display: grid; flex: 0 0 auto; align-content: center; justify-items: center; padding: 2px 12px; color: #fff; }
+.pb-res-side-score span { font-family: var(--res-font); font-size: 13px; letter-spacing: .6px; }
+.pb-res-side-score b { font-family: var(--res-font); font-size: 34px; font-weight: 400; line-height: 1; }
+.pb-res-side-blue .pb-res-side-score { background: linear-gradient(180deg, #6f9bff, #2f6cf0); }
+.pb-res-side-red .pb-res-side-score { background: linear-gradient(180deg, #ff8a95, #ec4a5a); }
+.pb-res-side-blue .pb-res-cell { background: rgba(111, 155, 255, .1); }
+.pb-res-side-red .pb-res-cell { background: rgba(255, 138, 149, .1); }
+.pb-res-side-win { box-shadow: inset 0 0 0 3px #ffc531; }
+.pb-res-side-win .pb-res-side-score::before { content: '\2605  WIN'; color: #fff3b0; font-family: var(--res-font); font-size: 11px; }
+.pb-res-vs { align-self: center; padding: 0 8px; color: var(--ink); font-family: var(--res-font); font-size: 28px; }
+
+/* ---------- 가운데: 캐릭터 머리 위 이름표 (위치는 JS) ---------- */
+.pb-res-plates { position: absolute; inset: 0; }
+.pb-res-plate {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  max-width: 150px;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 3px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 3px 0 rgba(39, 50, 92, .25);
+  opacity: 0;
+  transform: translate(-50%, -100%);
+  transition: opacity .25s ease;
+  white-space: nowrap;
+}
+.pb-res-plate.pb-res-in { opacity: 1; }
+.pb-res-plate.pb-res-me { background: #fff3c4; }
+.pb-res-plate-blue { border-color: #2f6cf0; }
+.pb-res-plate-red { border-color: #e0404f; }
+.pb-res-plate .pb-res-medal { width: 22px; height: 22px; font-size: 13px; }
+.pb-res-plate-nick { min-width: 0; max-width: 7em; overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 900; text-overflow: ellipsis; }
+.pb-res-plate .pb-res-mvp-tag { font-size: 11px; line-height: 15px; }
+
+/* 1위 왕관 (이름표 위, 위치는 JS) */
 .pb-res-crown {
   position: absolute;
   left: 0;
   top: 0;
-  width: 46px;
+  width: 40px;
   opacity: 0;
   transform: translate(-50%, -100%);
   transition: opacity .25s ease;
@@ -211,7 +227,7 @@
 .pb-res-crown.pb-res-in svg { animation: pb-res-crown 1.8s ease-in-out infinite; }
 @keyframes pb-res-crown {
   0%, 100% { transform: translateY(0) rotate(-6deg); }
-  50% { transform: translateY(-5px) rotate(6deg); }
+  50% { transform: translateY(-4px) rotate(6deg); }
 }
 
 /* ---------- 버튼 ---------- */
@@ -267,17 +283,54 @@
 }
 .pb-res-note:empty { display: none; }
 
-/* ---------- 낮은 화면 (모바일 가로) ---------- */
+/* ---------- 큰 화면 (1920×1080 등): 결과판도 비례해서 크게 ---------- */
+@media (min-width: 1600px) and (min-height: 900px) {
+  .pb-res-board-ffa .pb-res-cell { width: 260px; }
+  .pb-res-side .pb-res-cell { width: 220px; }
+  .pb-res-cell { padding: 8px 18px; }
+  .pb-res-nick { font-size: 20px; }
+  .pb-res-nick.pb-res-nick-long { font-size: 17px; }
+  .pb-res-medal { width: 32px; height: 32px; font-size: 18px; }
+  .pb-res-cell-bottom { padding-left: 38px; }
+  .pb-res-k,
+  .pb-res-d { font-size: 19px; line-height: 25px; }
+  .pb-res-side-score b { font-size: 44px; }
+  .pb-res-plate-nick { font-size: 17px; }
+  .pb-res-plate { max-width: 200px; }
+  .pb-res-crown { width: 50px; }
+  .pb-res-btn { min-width: 160px; min-height: 54px; font-size: 21px; }
+}
+
+/* ---------- 낮은 화면 (모바일 가로 667×375 · 844×390) ---------- */
 @media (max-height: 460px) {
-  .pb-res-card { width: 124px; padding: 3px 6px 5px; }
-  .pb-res-card.pb-res-back { width: 108px; }
+  .pb-res-head { gap: 2px; }
+  .pb-res-title { font-size: 30px; -webkit-text-stroke-width: 2px; text-shadow: 0 3px 0 #b86e00; }
+  .pb-res-o-lose .pb-res-title { text-shadow: 0 3px 0 #3f5fae; }
+  .pb-res-o-draw .pb-res-title { text-shadow: 0 3px 0 #2a8a68; }
+  .pb-res-sub { display: none; }
+  .pb-res-board { border-width: 5px 5px 7px; border-image-width: 5px 5px 7px 5px; }
+  .pb-res-cell { gap: 1px; padding: 3px 8px; }
+  .pb-res-board-ffa .pb-res-cell { width: 150px; }
+  .pb-res-side .pb-res-cell { width: 128px; }
+  .pb-res-cell-top { gap: 4px; }
+  .pb-res-cell-bottom { gap: 3px; padding-left: 0; }
+  .pb-res-board-ffa .pb-res-cell-bottom { padding-left: 26px; }
+  .pb-res-plate { max-width: 132px; }
   .pb-res-nick { font-size: 13px; }
-  /* 내 카드는 노란 테두리로 구분 → 낮은 화면에서는 '나' 표시를 빼 닉네임 자리 확보 */
+  .pb-res-nick.pb-res-nick-long { font-size: 11px; }
+  .pb-res-medal { width: 22px; height: 22px; font-size: 13px; }
+  .pb-res-k,
+  .pb-res-d { padding: 0 4px; font-size: 13px; line-height: 17px; }
+  .pb-res-mvp-tag { padding: 0 5px; font-size: 11px; line-height: 14px; }
   .pb-res-you { display: none; }
-  .pb-res-card { padding-inline: 4px; }
-  .pb-res-char { font-size: 9px; }
-  .pb-res-kd span { font-size: 12px; line-height: 16px; }
-  .pb-res-crown { width: 34px; }
+  .pb-res-side-score { padding: 2px 8px; }
+  .pb-res-side-score b { font-size: 24px; }
+  .pb-res-side-score span { font-size: 11px; }
+  .pb-res-vs { padding: 0 4px; font-size: 20px; }
+  .pb-res-plate { max-width: 116px; padding: 1px 6px 1px 2px; }
+  .pb-res-plate .pb-res-medal { width: 18px; height: 18px; font-size: 11px; }
+  .pb-res-plate-nick { font-size: 12px; }
+  .pb-res-crown { width: 30px; }
   .pb-res-btn { min-width: 112px; min-height: 40px; font-size: 16px; }
   .pb-res-note { bottom: calc(clamp(8px, 3vh, 24px) + 48px); }
 }
