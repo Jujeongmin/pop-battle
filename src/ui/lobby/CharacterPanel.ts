@@ -1,6 +1,8 @@
 // CHARACTER (전체 화면): 왼쪽 큰 3D 전신(게임 쇼케이스) + 오른쪽 6종 카드. 카드마다 전신 이미지·이름·HP·이동속도 게이지를 늘 보여
 // 한눈에 비교한다 (게이지는 6종 중 가장 큰 값을 기준으로 같은 스케일, 값은 캐릭터 데이터 그대로).
 // 카드를 누르면 3D 미리보기만 바뀌고(장착과 별개), 아래 장착 버튼으로 장착한다. 잠긴 캐릭터는 미리보기·능력치만.
+// 유료 캐릭터(SHONI·BAM): 카드에 가격, 아래 버튼이 VXShop 구매 버튼 (지급은 서버, 보유가 확인되면 바로 장착 버튼으로).
+import { CHARACTER_PRICE_VX } from '../../net/shared/shop';
 import { button, el, ICON, markRadios, radioGroup, type LobbyCharacter, type LobbyHost, type LobbyPanel } from './lobbyDom';
 
 export class CharacterPanel implements LobbyPanel {
@@ -16,6 +18,8 @@ export class CharacterPanel implements LobbyPanel {
   private loading = false;
   private active = false;
   private renderVersion = 0;
+  /** 상점·보유 상태 구독 해제 */
+  private offShop: (() => void) | null = null;
 
   constructor(
     private readonly host: LobbyHost,
@@ -47,20 +51,7 @@ export class CharacterPanel implements LobbyPanel {
         this.gauge('이동', 'lb-g-speed', character.speed / speedMax, `${Math.round(character.speed * 100)}%`),
       );
       card.append(figure, copy, stats, el('span', 'lb-card-equipped', '✓ 장착 중'), el('span', 'lb-card-preview', '미리보기'));
-      if (character.locked) {
-        const lock = el('span', 'lb-lock');
-        lock.innerHTML = `${ICON.lock}<i>잠김</i>`;
-        card.append(lock);
-      }
-      card.classList.toggle('lb-locked', character.locked);
-      card.title = character.locked ? `${character.name} · 잠김 · 미리보기` : `${character.name} 미리보기`;
-      // 잠긴 캐릭터: 미리보기는 되지만 장착 불가 → 이유를 화면 읽기에도 연결
-      if (character.locked) {
-        const why = el('span', 'lb-sr-only', '잠긴 캐릭터 · 미리보기만 가능, 장착하려면 해제가 필요해요');
-        why.id = `lb-char-lock-${character.id}`;
-        card.append(why);
-        card.setAttribute('aria-describedby', why.id);
-      }
+      this.decorateLock(card, character);
       grid.appendChild(card);
       void this.loadFigure(card, character, version);
       return card;
@@ -75,7 +66,17 @@ export class CharacterPanel implements LobbyPanel {
     this.note = el('p', 'lb-char-note');
     this.note.setAttribute('aria-live', 'polite');
     info.append(this.nameEl, this.stateEl, this.note);
-    this.equipButton = button('', 'lb-char-equip', () => void this.equip(version));
+    this.equipButton = button('', 'lb-char-equip', () => {
+      // 유료 잠김: 구매(또는 반영 재확인), 그 외: 장착
+      const c = this.characters.find((item) => item.id === this.preview);
+      const offer = c && !c.selectable ? this.host.characterOffer(c.id) : null;
+      if (offer) {
+        if (offer.delayed) this.host.recheckPurchase(offer.charId);
+        else if (offer.canBuy) this.host.buyCharacter(offer.charId);
+        return;
+      }
+      void this.equip(version);
+    });
     bar.append(info, this.equipButton);
     body.appendChild(bar);
 
@@ -83,10 +84,49 @@ export class CharacterPanel implements LobbyPanel {
     const equipped = this.host.currentCharacter();
     const first = this.characters.find((character) => character.id === equipped) ?? this.characters[0];
     if (first) this.show(first, true);
+    // 결제·보유 확인·상품 조회 결과가 오면 잠금·가격·버튼을 바로 바꿈 (패널이 다시 그려지면 이전 구독 해제)
+    this.offShop?.();
+    this.offShop = this.host.onShopChange(() => {
+      if (version !== this.renderVersion || !grid.isConnected) {
+        this.offShop?.();
+        this.offShop = null;
+        return;
+      }
+      this.characters = this.host.characters();
+      for (const card of this.cards) {
+        const c = this.characters.find((x) => x.id === card.dataset.id);
+        if (c) this.decorateLock(card, c);
+      }
+      this.mark();
+      const visible = this.characters.find((x) => x.id === this.preview);
+      if (visible && !this.loading) this.updateAction(visible);
+    });
+  }
+
+  /** 잠금 표시: 자물쇠 + (유료면) 가격, 화면 읽기 설명. 보유하면 지움 */
+  private decorateLock(card: HTMLButtonElement, character: LobbyCharacter): void {
+    card.querySelector('.lb-lock')?.remove();
+    card.querySelector(`#lb-char-lock-${character.id}`)?.remove();
+    card.removeAttribute('aria-describedby');
+    card.classList.toggle('lb-locked', character.locked);
+    card.title = character.locked ? `${character.name} · 잠김 · 미리보기` : `${character.name} 미리보기`;
+    if (!character.locked) return;
+    const offer = this.host.characterOffer(character.id);
+    const price = offer ? `${offer.price ?? CHARACTER_PRICE_VX} VX` : '';
+    const lock = el('span', 'lb-lock');
+    lock.innerHTML = `${ICON.lock}<i>${price || '잠김'}</i>`;
+    card.append(lock);
+    // 잠긴 이유·해제 방법을 화면 읽기에도 연결
+    const why = el('span', 'lb-sr-only', offer ? `잠긴 캐릭터 · ${price}에 구매하면 장착할 수 있어요 · 지금은 미리보기만` : '잠긴 캐릭터 · 미리보기만 가능');
+    why.id = `lb-char-lock-${character.id}`;
+    card.append(why);
+    card.setAttribute('aria-describedby', why.id);
   }
 
   /** 패널이 사라진 뒤 끝난 비동기 장착 응답이 옛 DOM을 바꾸지 않게 한다. */
   close(): void {
+    this.offShop?.();
+    this.offShop = null;
     this.renderVersion++;
     this.active = false;
     this.loading = false;
@@ -184,6 +224,8 @@ export class CharacterPanel implements LobbyPanel {
     this.stateEl!.textContent = equipped ? '장착 중' : character.locked ? '잠김 · 미리보기' : '미리보기 중';
 
     const equip = this.equipButton!;
+    equip.classList.remove('lb-equip-buy');
+    equip.removeAttribute('aria-label');
     equip.classList.toggle('lb-loading', result === 'loading');
     equip.classList.toggle('lb-success', result === 'success');
     equip.classList.toggle('lb-equip-locked', !character.selectable);
@@ -199,8 +241,22 @@ export class CharacterPanel implements LobbyPanel {
       equip.textContent = '장착 중';
       this.note!.textContent = result === 'failure' ? '지금은 캐릭터를 바꿀 수 없어요.' : '';
     } else if (!character.selectable) {
+      const offer = this.host.characterOffer(character.id);
+      if (offer) {
+        // 유료: 가격(VXShop 조회값 우선) 구매 버튼, 결제 중·확인 중엔 막음, 반영이 늦으면 다시 확인
+        equip.classList.add('lb-equip-buy');
+        equip.disabled = !(offer.canBuy || offer.delayed);
+        equip.innerHTML = offer.delayed
+          ? '<span>다시 확인</span>'
+          : offer.busy
+            ? '<span>결제 진행 중…</span>'
+            : `<span class="lb-equip-lock">${ICON.lock}</span><span>${offer.price ?? CHARACTER_PRICE_VX} VX 구매</span>`;
+        equip.setAttribute('aria-label', offer.delayed ? '구매 반영 다시 확인' : `${character.name} ${offer.price ?? CHARACTER_PRICE_VX} VX에 구매`);
+        this.note!.textContent = offer.note;
+        return;
+      }
       equip.innerHTML = `<span class="lb-equip-lock">${ICON.lock}</span><span>잠김</span>`;
-      this.note!.textContent = '잠긴 캐릭터 · 미리보기만 가능해요 (해금 준비 중)';
+      this.note!.textContent = '잠긴 캐릭터 · 미리보기만 가능해요';
     } else {
       equip.textContent = '장착하기';
       this.note!.textContent = result === 'failure' ? '지금은 캐릭터를 바꿀 수 없어요.' : '';

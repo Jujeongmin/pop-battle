@@ -96,7 +96,7 @@ export class Lobby {
       this.characterPanel,
       new LoadoutPanel(host),
       new RankingPanel(host, () => this.closeMenu()),
-      new ShopPanel(host),
+      new ShopPanel(host, () => openPanel('character')),
       new SettingsPanel(host),
     ]) {
       this.panels.set(panel.id, panel);
@@ -334,41 +334,21 @@ export class Lobby {
     icons.setAttribute('aria-label', '로비 메뉴');
     for (const item of NAV) {
       if (item.id === 'play' || item.id === 'create') continue;
-      // 상점: 구매 기능이 없어 비활성 (준비 중 표시 · 설명, 눌러도 막다른 화면으로 가지 않음)
-      const soon = item.id === 'shop';
       const navButton = button(
         '',
-        `lb-top-btn lb-top-icon-btn lb-top-${item.id}${soon ? ' lb-nav-soon' : ''}`,
+        `lb-top-btn lb-top-icon-btn lb-top-${item.id}`,
         () => {
-          if (soon) return showSoonTip();
           if (this.menu && this.open === item.id) this.closeMenu();
           else this.show(item.id);
         },
-        `<span class="lb-top-icon">${item.icon}</span><b>${item.korean}</b>${soon ? '<em class="lb-soon-badge">준비 중</em>' : ''}`,
+        `<span class="lb-top-icon">${item.icon}</span><b>${item.korean}</b>`,
       );
       navButton.id = `lb-tab-${item.id}`;
       navButton.setAttribute('role', 'tab');
       navButton.setAttribute('aria-selected', 'false');
       navButton.setAttribute('aria-controls', 'lb-panel');
-      navButton.setAttribute('aria-label', soon ? `${item.korean} (준비 중)` : item.korean);
-      navButton.title = soon ? '상점은 준비 중이에요 · 스킨 판매는 다음 업데이트' : item.korean;
-      // 준비 중 탭: 포커스는 받되(aria-disabled) 누르거나 포커스하면 이유 말풍선, 화면 읽기는 설명 연결
-      const tip = el('span', 'lb-soon-tip', '상점은 준비 중이에요 · 스킨 판매는 다음 업데이트');
-      let tipTimer = 0;
-      const showSoonTip = (): void => {
-        tip.classList.add('lb-on');
-        window.clearTimeout(tipTimer);
-        tipTimer = window.setTimeout(() => tip.classList.remove('lb-on'), 2600);
-      };
-      if (soon) {
-        tip.id = 'lb-shop-soon-tip';
-        tip.setAttribute('role', 'status');
-        navButton.append(tip);
-        navButton.setAttribute('aria-disabled', 'true');
-        navButton.setAttribute('aria-describedby', tip.id);
-        navButton.addEventListener('focus', showSoonTip, { signal: this.abort.signal });
-        navButton.addEventListener('blur', () => tip.classList.remove('lb-on'), { signal: this.abort.signal });
-      }
+      navButton.setAttribute('aria-label', item.korean);
+      navButton.title = item.korean;
       navButton.addEventListener(
         'keydown',
         (e) => {

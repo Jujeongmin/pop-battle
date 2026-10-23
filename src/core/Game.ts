@@ -1,4 +1,6 @@
 import { fullscreenAvailable, isExpanded, setExpanded, withFullscreenOffer } from '../ui/FullscreenPrompt';
+import { CharacterShop } from '../net/characterShop';
+import { isPaidCharacter } from '../net/shared/shop';
 import { CoachMarks, type CoachStep } from '../ui/CoachMarks';
 import type { RankingResult } from '../net/shared/ranking';
 import { levelInfo } from '../net/shared/progression';
@@ -28,6 +30,8 @@ import {
   CHARACTER_SELECT,
   CHARACTERS,
   isCharacterSelectable,
+  loadSavedCharacterId,
+  setCharacterOwnership,
   KILL_FEED_COLORS,
   KILL_FEED_TEAM_COLORS,
   PLAYER_CHARACTER,
@@ -221,6 +225,18 @@ export class Game {
   private pauseMenu: PauseMenu | null = null;
   /** 일시정지 조건이 처음 맞은 시각 (ms, -1 = 아님) */
   private pauseWantSince = -1;
+  /** 유료 캐릭터 상점 (VXShop). 보유 = 서버 shopOwned, 지급 = 서버 $onItemPurchased */
+  private readonly shop = new CharacterShop(async () => {
+    try {
+      if (this.netClient.status === 'no-verse') return null;
+      if (!(await withTimeout(this.netClient.connect(), 10000))) return null;
+      const r = await withTimeout(this.netClient.call<{ ok: boolean; chars: string[] }>('shopOwned'), 8000);
+      return r.ok && Array.isArray(r.chars) ? r.chars : null;
+    } catch (e) {
+      this.netClient.addLog('warn', `보유 캐릭터 확인 실패: ${errText(e)}`);
+      return null;
+    }
+  });
   /** 이번 매치에서 포인터 잠금을 한 번이라도 잡았는지 (못 잡았으면 일시정지 대신 마우스 고정 안내) */
   private matchLockSeen = false;
   /** 마지막으로 포인터 잠금을 잡은 시각 (잡자마자 풀리면 실패로 봄) */
@@ -416,6 +432,8 @@ export class Game {
     window.addEventListener('keyup', this.onScoreboardKeyUp, { signal: this.abort.signal, capture: true });
     window.addEventListener('blur', () => this.scoreboard.setOpen(false), { signal: this.abort.signal });
     this.input.kbm.onLockError = () => this.onLockFailed();
+    // 결과 화면에서는 커서로 버튼을 눌러야 함: 빈 곳 클릭(결과 화면은 클릭을 통과시킴)이 캔버스에 닿아도 다시 잠그지 않음
+    this.input.kbm.lockAllowed = () => !this.resultScreen?.open;
     this.input.onLockChange = (locked) => {
       this.hud.setLocked(locked);
       if (locked && !this.inLobby) {
@@ -719,7 +737,7 @@ export class Game {
       CHARACTER_IDS.map((id) => {
         const c = CHARACTERS[id];
         const sel = CHARACTER_SELECT[id];
-        return { id, name: c.name, role: sel.role, color: sel.color, maxHp: c.stats.maxHp, speed: c.stats.speed, hitSize: c.stats.hitSize, locked: sel.locked, selectable: isCharacterSelectable(id) };
+        return { id, name: c.name, role: sel.role, color: sel.color, maxHp: c.stats.maxHp, speed: c.stats.speed, hitSize: c.stats.hitSize, locked: !isCharacterSelectable(id), selectable: isCharacterSelectable(id) };
       }),
       (id) => void this.selectCharacter(id as CharacterId),
     );
@@ -754,6 +772,11 @@ export class Game {
     });
     // 계정에 저장된 닉네임 불러오기 (다른 기기·지운 저장소에서도 같은 이름, 첫 설정 창은 저장된 이름이 없을 때만)
     void this.syncServerNick();
+    // 유료 캐릭터: 보유 = 서버 기록만. 받으면 저장해 둔 유료 캐릭터(이전 접속에서 장착)를 다시 적용
+    setCharacterOwnership((id) => this.shop.owns(id));
+    this.shop.onChange(() => this.applyOwnedSaved());
+    this.shop.start();
+    void this.shop.syncOwned();
 
     // 첫 프레임 이전에 물리 쿼리 구조를 만들어 둔다
     this.physics.step();
@@ -1909,9 +1932,18 @@ export class Game {
         CHARACTER_DISPLAY_ORDER.map((id) => {
           const c = CHARACTERS[id];
           const sel = CHARACTER_SELECT[id];
-          return { id, name: c.name, role: sel.role, color: sel.color, maxHp: c.stats.maxHp, speed: c.stats.speed, locked: sel.locked, selectable: isCharacterSelectable(id) };
+          return { id, name: c.name, role: sel.role, color: sel.color, maxHp: c.stats.maxHp, speed: c.stats.speed, locked: !isCharacterSelectable(id), selectable: isCharacterSelectable(id) };
         }),
       currentCharacter: () => this.avatar.character.id,
+      // 유료 캐릭터 (VXShop): 상품 상태 · 공식 결제창 · 반영 재확인 · 변경 알림
+      characterOffer: (id) => this.shop.offer(id),
+      buyCharacter: (id) => {
+        this.sounds.ui('uiSelect');
+        this.shop.buy(id);
+      },
+      recheckPurchase: (id) => void this.shop.recheck(id),
+      shopStatus: () => this.shop.status(),
+      onShopChange: (cb) => this.shop.onChange(cb),
       selectCharacter: (id) => {
         this.sounds.ui('uiSelect');
         return this.selectCharacter(id as CharacterId);
@@ -2046,6 +2078,14 @@ export class Game {
       this.netClient.addLog('warn', `랭킹 불러오기 실패: ${errText(e)}`);
       return fail('error');
     }
+  }
+
+  /** 저장된 장착 캐릭터가 유료이고 서버 보유가 확인되면 그 캐릭터로 (시작할 때는 보유를 몰라 BLUE로 시작함) */
+  private applyOwnedSaved(): void {
+    const id = loadSavedCharacterId();
+    if (!id || !isPaidCharacter(id) || !this.shop.owns(id) || this.avatar.character.id === id) return;
+    if (!this.lobbyShown || this.netGame || this.combatant.active) return;
+    void this.selectCharacter(id);
   }
 
   /** 서버가 알려 준 내 경험치 반영 (사본 저장 + 로비 카드) */
@@ -2550,7 +2590,8 @@ export class Game {
   /** 결과 화면의 다시 플레이 버튼 */
   private replay(): void {
     if (this.match.state !== 'FINISHED') return;
-    // 버튼 클릭(사용자 동작) 안에서 포인터 잠금 요청 → 바로 조작 가능
+    // 버튼 클릭(사용자 동작) 안에서 포인터 잠금 요청 → 바로 조작 가능 (결과 화면이 열려 있으면 잠금을 막으므로 먼저 닫음)
+    this.resultScreen?.close();
     this.input.requestLock();
     this.beginMatch();
   }

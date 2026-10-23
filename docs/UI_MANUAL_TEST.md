@@ -28,3 +28,19 @@
 
 판단 기준: Verse8이 확장 상태를 알려 주는 API·메시지가 없어(SDK·문서 확인) 게임 창이 화면의 92%×85% 이상이거나 게임 안 전체 화면이면 확장으로 본다.
 최대화한 일반 브라우저 창도 확장으로 보일 수 있음(넓은 화면이라 권유가 필요 없는 경우).
+
+## VXShop 유료 캐릭터 (SHONI·BAM, 2026-10-23)
+
+대시보드 등록값: `character-shoni` / `character-bam`, 300 VX, Lifetime Limit 1, Active.
+Verse8 preview(`agent8-container.` 호스트)는 SDK가 상품을 PREVIEW 단계로 조회 → preview·production 각각 상품이 보이는지 확인.
+실제 VX 결제는 소유자 승인 뒤에만 진행.
+
+| # | 절차 | 기대 결과 |
+|---|------|-----------|
+| 1 | Verse8 게임 화면에서 상점 열기 | 두 캐릭터 가격 = 대시보드 가격, 구매 버튼 켜짐 (상품 미등록이면 꺼짐 + "아직 판매 중인 상품이 아니에요") |
+| 2 | 구매 버튼 → 결제창에서 닫기(취소) | "결제를 취소했어요 · 캐릭터는 지급되지 않았어요", 잠금 유지 |
+| 3 | 구매 완료 | "구매 확인 중…" → 서버 보유 반영되면 "구매 완료!", 잠금 해제, 장착 가능 |
+| 4 | 새로고침 · 다른 기기 같은 계정 | 보유 유지 (서버 글로벌 사용자 상태 chars), 저장해 둔 유료 캐릭터 자동 장착 |
+| 5 | 이미 산 상품 | 버튼 대신 "✓ 보유 중 / 장착하러 가기" (Lifetime Limit 1로 결제창도 막힘) |
+| 6 | 서버 로그 | `purchase_granted` (중복이면 `purchase_duplicate`, 이미 보유면 `purchase_already_owned`, 모르는 상품 `purchase_unknown_product`) |
+| 7 | 미보유 계정이 개발자 도구로 white/black 전송 | 로비는 BLUE로 표시, 매치 hello는 `charDenied: not_owned` (캐릭터 안 바뀜) |

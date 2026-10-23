@@ -225,8 +225,8 @@ export interface CharacterSelectInfo {
   /** 카드 강조 색 (캐릭터 원래 비니 색) */
   color: string;
   /**
-   * 잠김: 배포 빌드에서는 선택 불가, 카드에 자물쇠 표시. 해금 조건은 아직 정하지 않음 (임의 조건 없음).
-   * 개발 서버에서는 잠금과 관계없이 선택 가능 (해금 데이터·전적과 무관)
+   * 유료(VXShop) 캐릭터: 구매 전에는 잠김(미리보기만), 서버 보유 기록이 있으면 선택 가능.
+   * 상품 = net/shared/shop.ts (SHONI = white → character-shoni, BAM = black → character-bam)
    */
   locked: boolean;
 }
@@ -240,9 +240,19 @@ export const CHARACTER_SELECT: Record<CharacterId, CharacterSelectInfo> = {
   black: { role: '최상위 탱커형', color: '#2b2b33', locked: true },
 };
 
-/** 지금 이 빌드에서 고를 수 있는지 (개발 서버는 잠금 무시) */
+/** 유료 캐릭터 보유 확인 (Game이 서버 보유 목록으로 설정, 그전에는 없음) */
+let ownsPaid: (id: CharacterId) => boolean = () => false;
+
+export function setCharacterOwnership(check: (id: CharacterId) => boolean): void {
+  ownsPaid = check;
+}
+
+/** 개발 서버 확인용: ?char=<id> 또는 ?unlockall 이면 잠금 무시 (배포 빌드는 서버 보유 기록만, 서버도 따로 검사) */
+const DEV_UNLOCK = import.meta.env.DEV && typeof location !== 'undefined' && /[?&](char|unlockall)(=|&|$)/.test(location.search);
+
+/** 지금 고를 수 있는지: 무료 캐릭터 또는 구매(서버 보유)한 유료 캐릭터 */
 export function isCharacterSelectable(id: CharacterId): boolean {
-  return import.meta.env.DEV || !CHARACTER_SELECT[id].locked;
+  return !CHARACTER_SELECT[id].locked || ownsPaid(id) || DEV_UNLOCK;
 }
 
 /** 선택한 캐릭터 저장 키 (브라우저 저장소, 이 기기·브라우저에만) */
@@ -259,6 +269,15 @@ export function loadSavedCharacter(): CharacterId | null {
     // 옛 id로 저장돼 있으면 새 id로 다시 저장 (다른 저장 데이터는 건드리지 않음)
     if (id && raw !== id) localStorage.setItem(SAVE_KEY, id);
     return id && isCharacterSelectable(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 저장된 캐릭터 id (잠금 검사 전) — 유료 캐릭터는 서버 보유 확인 뒤 다시 적용할 때 */
+export function loadSavedCharacterId(): CharacterId | null {
+  try {
+    return asCharacterId(localStorage.getItem(SAVE_KEY));
   } catch {
     return null;
   }

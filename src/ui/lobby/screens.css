@@ -1178,3 +1178,53 @@
 .lb-lobby .lb-create-card.lb-create-ffa { border: 3px solid var(--lb-ink); border-image: none; border-radius: 10px; box-shadow: 0 3px 0 var(--lb-ink); }
 .lb-lobby .lb-create-card.lb-create-tdm.lb-selected,
 .lb-lobby .lb-create-card.lb-create-ffa.lb-selected { box-shadow: 0 0 0 3px #ffd45e, 0 4px 0 var(--lb-ink); }
+
+/* ================= 상점: 유료 캐릭터 (VXShop) ================= */
+.lb-lobby .lb-shop-chars { display: grid; gap: 8px; margin-bottom: 12px; }
+.lb-lobby .lb-shop-chars-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.lb-lobby .lb-shop-chars-title { font-family: var(--lb-display-font); font-size: 20px; font-weight: 400; color: var(--lb-ink); }
+.lb-lobby .lb-shop-chars-sub { color: var(--lb-ink2); font-size: 12px; font-weight: 800; }
+.lb-lobby .lb-shop-status { margin: 0; color: #9e3650; font-size: 12px; font-weight: 800; }
+.lb-lobby .lb-shop-status:empty { display: none; }
+.lb-lobby .lb-shop-char-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.lb-lobby .lb-shop-char {
+  --c: #5b8cff;
+  display: grid; min-width: 0; grid-template-columns: 110px minmax(0, 1fr) auto; grid-template-areas: 'art copy price' 'art buy buy' 'art note note';
+  align-items: center; gap: 4px 12px; padding: 10px 12px; border: 3px solid var(--lb-ink); border-radius: 14px;
+  background: linear-gradient(135deg, #fffdf6 55%, color-mix(in srgb, var(--c) 22%, #fffdf6)); box-shadow: 0 4px 0 var(--lb-ink);
+}
+.lb-lobby .lb-shop-char-art { grid-area: art; display: grid; height: 130px; place-items: end center; overflow: hidden; border: 2px solid var(--lb-ink); border-radius: 10px; background: radial-gradient(circle at 50% 70%, #fff, color-mix(in srgb, var(--c) 35%, #fff)); }
+.lb-lobby .lb-shop-char-art img { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
+.lb-lobby .lb-shop-char-copy { grid-area: copy; display: grid; min-width: 0; gap: 2px; }
+.lb-lobby .lb-shop-char-name { font-family: var(--lb-display-font); font-size: 22px; font-weight: 400; color: var(--lb-ink); }
+.lb-lobby .lb-shop-char-role { color: var(--lb-ink); font-size: 13px; font-weight: 900; }
+.lb-lobby .lb-shop-char-stats { color: var(--lb-ink2); font-size: 12px; font-weight: 800; }
+.lb-lobby .lb-shop-char-price { grid-area: price; display: inline-flex; align-items: center; gap: 4px; align-self: start; padding: 3px 10px; border: 2px solid var(--lb-ink); border-radius: 999px; background: #fff; color: var(--lb-ink); white-space: nowrap; }
+.lb-lobby .lb-shop-char-price b { font-family: var(--lb-display-font); font-size: 18px; font-weight: 400; }
+.lb-lobby .lb-shop-char-price .lb-vx { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: linear-gradient(135deg, #8a6cff, #5b8cff); color: #fff; font-size: 9px; font-weight: 900; }
+.lb-lobby .lb-shop-owned { color: #1f7a57; font-size: 13px; font-weight: 900; }
+.lb-lobby .lb-shop-char-buy {
+  grid-area: buy; display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 6px; padding: 0 16px;
+  border: 3px solid var(--lb-ink); border-image: none; border-radius: 12px; background: linear-gradient(180deg, #ffd45e, #ffb52e); color: var(--lb-ink);
+  box-shadow: 0 3px 0 var(--lb-ink); font-family: var(--lb-display-font); font-size: 18px; font-weight: 400; cursor: pointer;
+}
+.lb-lobby .lb-shop-char-buy svg { width: 16px; height: 16px; }
+.lb-lobby .lb-shop-char-buy:disabled { background: #e3e6ee; color: rgba(39, 50, 92, .55); box-shadow: 0 2px 0 rgba(39, 50, 92, .4); cursor: default; }
+.lb-lobby .lb-shop-char-buy.lb-shop-char-owned-btn { background: linear-gradient(180deg, #8de0bf, #3fbf8f); color: #0f3d2c; }
+.lb-lobby .lb-shop-char-buy:focus-visible { outline: 3px solid #2a6ee8; outline-offset: 2px; }
+.lb-lobby .lb-shop-char-note { grid-area: note; margin: 0; color: var(--lb-ink2); font-size: 12px; font-weight: 800; line-height: 1.35; }
+.lb-lobby .lb-shop-char-note:empty { display: none; }
+@media (max-height: 520px) {
+  .lb-lobby .lb-shop-chars { gap: 5px; margin-bottom: 6px; }
+  .lb-lobby .lb-shop-chars-title { font-size: 16px; }
+  .lb-lobby .lb-shop-char-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .lb-lobby .lb-shop-char { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 8px; border-width: 2px; border-radius: 12px; box-shadow: 0 3px 0 var(--lb-ink); }
+  .lb-lobby .lb-shop-char-art { height: 84px; }
+  .lb-lobby .lb-shop-char-name { font-size: 17px; }
+  .lb-lobby .lb-shop-char-role, .lb-lobby .lb-shop-char-stats, .lb-lobby .lb-shop-char-note { font-size: 11px; }
+  .lb-lobby .lb-shop-char-price { padding: 1px 6px; }
+  .lb-lobby .lb-shop-char-price b { font-size: 14px; }
+  .lb-lobby .lb-shop-char-buy { min-height: 36px; font-size: 15px; padding: 0 10px; }
+}
+/* 캐릭터 화면: 유료 잠김 카드 가격 · 구매 버튼 */
+.lb-lobby .lb-char-equip.lb-equip-buy:not(:disabled) { background: linear-gradient(180deg, #ffd45e, #ffb52e); color: var(--lb-ink); }

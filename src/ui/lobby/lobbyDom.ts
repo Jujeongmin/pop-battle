@@ -41,8 +41,30 @@ export interface LobbySlider {
   bind?(refresh: () => void): void;
 }
 
+/** 유료 캐릭터 상점 상태 (net/characterShop.ts CharacterOffer와 같은 모양) */
+export interface LobbyCharacterOffer {
+  charId: string;
+  productId: string;
+  price: number | null;
+  owned: boolean;
+  canBuy: boolean;
+  busy: boolean;
+  delayed: boolean;
+  note: string;
+}
+
 /** 로비 → 게임 요청 (Game이 구현). 실제 기능이 있는 것만 둔다 */
 export interface LobbyHost {
+  /** 유료 캐릭터 상품 상태 (무료 캐릭터는 null) */
+  characterOffer(id: string): LobbyCharacterOffer | null;
+  /** VXShop 공식 결제창 열기 (지급은 서버) */
+  buyCharacter(id: string): void;
+  /** 결제 뒤 반영이 늦을 때 서버 보유 정보 다시 확인 */
+  recheckPurchase(id: string): void;
+  /** 상점 전체 상태 (상품을 못 받은 이유) */
+  shopStatus(): { loading: boolean; error: string | null };
+  /** 상점·보유 상태가 바뀌면 cb (해제 함수 반환) */
+  onShopChange(cb: () => void): () => void;
   characters(): LobbyCharacter[];
   currentCharacter(): string;
   /** 장착 (저장·매치에 쓰임). 잠긴 캐릭터는 이 빌드에서 고를 수 없으면 false */

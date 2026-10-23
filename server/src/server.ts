@@ -51,6 +51,7 @@ import {
 } from '../../src/net/shared/protocol';
 import { levelInfo, MATCH_XP, matchXp, MAX_XP, standingRanks, type StoredProgress, type XpAward } from '../../src/net/shared/progression';
 import { addMatch, RANK_COLLECTION, RANK_KEY_FIELD, RANK_PAGE, rankKey, readStats, type RankingResult, type RankRow, type RankStats } from '../../src/net/shared/ranking';
+import { canUseCharacter, characterOfProduct, isPaidCharacter, ownedCharacters } from '../../src/net/shared/shop';
 
 const NO_ROOM = '__no_room__';
 const ROOM_CODE = /^pb-[a-z0-9]{4,12}$/;
@@ -566,7 +567,18 @@ type HelloResult = {
   /** slot -1일 때 이유 ('full' | 'in_progress') */
   reason?: string;
   now: number;
+  /** 보유하지 않은 유료 캐릭터를 보냄 → 바꾸지 않음 (기존 캐릭터·기본 BLUE 그대로) */
+  charDenied?: 'not_owned';
 } & NetRoomState;
+
+/** 내(호출한 계정) 보유 유료 캐릭터 (글로벌 사용자 상태, 못 읽으면 없음으로) */
+async function myOwnedCharacters(): Promise<string[]> {
+  try {
+    return ownedCharacters(await $global.getMyState());
+  } catch {
+    return [];
+  }
+}
 
 export class Server {
   // ---------------- 매칭 (룸 밖에서 호출) ----------------
@@ -677,8 +689,10 @@ export class Server {
   async hubHello(info: { c?: unknown; n?: unknown; w?: unknown }): Promise<{ ok: boolean; reason?: string; max: number; count: number }> {
     const roomId = hubOf();
     if (!roomId) return { ok: false, reason: 'not_in_hub', max: HUB_MAX_PLAYERS, count: 0 };
-    const c = typeof info?.c === 'string' && info.c in NET_CHARACTER_HP ? info.c : null;
+    let c = typeof info?.c === 'string' && info.c in NET_CHARACTER_HP ? info.c : null;
     if (!c) return { ok: false, reason: 'bad_char', max: HUB_MAX_PLAYERS, count: 0 };
+    // 유료 캐릭터는 서버 보유 기록이 있을 때만 (없으면 기본 BLUE로 표시)
+    if (isPaidCharacter(c) && !canUseCharacter(c, await myOwnedCharacters())) c = 'blue';
     const me = $sender.account;
     // 장부에 실제 접속으로 등록 (나를 뺀 자리 수가 정원이면 거절 → 클라이언트가 나가서 다시 배정받음).
     // 같은 계정의 다른 로비 기록은 지움 (중복 세션·유령 방지)
@@ -709,6 +723,7 @@ export class Server {
     const patch: Record<string, unknown> = {};
     if (info?.c !== undefined) {
       if (typeof info.c !== 'string' || !(info.c in NET_CHARACTER_HP)) return { ok: false, reason: 'bad_char' };
+      if (isPaidCharacter(info.c) && !canUseCharacter(info.c, await myOwnedCharacters())) return { ok: false, reason: 'not_owned' };
       patch.c = info.c;
     }
     if (info?.w !== undefined) patch.w = hubWeapon(info.w);
@@ -806,6 +821,52 @@ export class Server {
   }
 
   /** 내 경험치 (로비 표시용, 원본은 서버 저장값) */
+  // ---------------- VXShop 유료 캐릭터 ----------------
+
+  /** 내 보유 유료 캐릭터 (게임 시작·결제창 닫힘 뒤 클라이언트가 읽음). 원본 = 글로벌 사용자 상태 chars */
+  async shopOwned(): Promise<{ ok: true; chars: string[] }> {
+    return { ok: true, chars: await myOwnedCharacters() };
+  }
+
+  /**
+   * VXShop 결제 완료 (플랫폼이 결제 검증 뒤 호출, 클라이언트는 부를 수 없음 — $ 훅).
+   * character-shoni → white(SHONI), character-bam → black(BAM) 영구 해금.
+   * 같은 계정은 락으로 직렬화, purchaseId 기록(buys)으로 같은 결제가 다시 와도(중복 전달·재시도) 한 번만 처리.
+   * 보유 목록은 집합 → 이미 가진 캐릭터를 또 사도 중복 지급 없음 (기록만 남김: 분쟁 확인용).
+   * 저장 중 오류는 그대로 던짐 → 플랫폼 재시도 때 같은 purchaseId로 안전하게 다시 처리
+   */
+  async $onItemPurchased(e: { account?: unknown; purchaseId?: unknown; productId?: unknown; quantity?: unknown; metadata?: unknown }): Promise<{ success: boolean; reason?: string }> {
+    const account = typeof e?.account === 'string' ? e.account : '';
+    const purchaseId = typeof e?.purchaseId === 'string' || typeof e?.purchaseId === 'number' ? String(e.purchaseId) : '';
+    const productId = typeof e?.productId === 'string' ? e.productId : '';
+    if (!account || !purchaseId) {
+      slog('purchase_bad_event', '-', { account, productId });
+      return { success: false, reason: 'bad_event' };
+    }
+    const char = characterOfProduct(productId);
+    if (!char) {
+      // 이 게임에 없는 상품: 지급할 것이 없음 (대시보드 Product ID 확인 필요)
+      slog('purchase_unknown_product', '-', { account, productId, purchaseId });
+      return { success: false, reason: 'unknown_product' };
+    }
+    return $lock(`buy:${account}`, async () => {
+      const st = ((await $global.getUserState(account)) || {}) as Record<string, unknown>;
+      const buys = (st.buys && typeof st.buys === 'object' && !Array.isArray(st.buys) ? st.buys : {}) as Record<string, string>;
+      const owned = ownedCharacters(st);
+      if (buys[purchaseId]) {
+        slog('purchase_duplicate', '-', { account, productId, purchaseId });
+        return { success: true };
+      }
+      const already = owned.includes(char);
+      await $global.updateUserState(account, {
+        chars: already ? owned : [...owned, char],
+        buys: { ...buys, [purchaseId]: productId },
+      });
+      slog(already ? 'purchase_already_owned' : 'purchase_granted', '-', { account, productId, purchaseId, char });
+      return { success: true };
+    });
+  }
+
   async progressGet(): Promise<{ ok: true; xp: number; lv: number }> {
     const p = progressOf((await $global.getMyState()) as Record<string, unknown>);
     return { ok: true, xp: p.xp, lv: p.lv };
@@ -1025,17 +1086,22 @@ export class Server {
       // 표시 닉네임 (서버에 저장된 값 먼저, 검사 통과한 값만, 바뀔 때만 저장) + 레벨 (서버 저장 경험치)
       const n = await displayNick(nick);
       let lv = p.lv ?? 1;
+      let owned: string[] = [];
       try {
-        lv = progressOf((await $global.getMyState()) as Record<string, unknown>).lv;
+        const g = (await $global.getMyState()) as Record<string, unknown>;
+        lv = progressOf(g).lv;
+        owned = ownedCharacters(g);
       } catch {
-        // 글로벌 상태를 못 읽어도 입장은 막지 않음
+        // 글로벌 상태를 못 읽어도 입장은 막지 않음 (유료 캐릭터는 보유 확인이 안 되므로 못 씀)
       }
+      // 보유하지 않은 유료 캐릭터: 매치에 쓸 수 없음 → 캐릭터를 바꾸지 않고 알려 줌
+      const denied = typeof char === 'string' && isPaidCharacter(char) && !canUseCharacter(char, owned);
       if ((n && n !== p.nick) || lv !== p.lv) {
         if (n) p.nick = n;
         p.lv = lv;
         await $room.updateRoomState({ players: r.players }, { returnState: false });
       }
-      if (typeof char === 'string' && char in NET_CHARACTER_HP && (char !== p.char || p.max !== NET_CHARACTER_HP[char])) {
+      if (!denied && typeof char === 'string' && char in NET_CHARACTER_HP && (char !== p.char || p.max !== NET_CHARACTER_HP[char])) {
         const max = NET_CHARACTER_HP[char]!;
         // 다친 상태로 캐릭터만 바꿔 회복하는 것 방지: 가득 찬 상태일 때만 새 최대치로 채움
         const full = !p.dead && p.hp >= p.max;
@@ -1044,7 +1110,8 @@ export class Server {
         p.hp = full ? max : Math.min(p.hp, max);
         await $room.updateRoomState({ players: r.players }, { returnState: false });
       }
-      return { ...r, slot: p.slot, now: Date.now() };
+      if (denied) slog('char_denied', roomId, { account: me, char });
+      return { ...r, slot: p.slot, now: Date.now(), ...(denied ? { charDenied: 'not_owned' as const } : {}) };
     });
   }
 

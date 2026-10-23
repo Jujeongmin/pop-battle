@@ -79,6 +79,9 @@ describe('room lifecycle', () => {
   test('eight players get slots 0..7, ninth is spectator (-1)', async (server) => {
     for (const a of [...EIGHT, 'ivan']) await server.simulateJoin(ROOM, a);
     const chars = ['blue', 'black', 'pink', 'yellow', 'white', 'character_6', 'blue', 'pink'];
+    // 유료 캐릭터(BAM·SHONI)는 구매 기록이 있어야 매치에 씀
+    await server.$onItemPurchased({ account: EIGHT[1], purchaseId: 'room-bam', productId: 'character-bam', quantity: 1 });
+    await server.$onItemPurchased({ account: EIGHT[4], purchaseId: 'room-shoni', productId: 'character-shoni', quantity: 1 });
     for (let i = 0; i < 8; i++) {
       server.connect({ account: EIGHT[i], roomId: ROOM });
       expect((await server.hello(chars[i])).slot).toBe(i);
@@ -946,8 +949,17 @@ describe('online lobby (hub)', () => {
     expect((await server.hubInfo({ n: '<b>x</b>' })).reason).toBe('bad_nick');
     expect((await server.hubInfo({ n: 'abc' + String.fromCharCode(7) + 'def' })).reason).toBe('bad_nick');
     expect((await server.hubInfo({ n: 'a'.repeat(13) })).reason).toBe('bad_nick');
+    // 유료 캐릭터: 보유 전 거절, 구매 뒤 허용. 로비 입장 때 보유 안 한 유료 캐릭터는 BLUE로
+    expect((await server.hubInfo({ c: 'black' })).reason).toBe('not_owned');
+    expect((await hubUser(server, 'alice')).c).toBe('pink');
+    await server.$onItemPurchased({ account: 'alice', purchaseId: 'hub-bam', productId: 'character-bam', quantity: 1 });
+    server.connect({ account: 'alice', roomId: HUB });
     expect((await server.hubInfo({ c: 'black' })).ok).toBe(true);
     expect((await hubUser(server, 'alice')).c).toBe('black');
+    await server.simulateJoin(HUB, 'bob');
+    server.connect({ account: 'bob', roomId: HUB });
+    expect((await server.hubHello({ c: 'white', n: 'Bob' })).ok).toBe(true);
+    expect((await hubUser(server, 'bob')).c).toBe('blue');
   });
 
   test('hubHello rejects the 9th user in one lobby; a member saying hello again is not rejected', async (server) => {
@@ -1231,5 +1243,40 @@ describe('nickname filter (shared client/server check)', () => {
     for (const n of ['스시바', '미친듯이', '병아리', '신발', '시계', '새우깡', '개구리', '닥터', '꺼벙이', '조심해']) ok(n);
     // 홀로 쓴 자음이 섞여도 줄임말 구간에 걸치지 않으면 허용 (사방 → ㅅㅂ 뼈대지만 홀로 쓴 자음 없음)
     for (const n of ['사방', 'ㅋㅋ사방', 'ㅎㅎ신발', '바보ㅋ', '수박ㅋㅋ', 'ㅇㅇ지수']) ok(n);
+  });
+});
+
+describe('VXShop paid characters', () => {
+  test('SHONI/BAM: unowned is denied in match, purchase grants once, duplicate purchaseId ignored, unknown product refused', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    server.connect({ account: 'alice', roomId: ROOM });
+    let r = await server.hello('white');
+    expect(r.charDenied).toBe('not_owned');
+    expect(r.players.alice.char).toBe('blue');
+    expect((await server.shopOwned()).chars).toEqual([]);
+    const buy = (purchaseId: string, productId: string, account = 'alice') => server.$onItemPurchased({ account, purchaseId, productId, quantity: 1, metadata: null });
+    expect((await buy('p1', 'character-shoni')).success).toBe(true);
+    // 같은 결제가 다시 와도 (중복 전달·재시도) 한 번만
+    expect((await buy('p1', 'character-shoni')).success).toBe(true);
+    expect((await server.shopOwned()).chars).toEqual(['white']);
+    r = await server.hello('white');
+    expect(r.charDenied === undefined).toBe(true);
+    expect(r.players.alice.char).toBe('white');
+    // BAM은 아직 없음
+    r = await server.hello('black');
+    expect(r.charDenied).toBe('not_owned');
+    expect(r.players.alice.char).toBe('white');
+    expect((await buy('p2', 'character-bam')).success).toBe(true);
+    expect((await server.shopOwned()).chars).toEqual(['white', 'black']);
+    // 이미 가진 캐릭터를 다른 결제로 또 사도 목록은 그대로
+    expect((await buy('p3', 'character-bam')).success).toBe(true);
+    expect((await server.shopOwned()).chars).toEqual(['white', 'black']);
+    expect((await buy('p4', 'gold-pack')).reason).toBe('unknown_product');
+    // 다른 계정에는 지급되지 않음
+    await server.simulateJoin(ROOM, 'bob');
+    server.connect({ account: 'bob', roomId: ROOM });
+    r = await server.hello('black');
+    expect(r.charDenied).toBe('not_owned');
+    expect((await server.shopOwned()).chars).toEqual([]);
   });
 });
