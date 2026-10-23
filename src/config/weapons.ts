@@ -625,13 +625,13 @@ export const SNIPER: WeaponDef = {
   kind: 'gun',
   slot: 'primary',
   // 2026-10-23 플레이 테스트 하향 (너무 강함): 몸통 80 → 70 (모든 캐릭터 몸통 2발, 한 발 뒤 라이플 마무리는 1~2발 더),
-  // 헤드샷 배율 1.5 → 1.75 = 122.5 (헤드샷 한 방 대상은 그대로: HP 120 이하 5종, BAM 130은 7.5 남음)
+  // 헤드샷 = 100 (사용자 결정, 배율 100/70): 한 방 처치는 HP 100인 BUBU만, 나머지는 헤드샷 + 1발
   damage: 70,
   magazineSize: 5,
   reserveAmmo: 20,
   // 45 → 40 (발사 간격 1.33 → 1.5초)
   rpm: 40,
-  headshotMultiplier: 1.75,
+  headshotMultiplier: 100 / 70,
   automatic: false,
   pellets: 1,
   range: 300,
@@ -658,8 +658,8 @@ export const SNIPER: WeaponDef = {
     // 볼트액션: 쏘면 스코프가 풀리고, 후딜레이(볼트) 동안은 다시 조준해도 발사 불가
     releaseAfterShot: true,
   },
-  // 발사 간격 60/40 = 1.5초. 2026-10-23: 쏘고 바로 무기를 바꿔 볼트 후딜레이를 줄이던 것(최소 0.8초) 막음 → 바꿔도 1.5초
-  quickSwap: { minFireInterval: 1.5 },
+  // 발사 간격 60/40 = 1.5초 (후딜레이). 퀵스왑(쏘고 다른 무기로 바꿔 후딜레이 취소)은 유지, 그래도 최소 0.8초
+  quickSwap: { minFireInterval: 0.8 },
   effects: { flashScale: 1.6, firePitch: 0.55, fireGain: 1.2 },
   // 비조준 상태 작은 십자 (ADS는 기존 스코프 화면, 조준선 숨김)
   crosshair: { style: 'cross', lineLength: 7, lineWidth: 3, dotSize: 3.5, minGap: 3 },

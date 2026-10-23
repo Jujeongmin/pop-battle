@@ -166,7 +166,8 @@ export const NET_WEAPONS: Record<string, NetWeaponRule> = {
     damage: 15, headshotMultiplier: 1.5, rpm: 80, pellets: 8, range: 60,
     falloff: { startDistance: 3, endDistance: 7, minMultiplier: 0.5, farDistance: 15, farMultiplier: 0.2 },
   },
-  sniper: { damage: 70, headshotMultiplier: 1.75, rpm: 40, pellets: 1, range: 300 },
+  // 헤드샷 = 100 (70 × 100/70)
+  sniper: { damage: 70, headshotMultiplier: 100 / 70, rpm: 40, pellets: 1, range: 300 },
   pistol: { damage: 15, headshotMultiplier: 1.5, rpm: 300, pellets: 1, range: 80 },
   melee: { damage: 40, headshotMultiplier: 1, rpm: 60 / 0.7, pellets: 1, range: 1.6 },
 };
