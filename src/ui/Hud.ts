@@ -866,8 +866,10 @@ export class Hud {
           if (!this.root.classList.contains('touch')) return;
           e.preventDefault();
           e.stopPropagation();
+          el.classList.add('down');
           this.onSlotTap?.(Number(s.key) - 1);
         });
+        for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) el.addEventListener(t, () => el.classList.remove('down'));
         this.slotsEl.appendChild(el);
       }
     }

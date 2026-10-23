@@ -547,27 +547,57 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   margin: calc(var(--r) * -.45) 0 0 calc(var(--r) * -.45); border-radius: 50%;
   background: linear-gradient(180deg, #fffdf8, #ffe9b8); border: 3px solid #fff; box-shadow: 0 3px 0 rgba(39, 50, 92, .3);
 }
+/* 조작 버튼 공통 (사격·ADS·점프·슬라이딩·재장전·일시정지·무기 슬롯): 흰 테두리 3px, 반투명 크림 플라스틱 바탕
+   (위쪽 하이라이트), 아래 그림자 4px, 아이콘 46%. 상태: 눌림 .down = 내려앉음 · 켜짐 .on = 노랑 · 사용 불가 = 흐린 회색 */
+.touch-layer, .hud.touch {
+  --tc-bg: rgba(255, 250, 242, .66);
+  --tc-gloss: radial-gradient(circle at 50% 26%, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0) 58%);
+  --tc-border: rgba(255, 255, 255, .9);
+  --tc-shadow: 0 4px 0 rgba(39, 50, 92, .28), inset 0 -3px 0 rgba(39, 50, 92, .08);
+  --tc-shadow-down: 0 1px 0 rgba(39, 50, 92, .28), inset 0 2px 5px rgba(39, 50, 92, .2);
+}
 .tc-btn {
   --s: 60px;
   position: absolute; display: grid; place-items: center; padding: 0; margin: 0;
   width: calc(var(--s) * var(--tu) * var(--btn)); height: calc(var(--s) * var(--tu) * var(--btn));
-  border-radius: 50%; border: 3px solid rgba(255, 255, 255, .85); color: var(--ink);
-  background: rgba(255, 250, 242, .72); box-shadow: 0 4px 0 rgba(39, 50, 92, .25);
+  border-radius: 50%; border: 3px solid var(--tc-border); color: var(--ink);
+  background: var(--tc-gloss), var(--tc-bg); box-shadow: var(--tc-shadow);
   font: 900 calc(14px * var(--tu) * var(--btn)) var(--font); touch-action: none; cursor: pointer;
+  transition: transform .06s, box-shadow .06s, background-color .12s, opacity .15s, filter .15s;
 }
-.tc-btn svg { width: 48%; height: 48%; }
-.tc-btn.down { transform: translateY(3px) scale(.94); box-shadow: 0 1px 0 rgba(39, 50, 92, .25); background: #fff; }
-/* 오른쪽 아래 엄지 호: 사격(크게) 중심, 위·왼쪽으로 점프·ADS·슬라이딩·재장전 */
-.tc-fire { --s: 92px; right: calc(var(--safe-r) + 26px * var(--tu)); bottom: calc(var(--safe-b) + 30px * var(--tu)); background: rgba(255, 92, 120, .85); color: #fff; }
-.tc-fire.down { background: #ff4d6d; }
+.tc-btn svg { width: 46%; height: 46%; pointer-events: none; filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .8)); }
+.tc-btn.down { transform: translateY(3px) scale(.94); box-shadow: var(--tc-shadow-down); background-color: rgba(255, 255, 255, .94); }
+/* 사격: 가장 크고 유일한 진한 색(분홍 빨강) + 바깥 고리 → 엄지가 바로 찾음 */
+.tc-fire {
+  --s: 92px; right: calc(var(--safe-r) + 26px * var(--tu)); bottom: calc(var(--safe-b) + 30px * var(--tu));
+  border-width: 4px; border-color: #fff; color: #fff;
+  background: radial-gradient(circle at 50% 26%, rgba(255, 255, 255, .42), rgba(255, 255, 255, 0) 56%), rgba(255, 84, 116, .9);
+  box-shadow: 0 5px 0 rgba(170, 30, 66, .5), 0 0 0 3px rgba(255, 84, 116, .3), inset 0 -4px 0 rgba(120, 10, 40, .16);
+}
+.tc-fire svg { width: 44%; height: 44%; filter: drop-shadow(0 1px 0 rgba(120, 10, 40, .35)); }
+.tc-fire.down { background-color: #ff3d63; box-shadow: 0 1px 0 rgba(170, 30, 66, .5), 0 0 0 6px rgba(255, 84, 116, .38), inset 0 3px 6px rgba(120, 10, 40, .3); }
 .tc-jump { right: calc(var(--safe-r) + 20px * var(--tu)); bottom: calc(var(--safe-b) + (30px + 92px * var(--btn) + 16px) * var(--tu)); }
 .tc-ads { --s: 64px; right: calc(var(--safe-r) + (26px + 92px * var(--btn) + 12px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 66px * var(--btn)) * var(--tu)); }
-.tc-ads.on { background: var(--yellow); }
+/* 켜짐(ADS 조준 중): 불투명 노랑 + 노란 고리 */
+.tc-ads.on { background-color: var(--yellow); box-shadow: 0 4px 0 rgba(176, 120, 0, .45), 0 0 0 3px rgba(255, 212, 94, .5), inset 0 -3px 0 rgba(176, 120, 0, .15); }
+.tc-ads.on.down { box-shadow: 0 1px 0 rgba(176, 120, 0, .45), 0 0 0 3px rgba(255, 212, 94, .5), inset 0 2px 5px rgba(176, 120, 0, .25); }
 .tc-slide { right: calc(var(--safe-r) + (26px + 92px * var(--btn) + 22px) * var(--tu)); bottom: calc(var(--safe-b) + 14px * var(--tu)); }
 .tc-reload { --s: 54px; right: calc(var(--safe-r) + (26px + 92px * var(--btn) - 4px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 150px * var(--btn)) * var(--tu)); }
+/* 재장전 중: 아이콘 회전 + 연노랑 */
+.tc-reload.busy { background-color: rgba(255, 236, 170, .85); }
 .tc-reload.busy svg { animation: tc-spin .7s linear infinite; }
 @keyframes tc-spin { to { transform: rotate(360deg); } }
-.touch-layer.melee .tc-ads, .touch-layer.melee .tc-reload { opacity: .35; }
+/* 사용 불가(근접무기의 ADS·재장전): 흐린 회색, 그림자 없음 */
+.touch-layer.melee .tc-ads, .touch-layer.melee .tc-reload { opacity: .4; filter: grayscale(1); box-shadow: none; }
+/* 큰 버튼(크기 설정 115~140%, TouchInput BIG_BUTTONS): 사격을 구석으로 붙이고 점프·재장전은 사격 위 오른쪽 세로줄,
+   ADS는 그 왼쪽(사격 바로 위 높이), 슬라이딩은 사격 왼쪽 아래 → 화면 가운데 조준 영역(가로·세로 30~70%)과
+   아래 무기 슬롯을 비움 (667×375 기준). 크기는 그대로, 위치만 다름. 간격은 버튼 크기에 비례 */
+.touch-layer.big:not(.lobby) .tc-fire { right: calc(var(--safe-r) + 14px * var(--tu)); bottom: calc(var(--safe-b) + 14px * var(--tu)); }
+.touch-layer.big:not(.lobby) .tc-jump { right: calc(var(--safe-r) + 18px * var(--tu)); bottom: calc(var(--safe-b) + (14px + 92px * var(--btn) + 17px) * var(--tu)); }
+/* 재장전: 점프 위, 조금 왼쪽으로 비켜 점프와 간격 확보 (위쪽 킬로그 2줄 아래) */
+.touch-layer.big:not(.lobby) .tc-reload { right: calc(var(--safe-r) + (28px + 3px * var(--btn)) * var(--tu)); bottom: calc(var(--safe-b) + (14px + 92px * var(--btn) + 17px + 60px * var(--btn) + 17px) * var(--tu)); }
+.touch-layer.big:not(.lobby) .tc-ads { right: calc(var(--safe-r) + (18px + 60px * var(--btn) + 22px) * var(--tu)); bottom: calc(var(--safe-b) + (14px + 92px * var(--btn) + 6px) * var(--tu)); }
+.touch-layer.big:not(.lobby) .tc-slide { right: calc(var(--safe-r) + (14px + 92px * var(--btn) + 20px) * var(--tu)); bottom: calc(var(--safe-b) + 10px * var(--tu)); }
 /* 온라인 로비: 다른 플레이어 머리 위 닉네임 (화면 좌표는 LobbyPeers가 transform으로) */
 .lobby-nametags { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
 .lobby-nametag {
@@ -580,12 +610,16 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .touch-layer.lobby .tc-fire, .touch-layer.lobby .tc-ads, .touch-layer.lobby .tc-reload, .touch-layer.lobby .tc-pause { display: none; }
 .touch-layer.lobby .tc-jump { --s: 84px; right: calc(30px * var(--tu)); bottom: calc(34px * var(--tu)); }
 .touch-layer.lobby .tc-slide { --s: 64px; right: calc((30px + 84px * var(--btn) + 18px) * var(--tu)); bottom: calc(22px * var(--tu)); }
+/* 일시정지: 다른 조작 버튼과 같은 둥근 크림 버튼 (작고 화면 구석이라 크기 설정과 무관한 44px) */
 .tc-pause {
   position: absolute; left: calc(var(--safe-l) + 10px); top: calc(var(--safe-t) + 10px);
-  width: 44px; height: 44px; border-radius: 12px; border: 2px solid #fff;
-  background: rgba(39, 50, 92, .55); display: flex; gap: 5px; align-items: center; justify-content: center; padding: 0; touch-action: none;
+  width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--tc-border);
+  background: var(--tc-gloss), var(--tc-bg); box-shadow: var(--tc-shadow); color: var(--ink);
+  display: flex; gap: 5px; align-items: center; justify-content: center; padding: 0; touch-action: none; cursor: pointer;
+  transition: transform .06s, box-shadow .06s, background-color .12s;
 }
-.tc-pause i { width: 5px; height: 40%; border-radius: 3px; background: #fff; }
+.tc-pause i { width: 5px; height: 36%; border-radius: 3px; background: currentColor; }
+.tc-pause.down { transform: translateY(2px) scale(.94); box-shadow: var(--tc-shadow-down); background-color: rgba(255, 255, 255, .94); }
 
 /* HUD: 터치 모드 배치 (왼쪽 아래 조이스틱 · 오른쪽 아래 버튼 자리를 비움) */
 .hud.touch .hp { top: calc(var(--pad-y) + var(--safe-t)); bottom: auto; left: calc(var(--safe-l) + 64px); }
@@ -646,7 +680,13 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 /* 작은 가로 화면: 시작·일시정지 카드는 스크롤, 카드 자체를 눌러도 시작 */
 .hud.touch .lock-card { pointer-events: auto; max-height: calc(100% - 16px); overflow-y: auto; overscroll-behavior: contain; }
 .hud.touch .lock-card ul { margin: 6px 0; font-size: 12px; line-height: 1.5; }
-.hud.touch .slot { min-height: 44px; padding: 6px 12px 6px 6px; touch-action: none; }
+.hud.touch .slot {
+  min-height: 44px; padding: 6px 12px 6px 6px; touch-action: none;
+  border: 3px solid var(--tc-border); border-radius: 16px; background: var(--tc-gloss), var(--tc-bg); box-shadow: var(--tc-shadow);
+  transition: transform .06s, box-shadow .06s;
+}
+.hud.touch .slot.active { background: var(--tc-gloss), var(--yellow); border-color: #fff; box-shadow: 0 4px 0 rgba(176, 120, 0, .45), inset 0 -3px 0 rgba(176, 120, 0, .15); }
+.hud.touch .slot.down { transform: translateY(2px) scale(.96); box-shadow: var(--tc-shadow-down); }
 .hud.touch .slot-name { display: none; }
 .hud.touch .slot-icon svg { width: 40px; height: 16px; }
 .hud .touch-only, .hud .touch-settings-open { display: none; }
