@@ -1,5 +1,7 @@
 import { fullscreenAvailable, isExpanded, setExpanded, withFullscreenOffer } from '../ui/FullscreenPrompt';
 import { CharacterShop } from '../net/characterShop';
+import { installRetentionConsole } from '../net/retentionConsole';
+import type { RetentionResult } from '../net/shared/retention';
 import { isPaidCharacter } from '../net/shared/shop';
 import { CoachMarks, type CoachStep } from '../ui/CoachMarks';
 import type { RankingResult } from '../net/shared/ranking';
@@ -784,6 +786,11 @@ export class Game {
     });
     // 계정에 저장된 닉네임 불러오기 (다른 기기·지운 저장소에서도 같은 이름, 첫 설정 창은 저장된 이름이 없을 때만)
     void this.syncServerNick();
+    // 개발자 콘솔 retention(): 서버가 관리자 계정인지 확인하고 집계만 돌려줌
+    installRetentionConsole(async (view) => {
+      if (!(await withTimeout(this.netClient.connect(), 10000))) throw new Error('connect');
+      return withTimeout(this.netClient.call<RetentionResult>('retentionGet', [view]), 20000);
+    });
     // 유료 캐릭터: 보유 = 서버 기록만. 받으면 저장해 둔 유료 캐릭터(이전 접속에서 장착)를 다시 적용
     setCharacterOwnership((id) => this.shop.owns(id));
     this.shop.onChange(() => this.applyOwnedSaved());
@@ -2129,6 +2136,8 @@ export class Game {
       if (this.netClient.status === 'no-verse') return;
       if (!(await withTimeout(this.netClient.connect(), 10000))) return;
       const g = await withTimeout(this.netClient.call<{ ok: boolean; nick: string | null }>('nickGet'), 8000);
+      // 리텐션 접속 기록 (계정당 UTC 하루 1번, 응답을 기다리지 않음 — 게임 시작을 늦추지 않음)
+      void this.netClient.call('actPing').catch(() => undefined);
       // 레벨·경험치: 서버 저장값 (이전 서버 배포에 함수가 없으면 사본 그대로)
       void this.netClient
         .call<{ ok: boolean; xp: number }>('progressGet')

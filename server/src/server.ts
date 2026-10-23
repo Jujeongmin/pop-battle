@@ -52,6 +52,7 @@ import {
 import { levelInfo, MATCH_XP, matchXp, MAX_XP, standingRanks, type StoredProgress, type XpAward } from '../../src/net/shared/progression';
 import { addMatch, RANK_COLLECTION, RANK_KEY_FIELD, RANK_PAGE, rankKey, readStats, type RankingResult, type RankRow, type RankStats } from '../../src/net/shared/ranking';
 import { canUseCharacter, characterOfProduct, isPaidCharacter, ownedCharacters } from '../../src/net/shared/shop';
+import { dayLabel, rate, RETENTION_DAYS, utcDay, type RetentionCohortRow, type RetentionDailyRow, type RetentionResult, type RetentionView } from '../../src/net/shared/retention';
 
 const NO_ROOM = '__no_room__';
 const ROOM_CODE = /^pb-[a-z0-9]{4,12}$/;
@@ -166,6 +167,38 @@ const NICK_CHANGE_MS = 10_000;
 // 같은 이름 동시 요청은 이름별 락으로 한 명만 차지. 바꾸면 새 이름을 먼저 차지한 뒤 예전 이름을 놓음.
 // 이 기능 전에 정한 기존 닉네임은 바꾸지 않고, 그 계정이 접속할 때(nickGet) 비어 있으면 등록 (먼저 온 사람이 주인).
 const NICK_COLLECTION = 'pb_nick';
+
+// ---------------- 리텐션 기록 (개발자 콘솔 retention()) ----------------
+// 컬렉션은 클라이언트도 이름을 알면 구독할 수 있음(SDK에 서버 전용 컬렉션·권한이 없음) → 계정·닉네임 없이 날짜 숫자만 저장하고,
+// 이름은 서버 코드에만 둠 (클라이언트 번들에 없음). 계정 ↔ 유저 문서 연결은 그 계정의 비공개 사용자 상태 act에만.
+/** 유저 문서 {f: 최초 접속일, l: 마지막 접속일} (UTC 일 번호) */
+const RET_USERS = 'pb_ret_u7k2';
+/** 접속일 문서 {d: 접속일, f: 최초 접속일, k: d - f} — 계정당 하루 1개 */
+const RET_DAYS = 'pb_ret_d7k2';
+/**
+ * 리텐션 조회 관리자 (Verse8 계정 주소, 소문자 비교). SDK에 관리자 권한 체계가 없어 서버 코드의 허용 목록으로만 판단.
+ * $sender.account는 플랫폼이 인증한 값이라 클라이언트가 바꿀 수 없음. 추가·변경은 이 목록을 고치고 서버 다시 배포
+ */
+const RETENTION_ADMINS = new Set(['0x7b47aa40357441418909f83728da906b7c85d261']);
+/** 관리자 한 명당 조회 간격 (집계에 count 질의가 많아서) */
+const RETENTION_COOLDOWN_MS = 5000;
+/** 코호트·일별 표 범위 (일) */
+const RETENTION_WINDOW = 30;
+
+/** 내 리텐션 기록 (비공개 사용자 상태) */
+interface ActRecord {
+  /** 최초 접속일 */
+  f: number;
+  /** 마지막 접속일 */
+  l: number;
+  /** 유저 문서 id */
+  id: string;
+}
+
+function readAct(st: Record<string, unknown> | null): ActRecord | null {
+  const a = st?.act as Partial<ActRecord> | undefined;
+  return a && Number.isInteger(a.f) && Number.isInteger(a.l) && typeof a.id === 'string' ? (a as ActRecord) : null;
+}
 
 function nickKey(nick: string): string {
   return nick.normalize('NFC').trim().toLowerCase();
@@ -865,6 +898,109 @@ export class Server {
       slog(already ? 'purchase_already_owned' : 'purchase_granted', '-', { account, productId, purchaseId, char });
       return { success: true };
     });
+  }
+
+  /**
+   * 접속 기록 (클라이언트가 게임 시작 때 한 번, 응답을 기다리지 않음): 계정당 UTC 하루 1번만 접속일 문서를 남김.
+   * 같은 날 여러 번 와도(새로고침·다른 기기) 계정 상태의 마지막 접속일로 걸러 1명. 과거 기록은 만들지 않음
+   */
+  async actPing(): Promise<{ ok: boolean; first?: boolean }> {
+    const account = $sender.account;
+    if (!account) return { ok: false };
+    return $lock(`act:${account}`, async () => {
+      const today = utcDay(Date.now());
+      const st = ((await $global.getMyState()) || {}) as Record<string, unknown>;
+      const act = readAct(st);
+      if (act && act.l >= today) return { ok: true, first: false };
+      if (!act) {
+        const doc = await $global.addCollectionItem(RET_USERS, { f: today, l: today });
+        await $global.addCollectionItem(RET_DAYS, { d: today, f: today, k: 0 });
+        await $global.updateMyState({ act: { f: today, l: today, id: doc.__id } satisfies ActRecord });
+        return { ok: true, first: true };
+      }
+      await $global.addCollectionItem(RET_DAYS, { d: today, f: act.f, k: today - act.f });
+      await $global.updateCollectionItem(RET_USERS, { __id: act.id, f: act.f, l: today });
+      await $global.updateMyState({ act: { ...act, l: today } });
+      return { ok: true, first: false };
+    });
+  }
+
+  /**
+   * 리텐션 집계 (관리자만, 서버가 계정으로 확인). 집계된 숫자만 돌려줌 — 계정·닉네임 등 개인 정보 없음.
+   * summary: 전체 Dn (대상 = 최초 접속일이 오늘-n 이전인 유저, 재접속 = 정확히 n일째 접속), cohort: 최근 30일 최초 접속일별, daily: 최근 30일 DAU·신규
+   */
+  async retentionGet(view?: unknown): Promise<RetentionResult> {
+    const account = $sender.account;
+    if (!account || !RETENTION_ADMINS.has(account.toLowerCase())) {
+      slog('retention_denied', '-', { account });
+      return { ok: false, reason: 'not_admin', account };
+    }
+    const v: RetentionView = view === undefined || view === null || view === 'summary' ? 'summary' : view === 'cohort' || view === 'daily' ? view : ('' as RetentionView);
+    if (!v) return { ok: false, reason: 'bad_view' };
+    const now = Date.now();
+    const st = ((await $global.getMyState()) || {}) as { rtAt?: unknown };
+    const last = typeof st.rtAt === 'number' ? st.rtAt : 0;
+    if (now - last < RETENTION_COOLDOWN_MS) return { ok: false, reason: 'too_fast', waitMs: RETENTION_COOLDOWN_MS - (now - last) };
+    await $global.updateMyState({ rtAt: now });
+    const today = utcDay(now);
+    const count = (id: string, filters: Array<{ field: string; operator: string; value: number }>) => $global.countCollectionItems(id, { filters });
+    try {
+      if (v === 'summary') {
+        const [users, active30, activeToday, earliest] = await Promise.all([
+          count(RET_USERS, []),
+          count(RET_USERS, [{ field: 'l', operator: '>=', value: today - (RETENTION_WINDOW - 1) }]),
+          count(RET_DAYS, [{ field: 'd', operator: '==', value: today }]),
+          $global.getCollectionItems(RET_USERS, { orderBy: [{ field: 'f', direction: 'asc' }], limit: 1 }),
+        ]);
+        const cells = await Promise.all(
+          RETENTION_DAYS.map(async (n) => {
+            const [eligible, retained] = await Promise.all([
+              count(RET_USERS, [{ field: 'f', operator: '<=', value: today - n }]),
+              count(RET_DAYS, [{ field: 'k', operator: '==', value: n }]),
+            ]);
+            return { n, eligible, retained, rate: rate(retained, eligible) };
+          }),
+        );
+        const first = earliest[0]?.f;
+        return { ok: true, view: 'summary', data: { today: dayLabel(today), users, active30, activeToday, since: Number.isInteger(first) ? dayLabel(first) : null, cells } };
+      }
+      if (v === 'cohort') {
+        const rows: RetentionCohortRow[] = [];
+        for (let f = today - (RETENTION_WINDOW - 1); f <= today; f++) {
+          const size = await count(RET_USERS, [{ field: 'f', operator: '==', value: f }]);
+          if (size === 0) continue;
+          const cells = await Promise.all(
+            RETENTION_DAYS.map(async (n) => {
+              if (f + n > today) return { n, retained: null, rate: null };
+              const retained = await count(RET_DAYS, [
+                { field: 'f', operator: '==', value: f },
+                { field: 'k', operator: '==', value: n },
+              ]);
+              return { n, retained, rate: rate(retained, size) };
+            }),
+          );
+          rows.push({ day: dayLabel(f), users: size, cells });
+        }
+        return { ok: true, view: 'cohort', data: rows };
+      }
+      const rows: RetentionDailyRow[] = await Promise.all(
+        Array.from({ length: RETENTION_WINDOW }, async (_, i) => {
+          const d = today - (RETENTION_WINDOW - 1) + i;
+          const [dau, newUsers] = await Promise.all([
+            count(RET_DAYS, [{ field: 'd', operator: '==', value: d }]),
+            count(RET_DAYS, [
+              { field: 'd', operator: '==', value: d },
+              { field: 'k', operator: '==', value: 0 },
+            ]),
+          ]);
+          return { day: dayLabel(d), dau, newUsers };
+        }),
+      );
+      return { ok: true, view: 'daily', data: rows };
+    } catch (e) {
+      slog('retention_error', '-', { err: e instanceof Error ? e.message : String(e) });
+      return { ok: false, reason: 'error' };
+    }
   }
 
   async progressGet(): Promise<{ ok: true; xp: number; lv: number }> {

@@ -1280,3 +1280,43 @@ describe('VXShop paid characters', () => {
     expect((await server.shopOwned()).chars).toEqual([]);
   });
 });
+
+describe('retention (developer console)', () => {
+  const ADMIN = '0x7b47aa40357441418909f83728da906b7c85d261';
+  test('one activity per account per UTC day, aggregates only, admin-only with cooldown', async (server) => {
+    // 같은 계정이 하루에 여러 번 와도 1명
+    server.connect({ account: 'alice' });
+    expect((await server.actPing()).first).toBe(true);
+    expect((await server.actPing()).first).toBe(false);
+    expect((await server.actPing()).first).toBe(false);
+    server.connect({ account: 'bob' });
+    expect((await server.actPing()).first).toBe(true);
+    // 일반 계정은 거절 (서버가 계정으로 확인)
+    const denied = await server.retentionGet('summary');
+    expect(denied.ok).toBe(false);
+    expect(denied.reason).toBe('not_admin');
+    server.connect({ account: ADMIN });
+    const r = await server.retentionGet();
+    expect(r.ok).toBe(true);
+    expect(r.view).toBe('summary');
+    expect(r.data.users).toBe(2);
+    expect(r.data.activeToday).toBe(2);
+    expect(r.data.active30).toBe(2);
+    // 오늘 처음 온 유저뿐 → D1 이후는 아직 관측 불가 (분모 0 = N/A)
+    expect(r.data.cells.every((c: any) => c.eligible === 0 && c.rate === null)).toBe(true);
+    expect(JSON.stringify(r).includes('alice')).toBe(false);
+    // 연속 조회는 잠시 막음
+    expect((await server.retentionGet('daily')).reason).toBe('too_fast');
+    spin(5100);
+    const daily = await server.retentionGet('daily');
+    expect(daily.data).toHaveLength(30);
+    expect(daily.data[29].dau).toBe(2);
+    expect(daily.data[29].newUsers).toBe(2);
+    spin(5100);
+    const cohort = await server.retentionGet('cohort');
+    expect(cohort.data).toHaveLength(1);
+    expect(cohort.data[0].users).toBe(2);
+    expect(cohort.data[0].cells.every((c: any) => c.rate === null)).toBe(true);
+    expect((await server.retentionGet('weird')).reason).toBe('bad_view');
+  });
+});
