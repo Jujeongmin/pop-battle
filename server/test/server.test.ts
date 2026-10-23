@@ -1106,6 +1106,27 @@ describe('nickname storage (server final check)', () => {
     expect((await server.nickGet()).nick).toBe('뽀야');
   });
 
+  test('nickSet blocks a nickname another account uses (case and surrounding spaces ignored), frees it after a rename', async (server) => {
+    server.connect({ account: 'alice', roomId: '__no_room__' });
+    expect((await server.nickSet('Bubu')).ok).toBe(true);
+    server.connect({ account: 'bob', roomId: '__no_room__' });
+    expect((await server.nickSet('bubu')).reason).toBe('taken');
+    expect((await server.nickSet('  BUBU  ')).reason).toBe('taken');
+    expect((await server.nickGet()).nick).toBe(null);
+    expect((await server.nickSet('Momo')).ok).toBe(true);
+    // 내 이름의 대소문자만 바꾸는 것은 가능
+    server.connect({ account: 'alice', roomId: '__no_room__' });
+    expect((await server.nickSet('Bubu')).ok).toBe(true);
+    spin(10_100);
+    expect((await server.nickSet('BUBU')).ok).toBe(true);
+    spin(10_100);
+    expect((await server.nickSet('Pang')).ok).toBe(true);
+    // alice가 놓은 이름은 이제 bob이 쓸 수 있음
+    server.connect({ account: 'bob', roomId: '__no_room__' });
+    spin(10_100);
+    expect((await server.nickSet('bubu')).ok).toBe(true);
+  });
+
   test('nickSet rate limit (first set free, change again within 10 s refused, same name fine)', async (server) => {
     server.connect({ account: 'nr', roomId: '__no_room__' });
     expect((await server.nickSet('First')).ok).toBe(true);

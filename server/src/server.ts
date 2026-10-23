@@ -159,6 +159,42 @@ function hubWeapon(w: unknown): string {
 const NICK_CHANGE_MS = 10_000;
 
 /** 저장된 내 닉네임 (지금 규칙으로 다시 검사, 금칙어 목록이 바뀌어 걸리면 없는 것으로) */
+// ---------------- 닉네임 중복 방지 (서버 기준) ----------------
+// 닉네임 등록부: 컬렉션 pb_nick 한 줄 = { key: 비교용 닉네임, acc: 주인 계정 }. 비교는 앞뒤 공백 제거 + 대소문자 무시 (NFC 정규화).
+// 같은 이름 동시 요청은 이름별 락으로 한 명만 차지. 바꾸면 새 이름을 먼저 차지한 뒤 예전 이름을 놓음.
+// 이 기능 전에 정한 기존 닉네임은 바꾸지 않고, 그 계정이 접속할 때(nickGet) 비어 있으면 등록 (먼저 온 사람이 주인).
+const NICK_COLLECTION = 'pb_nick';
+
+function nickKey(nick: string): string {
+  return nick.normalize('NFC').trim().toLowerCase();
+}
+
+async function nickOwner(key: string): Promise<{ id: string; acc: string } | null> {
+  const items = await $global.getCollectionItems(NICK_COLLECTION, { filters: [{ field: 'key', operator: '==', value: key }], limit: 1 });
+  const it = items[0];
+  return it ? { id: it.__id, acc: String(it.acc) } : null;
+}
+
+/** 이 계정이 이 닉네임을 차지 (이미 내 것이면 그대로). 다른 계정 것이면 false */
+async function claimNick(account: string, nick: string): Promise<boolean> {
+  const key = nickKey(nick);
+  return $lock(`nick:${key}`, async () => {
+    const owner = await nickOwner(key);
+    if (owner) return owner.acc === account;
+    await $global.addCollectionItem(NICK_COLLECTION, { key, acc: account, t: Date.now() });
+    return true;
+  });
+}
+
+/** 내 것인 닉네임 등록을 놓음 (바꾼 뒤 예전 이름) */
+async function releaseNick(account: string, nick: string): Promise<void> {
+  const key = nickKey(nick);
+  await $lock(`nick:${key}`, async () => {
+    const owner = await nickOwner(key);
+    if (owner && owner.acc === account) await $global.deleteCollectionItem(NICK_COLLECTION, owner.id);
+  });
+}
+
 async function storedNick(): Promise<string | null> {
   const st = ((await $global.getMyState()) || {}) as { nick?: unknown };
   const r = checkNickname(st.nick);
@@ -777,11 +813,25 @@ export class Server {
   }
 
   async nickGet(): Promise<{ ok: true; nick: string | null }> {
-    return { ok: true, nick: await storedNick() };
+    const nick = await storedNick();
+    // 기존 닉네임(중복 방지 전에 정한 이름)은 그대로 두고, 등록부에 비어 있으면 이 계정 것으로 등록
+    if (nick) {
+      const st = ((await $global.getMyState()) || {}) as { nickReg?: unknown };
+      if (st.nickReg !== nickKey(nick)) {
+        try {
+          if (await claimNick($sender.account, nick)) await $global.updateMyState({ nickReg: nickKey(nick) });
+          else slog('nick_shared_legacy', '-', { account: $sender.account });
+        } catch {
+          // 등록부를 못 써도 접속은 그대로
+        }
+      }
+    }
+    return { ok: true, nick };
   }
 
   /**
-   * 닉네임 저장 (최종 검사): 형식·금칙어 통과한 값만 저장, 실패하면 이전 값 그대로. 바꾸는 간격 제한 (첫 설정 제외).
+   * 닉네임 저장 (최종 검사): 형식·금칙어 통과 + 다른 계정이 쓰지 않는 이름만 저장(대소문자·앞뒤 공백 무시, 'taken'),
+   * 실패하면 이전 값 그대로. 바꾸는 간격 제한 (첫 설정 제외).
    * 로비 안이면 로비 사용자 상태도 바꿈 → 다른 사람 머리 위 이름이 바로 바뀜. 실패 이유는 형식·금칙어를 구분해 돌려줌
    */
   async nickSet(raw: unknown): Promise<{ ok: boolean; nick?: string; reason?: string; retryMs?: number }> {
@@ -792,7 +842,10 @@ export class Server {
     if (st.nick !== r.value) {
       const last = typeof st.nickAt === 'number' ? st.nickAt : 0;
       if (typeof st.nick === 'string' && st.nick && now - last < NICK_CHANGE_MS) return { ok: false, reason: 'rate', retryMs: NICK_CHANGE_MS - (now - last) };
-      await $global.updateMyState({ nick: r.value, nickAt: now });
+      if (!(await claimNick($sender.account, r.value))) return { ok: false, reason: 'taken' };
+      await $global.updateMyState({ nick: r.value, nickAt: now, nickReg: nickKey(r.value) });
+      // 예전 이름은 놓음 (대소문자만 바꾼 경우는 같은 등록이라 그대로)
+      if (typeof st.nick === 'string' && st.nick && nickKey(st.nick) !== nickKey(r.value)) await releaseNick($sender.account, st.nick).catch(() => undefined);
       const rid = (st as { rid?: unknown }).rid;
       if (typeof rid === 'string' && rid) await $global.updateCollectionItem(RANK_COLLECTION, { __id: rid, nick: r.value }).catch(() => undefined);
     }

@@ -129,7 +129,7 @@ export interface LobbyHost {
 export interface NicknameResult {
   ok: boolean;
   value?: string;
-  reason?: NickFailReason | 'rate' | 'server';
+  reason?: NickFailReason | 'rate' | 'taken' | 'server';
   retryMs?: number;
 }
 

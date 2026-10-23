@@ -6,7 +6,7 @@ import { button, el, type LobbyHost, type NicknameResult } from './lobbyDom';
 export const NICKNAME_RULE = `${NICK_RULE.min}~${NICK_RULE.max}자 · 한글, 영문, 숫자만 사용할 수 있어요.`;
 
 /** 실패 이유별 안내 (금칙어는 어떤 말에 걸렸는지 알려 주지 않음) */
-export function nicknameMessage(reason: NickFailReason | 'rate' | 'server' | undefined, retryMs?: number): string {
+export function nicknameMessage(reason: NickFailReason | 'rate' | 'taken' | 'server' | undefined, retryMs?: number): string {
   switch (reason) {
     case 'empty':
       return '닉네임을 입력해 주세요.';
@@ -16,6 +16,8 @@ export function nicknameMessage(reason: NickFailReason | 'rate' | 'server' | und
       return '한글, 영문, 숫자만 사용할 수 있어요.';
     case 'blocked':
       return '사용할 수 없는 닉네임입니다. 다른 이름을 입력해 주세요.';
+    case 'taken':
+      return '이미 다른 플레이어가 쓰는 닉네임이에요. 다른 이름을 입력해 주세요.';
     case 'rate':
       // 서버(또는 이 기기 저장)가 알려 준 남은 시간만 표시, 모르면 시간 없이
       return retryMs !== undefined && retryMs > 0 ? `${Math.ceil(retryMs / 1000)}초 뒤에 다시 변경할 수 있어요.` : '잠시 후 다시 변경해 주세요.';

@@ -108,8 +108,8 @@ function isRemoteTarget(t: { id?: string } | undefined): boolean {
   return !!t?.id?.startsWith('net:');
 }
 
-function isNickReason(r: unknown): r is NickFailReason | 'rate' {
-  return r === 'empty' || r === 'length' || r === 'chars' || r === 'blocked' || r === 'rate';
+function isNickReason(r: unknown): r is NickFailReason | 'rate' | 'taken' {
+  return r === 'empty' || r === 'length' || r === 'chars' || r === 'blocked' || r === 'rate' || r === 'taken';
 }
 
 /** ms 안에 끝나지 않으면 실패 (서버 응답이 없을 때 화면이 멈춰 있지 않게) */
