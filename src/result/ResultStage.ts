@@ -113,9 +113,13 @@ function layout(data: ResultData): Array<Omit<Slot, 'bx'>> {
       { x: 1.55, z: 0, scale: 1 },
       { x: 2.95, z: -0.55, scale: 0.84 },
     ];
+    // 무리 전체를 화면 가운데로 (4명이면 4위가 오른쪽에만 있어 1위 기준이면 오른쪽으로 치우침)
+    const used = spots.slice(0, list.length).map((s) => s.x);
+    const shift = -(Math.min(...used) + Math.max(...used)) / 2;
     return list.map((entry, i) => ({
       entry,
       ...spots[i]!,
+      x: spots[i]!.x + shift,
       podium: FFA_PODIUM_HEIGHTS[Math.min(3, entry.rank - 1)]!,
       color: FFA_PODIUM_COLORS[Math.min(3, entry.rank - 1)]!,
       pose: ffaPose(entry.rank, list.length),
