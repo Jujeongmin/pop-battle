@@ -273,7 +273,7 @@ export class Game {
   /** 시작 화면 "Multiplayer Test" 메뉴 (항상 생성, 서버 연결은 방 만들기/입장 때) */
   private mpMenu: MultiplayerMenu | null = null;
   private netHud: NetTestHud | null = null;
-  /** 멀티 테스트 게임으로 전환됨 (봇 제거, 최대 4인 규칙). 싱글플레이로 돌아가려면 새로고침 */
+  /** 멀티 게임으로 전환됨 (봇 제거, 최대 8인 규칙) */
   private netGame = false;
   /** 직접 나가기로 룸에서 나옴 (연결 끊김과 구분해 메뉴 화면을 고름) */
   private netLeftByUser = false;
@@ -1705,7 +1705,7 @@ export class Game {
       matchLabel: () => {
         if (!this.netGame) return '연습전 · 개인전 4인';
         const mode = this.net?.session.mode;
-        return mode === 'tdm' ? '멀티플레이 · 팀 데스매치 2:2' : mode === 'ffa' ? '멀티플레이 · 개인전 4인' : '멀티플레이 · 자유 테스트';
+        return mode === 'tdm' ? '멀티플레이 · 팀 데스매치 (최대 4:4)' : mode === 'ffa' ? '멀티플레이 · 개인전 (최대 8인)' : '멀티플레이 · 자유 테스트';
       },
       multiplayer: () => this.netGame,
       leaveMatch: async () => {
@@ -2795,7 +2795,7 @@ export class Game {
     this.resetNetMatch();
     this.applyNetMode();
     this.hud.setCharacter(this.avatar.character.id, true);
-    this.hud.setModeLine('멀티플레이 (최대 4인) · 봇 없음');
+    this.hud.setModeLine('멀티플레이 (최대 8인) · 봇 없음');
     this.netHud = new NetTestHud(this.container, this.ensureNet().session, () => ({ hp: this.combatant.health.hp, max: this.combatant.health.maxHp }), () => this.fps);
     // 다른 플레이어 입장·퇴장·연결 끊김을 화면에 알림 (정식 HUD 알림)
     this.ensureNet().session.onNotice = (text) => this.hud.notify(text);
@@ -2871,10 +2871,9 @@ export class Game {
     const why: Record<string, string> = {
       not_host: '방장만 할 수 있어요',
       need_2_players: '두 명 이상 있어야 시작할 수 있어요',
-      need_4_players: '4명이 모두 들어와야 시작할 수 있어요',
-      teams_unbalanced: '팀 인원을 2:2로 맞춰 주세요',
+      teams_unbalanced: '팀 인원 차이가 1명을 넘지 않게 상대 팀이 더 적을 때만 바꿀 수 있어요',
       in_progress: '매치가 진행 중이에요',
-      team_full: '그 팀은 이미 2명이에요',
+      team_full: '그 팀은 이미 4명이에요',
       not_tdm: '팀 데스매치에서만 팀을 바꿀 수 있어요',
     };
     return why[reason ?? ''] ?? reason ?? '알 수 없음';
@@ -2937,10 +2936,12 @@ export class Game {
         .sort((a, b) => a[1].slot - b[1].slot);
       const idx = Math.max(0, mates.findIndex(([a]) => a === s.me));
       this.spawnPool = list;
-      this.netSpawn = [list[0], list[4] ?? list[1]][idx] ?? list[0] ?? null;
+      // 팀 안 순서별 스폰 (같은 쪽 진영, 서로 3m 이상): 기존 2인 자리(0·4) 그대로 + 3·4번째
+      this.netSpawn = [list[0], list[4] ?? list[1], list[3] ?? list[2], list[2] ?? list[1]][idx] ?? list[0] ?? null;
     } else {
       this.spawnPool = [...teamA, ...teamB];
-      const bySlot = [teamA[0], teamB[0], teamA[4] ?? teamA[1], teamB[3] ?? teamB[1]];
+      // 자리별 스폰 (남·북 번갈아, 기존 4자리 그대로 + 5~8번째)
+      const bySlot = [teamA[0], teamB[0], teamA[4] ?? teamA[1], teamB[3] ?? teamB[1], teamA[3] ?? teamA[2], teamB[4] ?? teamB[2], teamA[2], teamB[2]];
       this.netSpawn = bySlot[s.slot] ?? null;
     }
     this.beginMatch();

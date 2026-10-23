@@ -172,6 +172,7 @@
 
 /* TDM: [BLUE 점수 · 두 명] : [두 명 · RED 점수] */
 .pb-res-side { display: flex; min-width: 0; flex: 1 1 0; align-items: stretch; }
+.pb-res-side-cells { display: flex; min-width: 0; flex: 1 1 auto; align-items: stretch; }
 .pb-res-side .pb-res-cell { width: 170px; }
 .pb-res-side-score { display: grid; flex: 0 0 auto; align-content: center; justify-items: center; padding: 2px 12px; color: #fff; }
 .pb-res-side-score span { font-family: var(--res-font); font-size: 13px; letter-spacing: .6px; }
@@ -334,3 +335,15 @@
   .pb-res-btn { min-width: 112px; min-height: 40px; font-size: 16px; }
   .pb-res-note { bottom: calc(clamp(8px, 3vh, 24px) + 48px); }
 }
+
+/* 5~8명: 두 줄 (FFA 4칸 × 2줄 순위 순서, TDM 팀마다 2칸 × 2줄) — 칸 폭은 줄이고 판이 화면을 넘지 않게 */
+.pb-res-board-many.pb-res-board-ffa { flex-wrap: wrap; width: min(820px, 100%); }
+.pb-res-board-many.pb-res-board-ffa .pb-res-cell { width: auto; flex: 0 0 25%; }
+.pb-res-board-many.pb-res-board-ffa .pb-res-cell:nth-child(4n + 1) { border-left: 0; }
+.pb-res-board-many.pb-res-board-ffa .pb-res-cell:nth-child(n + 5) { border-top: 2px dashed rgba(39, 50, 92, .14); }
+.pb-res-board-many .pb-res-side-cells { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pb-res-board-many .pb-res-side .pb-res-cell { width: auto; min-width: 0; }
+.pb-res-board-many .pb-res-side .pb-res-cell:nth-child(2n + 1) { border-left: 0; }
+.pb-res-board-many .pb-res-side .pb-res-cell:nth-child(n + 3) { border-top: 2px dashed rgba(39, 50, 92, .14); }
+.pb-res-board-many.pb-res-board-tdm { width: min(980px, 100%); }
+

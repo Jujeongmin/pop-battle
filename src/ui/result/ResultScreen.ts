@@ -195,10 +195,11 @@ export class ResultScreen {
 
   /**
    * 스코어보드 한 판 (가로로 넓고 낮게): 칸마다 순위 메달 · 닉네임 전체 · K/D · MVP.
-   * FFA = 순위 순서 / TDM = [BLUE 점수 · 두 명] vs [두 명 · RED 점수], 이긴 팀 금테
+   * FFA = 순위 순서 / TDM = [BLUE 점수 · 팀원] vs [팀원 · RED 점수], 이긴 팀 금테.
+   * 5명 이상(최대 8명)이면 두 줄: FFA 4칸 × 2줄, TDM 팀마다 2칸 × 2줄
    */
   private board(d: ResultData): HTMLElement {
-    const board = el('div', `pb-res-board pb-res-board-${d.layout}`);
+    const board = el('div', `pb-res-board pb-res-board-${d.layout}${d.entries.length > 4 ? ' pb-res-board-many' : ''}`);
     const cell = (e: ResultEntry) => {
       const c = el('div', 'pb-res-cell');
       if (e.me) c.classList.add('pb-res-me');
@@ -222,9 +223,10 @@ export class ResultScreen {
         const side = el('div', `pb-res-side pb-res-side-${team.toLowerCase()}${d.winnerTeam === team ? ' pb-res-side-win' : ''}`);
         const score = el('div', 'pb-res-side-score');
         score.append(el('span', '', `${team}`), el('b', '', String(d.teamScore[team])));
-        const cells = d.entries.filter((e) => (e.team ?? 'BLUE') === team).map(cell);
-        if (team === 'BLUE') side.append(score, ...cells);
-        else side.append(...cells, score);
+        const cells = el('div', 'pb-res-side-cells');
+        cells.append(...d.entries.filter((e) => (e.team ?? 'BLUE') === team).map(cell));
+        if (team === 'BLUE') side.append(score, cells);
+        else side.append(cells, score);
         board.append(side);
         if (team === 'BLUE') board.append(el('span', 'pb-res-vs', ':'));
       }

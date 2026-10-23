@@ -355,3 +355,8 @@
   .lb-mp-ffa .lb-mp-player { grid-template-columns: 45px minmax(0,1fr); }
   .lb-mp-ffa .lb-mp-char-swatch { width: 43px; }
 }
+
+/* TDM 최대 4v4: 팀마다 2칸 × 2줄 (팀 4명이 세로로 길게 늘어서 작은 가로 화면에서 잘리지 않게) */
+.lb-mp-teams .lb-mp-team-column { grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; }
+.lb-mp-teams .lb-mp-team-column h3 { grid-column: 1 / -1; }
+

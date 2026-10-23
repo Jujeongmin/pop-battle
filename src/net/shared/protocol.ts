@@ -5,14 +5,14 @@
 import { checkNickname, NICK_RULE } from './nickFilter';
 export { checkNickname, type NickFailReason } from './nickFilter';
 
-/** 룸 정원 (멀티플레이 테스트: 최대 4명) */
-export const NET_MAX_PLAYERS = 4;
-/** 자유 테스트 모드 시작에 필요한 최소 인원 */
+/** 룸 정원 (최대 8명) */
+export const NET_MAX_PLAYERS = 8;
+/** 매치 시작에 필요한 최소 인원 (모든 모드) */
 export const NET_MIN_PLAYERS = 2;
-/** TDM 팀당 최대 인원 */
-export const NET_TEAM_SIZE = 2;
+/** TDM 팀당 최대 인원 (4v4). 시작할 때 두 팀 인원 차이는 1명 이하로 맞춤 (2명 1v1 … 8명 4v4) */
+export const NET_TEAM_SIZE = 4;
 
-/** 게임 모드: 팀 데스매치(2v2) / 개인전(4인) / 자유 테스트(기존 1v1~4인 테스트, 시간·점수 제한 없음) */
+/** 게임 모드: 팀 데스매치(최대 4v4) / 개인전(최대 8인) / 자유 테스트(2~8명, 시간·점수 제한 없음) */
 export type NetMode = 'tdm' | 'ffa' | 'test';
 /** 매치 단계 (서버 소유): 대기실 → 카운트다운 → 진행 → 결과 → 대기실 */
 export type NetMatchPhase = 'lobby' | 'countdown' | 'playing' | 'result';
@@ -21,7 +21,7 @@ export type NetTeam = 'BLUE' | 'RED';
 export interface NetModeRule {
   label: string;
   short: string;
-  /** 시작에 필요한 인원 (이 인원 이상, TDM은 팀별 NET_TEAM_SIZE명씩) */
+  /** 시작에 필요한 인원 (이 인원 이상) */
   requiredPlayers: number;
   /** 제한 시간 (ms, 0 = 없음) */
   timeLimitMs: number;
@@ -31,8 +31,8 @@ export interface NetModeRule {
 }
 
 export const NET_MODE_RULES: Record<NetMode, NetModeRule> = {
-  tdm: { label: 'Team Deathmatch', short: 'TDM 2v2', requiredPlayers: 4, timeLimitMs: 180_000, scoreToWin: 20, teams: true },
-  ffa: { label: 'Free For All', short: 'FFA 4인', requiredPlayers: 4, timeLimitMs: 180_000, scoreToWin: 15, teams: false },
+  tdm: { label: 'Team Deathmatch', short: 'TDM 4v4', requiredPlayers: NET_MIN_PLAYERS, timeLimitMs: 180_000, scoreToWin: 20, teams: true },
+  ffa: { label: 'Free For All', short: 'FFA 8인', requiredPlayers: NET_MIN_PLAYERS, timeLimitMs: 180_000, scoreToWin: 15, teams: false },
   test: { label: '자유 테스트', short: 'TEST', requiredPlayers: NET_MIN_PLAYERS, timeLimitMs: 0, scoreToWin: 0, teams: false },
 };
 

@@ -1,4 +1,4 @@
-// 결과 화면 3D 무대: 경기장 대신 따로 그리는 작은 장면 (하늘 배경·바닥·시상대·캐릭터 최대 4명·색종이).
+// 결과 화면 3D 무대: 경기장 대신 따로 그리는 작은 장면 (하늘 배경·바닥·시상대·캐릭터 최대 4명·색종이). 8인 경기는 무대에 상위 4명(TDM은 팀마다 2명), 전체 기록은 스코어보드.
 // 캐릭터는 게임이 이미 불러온 GLB 캐시를 복제하고 대기 클립 위에 본 회전(월드 축 기준)으로 순위별 자세를 얹는다:
 // 1위·TDM 승리 = 짧은 점프 등장 → 한 팔 번쩍 + 반대 손 허리, 2위 = 손 들어 두 번 흔든 뒤 유지, 3위 = 양손 허리,
 // 꼴찌·TDM 패배 = 고개·어깨 떨굼, 무승부 = 대기. 1~2초 안에 자세를 잡고 숨쉬기 정도만 움직임 (반복 점프·팔 휘젓기 없음).
@@ -127,10 +127,12 @@ function layout(data: ResultData): Array<Omit<Slot, 'bx'>> {
       front: i < 3,
     }));
   }
+  // TDM: 팀마다 순위 순서로 2명씩 (상위 4명만 고르면 한 팀만 무대에 오를 수 있음)
+  const all = data.entries;
   const team = (e: ResultEntry) => e.team ?? 'BLUE';
   if (data.draw || !data.winnerTeam) {
-    const blue = list.filter((e) => team(e) === 'BLUE');
-    const red = list.filter((e) => team(e) !== 'BLUE');
+    const blue = all.filter((e) => team(e) === 'BLUE');
+    const red = all.filter((e) => team(e) !== 'BLUE');
     const xs = [-2.15, -0.8, 0.8, 2.15];
     return [...blue.slice(0, 2).map((e, i) => ({ e, x: xs[1 - i]! })), ...red.slice(0, 2).map((e, i) => ({ e, x: xs[2 + i]! }))].map(({ e, x }, i) => ({
       entry: e,
@@ -144,8 +146,8 @@ function layout(data: ResultData): Array<Omit<Slot, 'bx'>> {
       front: true,
     }));
   }
-  const win = list.filter((e) => team(e) === data.winnerTeam);
-  const lose = list.filter((e) => team(e) !== data.winnerTeam);
+  const win = all.filter((e) => team(e) === data.winnerTeam);
+  const lose = all.filter((e) => team(e) !== data.winnerTeam);
   return [
     ...lose.slice(0, 2).map((entry, i) => ({ entry, x: i === 0 ? -2.6 : 2.6, z: -0.75, scale: 0.82, podium: 0.16, pose: 'defeat' as const, delay: 0.25 + i * 0.15, front: false })),
     ...win.slice(0, 2).map((entry, i) => ({ entry, x: i === 0 ? -0.8 : 0.8, z: 0.35, scale: 1.1, podium: 0.42, pose: 'champion' as const, delay: 0.7 + i * 0.15, front: true })),

@@ -1,4 +1,4 @@
-// 네트워크 레이어 2/2: 최대 4인 테스트 룸 흐름 (만들기·입장·나가기·끊김), 상태 패킷 전송, 원격 상태 보간 버퍼, 서버 이벤트 전달.
+// 네트워크 레이어 2/2: 최대 8인 룸 흐름 (만들기·입장·나가기·끊김), 상태 패킷 전송, 원격 상태 보간 버퍼, 서버 이벤트 전달.
 // 게임 객체는 모른다 → 결과는 NetSessionEvents 콜백으로만 내보냄 (게임 모드 쪽: NetGameMode).
 import { errText, NetClient } from './NetClient';
 import { SnapshotBuffer } from './SnapshotBuffer';
@@ -180,7 +180,7 @@ export class NetSession {
     return p?.nick || null;
   }
 
-  /** 닉네임이 없을 때 쓰는 자리 이름 (P1~P4) */
+  /** 닉네임이 없을 때 쓰는 자리 이름 (P1~P8) */
   slotName(account: string): string {
     const p = this.players[account] ?? this.gone[account] ?? this.result?.standings.find((s) => s.account === account);
     return p ? `P${p.slot + 1}` : '플레이어';

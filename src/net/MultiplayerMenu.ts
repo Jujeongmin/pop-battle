@@ -1,4 +1,4 @@
-// 시작 화면의 "Multiplayer" 화면: 모드 선택(TDM 2v2 / FFA 4인 / 자유 테스트) · 방 만들기 · 코드로 입장 ·
+// 시작 화면의 "Multiplayer" 화면: 모드 선택(TDM 4v4 / FFA 8인 / 자유 테스트) · 방 만들기 · 코드로 입장 ·
 // 대기실(팀·방장 시작) · 진행 중 일시정지 · 결과 화면 · 연결 끊김. 서버에는 준비 상태가 없다.
 // 표시는 전부 서버가 확인한 상태(NetSession)만 읽는다 — 클라이언트가 임의로 성공·결과를 만들지 않음.
 import { displayCode, type NetSession } from './NetSession';
@@ -60,8 +60,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 /** 모드 규칙 한 줄 */
 export function modeRuleText(mode: NetMode): string {
   const r = NET_MODE_RULES[mode];
-  if (mode === 'tdm') return `BLUE vs RED 2:2 · ${r.timeLimitMs / 60000}분 · 팀 ${r.scoreToWin}킬 먼저 · 시간 끝나면 킬 많은 팀, 같으면 무승부`;
-  if (mode === 'ffa') return `4인 개인전 · ${r.timeLimitMs / 60000}분 · ${r.scoreToWin}킬 먼저 · 시간 끝나면 최다 킬, 공동 1위면 무승부`;
+  if (mode === 'tdm') return `BLUE vs RED 최대 4:4 (2~${NET_MAX_PLAYERS}명) · ${r.timeLimitMs / 60000}분 · 팀 ${r.scoreToWin}킬 먼저 · 시간 끝나면 킬 많은 팀, 같으면 무승부`;
+  if (mode === 'ffa') return `개인전 2~${NET_MAX_PLAYERS}명 · ${r.timeLimitMs / 60000}분 · ${r.scoreToWin}킬 먼저 · 시간 끝나면 최다 킬, 공동 1위면 무승부`;
   return `2~${NET_MAX_PLAYERS}명 · 시간·점수 제한 없음 (연결·전투 점검용)`;
 }
 
@@ -330,12 +330,15 @@ export class MultiplayerMenu {
       if (rule.teams) {
         const team = this.host.localTeam();
         const other = team === 'BLUE' ? red : blue;
+        const mine = team === 'BLUE' ? blue : red;
         const sw = this.button(`팀 바꾸기 (${team === 'BLUE' ? '→ RED' : '→ BLUE'})`, 'lb-mp-small', () => this.run(() => this.host.switchTeam()));
-        sw.disabled = other >= NET_TEAM_SIZE;
+        // 팀 인원 차이 1명 이하 유지: 상대 팀이 더 적을 때만
+        sw.disabled = other >= NET_TEAM_SIZE || other >= mine;
         teamButton = sw;
       }
       const anyLost = Object.keys(s.players).some((a) => s.isLost(a));
-      const enough = n >= rule.requiredPlayers && (!rule.teams || (blue === NET_TEAM_SIZE && red === NET_TEAM_SIZE));
+      // TDM 팀 인원은 시작할 때 서버가 차이 1명 이하로 맞춤 (1v1 … 4v4)
+      const enough = n >= rule.requiredPlayers;
       const ready = enough && !anyLost;
       if (s.isHost) {
         if (import.meta.env.DEV && rule.timeLimitMs > 0) c.append(this.testTimePicker());
@@ -344,9 +347,9 @@ export class MultiplayerMenu {
         const hint = anyLost
           ? '연결이 끊긴 플레이어가 돌아오거나 나갈 때까지 기다려요'
           : n < rule.requiredPlayers
-            ? `${rule.requiredPlayers}명이 모두 들어와야 시작할 수 있어요 (지금 ${n}명) — 방 코드를 알려 주세요`
-            : rule.teams && !enough
-              ? '팀 인원을 2:2로 맞춰 주세요'
+            ? `${rule.requiredPlayers}명 이상 있어야 시작할 수 있어요 (지금 ${n}명) — 방 코드를 알려 주세요`
+            : rule.teams && Math.abs(blue - red) > 1
+              ? '시작하면 팀 인원 차이가 1명 이하가 되게 자동으로 맞춰요'
               : '시작하면 모두 같은 맵에서 3초 카운트다운 후 시작해요';
         c.append(start, el('p', 'lb-mp-hint', hint));
       } else {

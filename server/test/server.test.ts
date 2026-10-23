@@ -7,6 +7,8 @@
 import { checkNickname } from '../../src/net/shared/nickFilter';
 
 const ROOM = 'pb-test01';
+/** 정원 8명 */
+const EIGHT = ['alice', 'bob', 'carol', 'dave', 'erin', 'frank', 'gina', 'hank'];
 
 /** 하네스 안에는 타이머가 없어 시간 경과는 바쁜 대기로 */
 function spin(ms: number): void {
@@ -60,8 +62,8 @@ describe('matching', () => {
     expect(one.count).toBe(1);
     await server.simulateJoin(ROOM, 'bob');
     expect((await server.findRoom(ROOM)).count).toBe(2);
-    await server.simulateJoin(ROOM, 'carol');
-    await server.simulateJoin(ROOM, 'dave');
+    for (const a of ['carol', 'dave', 'erin', 'frank', 'gina', 'hank']) await server.simulateJoin(ROOM, a);
+    expect((await server.findRoom(ROOM)).count).toBe(8);
     expect((await server.findRoom(ROOM)).reason).toBe('full');
   });
 
@@ -74,20 +76,17 @@ describe('matching', () => {
 });
 
 describe('room lifecycle', () => {
-  test('four players get slots 0..3, fifth is spectator (-1)', async (server) => {
-    for (const a of ['alice', 'bob', 'carol', 'dave', 'erin']) await server.simulateJoin(ROOM, a);
-    server.connect({ account: 'alice', roomId: ROOM });
-    expect((await server.hello('blue')).slot).toBe(0);
-    server.connect({ account: 'bob', roomId: ROOM });
-    expect((await server.hello('black')).slot).toBe(1);
-    server.connect({ account: 'carol', roomId: ROOM });
-    expect((await server.hello('pink')).slot).toBe(2);
-    server.connect({ account: 'dave', roomId: ROOM });
-    expect((await server.hello('yellow')).slot).toBe(3);
-    server.connect({ account: 'erin', roomId: ROOM });
+  test('eight players get slots 0..7, ninth is spectator (-1)', async (server) => {
+    for (const a of [...EIGHT, 'ivan']) await server.simulateJoin(ROOM, a);
+    const chars = ['blue', 'black', 'pink', 'yellow', 'white', 'character_6', 'blue', 'pink'];
+    for (let i = 0; i < 8; i++) {
+      server.connect({ account: EIGHT[i], roomId: ROOM });
+      expect((await server.hello(chars[i])).slot).toBe(i);
+    }
+    server.connect({ account: 'ivan', roomId: ROOM });
     const e = await server.hello('blue');
     expect(e.slot).toBe(-1);
-    expect(Object.keys(e.players)).toHaveLength(4);
+    expect(Object.keys(e.players)).toHaveLength(8);
     expect(e.players.bob.max).toBe(130);
     expect(e.players.bob.hp).toBe(130);
   });
@@ -328,16 +327,38 @@ describe('test room flow', () => {
     expect(h.host).toBe('alice');
   });
 
-  test('fifth account cannot take a slot through hello', async (server) => {
-    for (const a of ['alice', 'bob', 'carol', 'dave']) await server.simulateJoin(ROOM, a);
-    server.connect({ account: 'erin', roomId: ROOM });
+  test('ninth account cannot take a slot through hello', async (server) => {
+    for (const a of EIGHT) await server.simulateJoin(ROOM, a);
+    server.connect({ account: 'ivan', roomId: ROOM });
     expect((await server.hello('blue')).slot).toBe(-1);
   });
 });
 
-// ---------------- 게임 모드 (TDM 2v2 / FFA 4인) ----------------
+// ---------------- 게임 모드 (TDM 최대 4v4 / FFA 최대 8인) ----------------
 
-const POS: Record<string, [number, number, number]> = { alice: [0, 0, 0], bob: [2, 0, 0], carol: [0, 0, 2], dave: [2, 0, 2] };
+const POS: Record<string, [number, number, number]> = {
+  alice: [0, 0, 0],
+  bob: [2, 0, 0],
+  carol: [0, 0, 2],
+  dave: [2, 0, 2],
+  erin: [4, 0, 0],
+  frank: [4, 0, 2],
+  gina: [6, 0, 0],
+  hank: [6, 0, 2],
+};
+
+/** n명 입장·위치 등록 후 방장(alice)이 모드 지정 */
+async function roomN(server: any, n: number, mode: string) {
+  const who = EIGHT.slice(0, n);
+  for (const a of who) await server.simulateJoin(ROOM, a);
+  for (const a of who) {
+    server.connect({ account: a, roomId: ROOM });
+    await server.hello('blue');
+    await server.st(state(POS[a]!));
+  }
+  server.connect({ account: 'alice', roomId: ROOM });
+  return server.setMode(mode);
+}
 
 /** 4명 입장·위치 등록 후 방장(alice)이 모드 지정 */
 async function room4(server: any, mode: string) {
@@ -384,21 +405,54 @@ async function roomState(server: any) {
 }
 
 describe('team deathmatch', () => {
-  test('teams 2/2, start rules, no team switch into a full team', async (server) => {
-    for (const a of ['alice', 'bob', 'carol']) await server.simulateJoin(ROOM, a);
+  test('teams stay within one player (1v1 … 4v4), switch only to the smaller team, full team blocked', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
     server.connect({ account: 'alice', roomId: ROOM });
     expect((await server.setMode('tdm')).ok).toBe(true);
-    expect((await server.startMatch()).reason).toBe('need_4_players');
-    await server.simulateJoin(ROOM, 'dave');
-    const r = await roomState(server);
-    expect(r.mode).toBe('tdm');
-    expect(r.players.alice.team).toBe('BLUE');
-    expect(r.players.bob.team).toBe('RED');
-    expect(r.players.carol.team).toBe('BLUE');
-    expect(r.players.dave.team).toBe('RED');
+    expect((await server.startMatch()).reason).toBe('need_2_players');
+    for (const a of ['bob', 'carol']) await server.simulateJoin(ROOM, a);
+    let r = await roomState(server);
+    expect([r.players.alice.team, r.players.bob.team, r.players.carol.team]).toEqual(['BLUE', 'RED', 'BLUE']);
+    // 2v1: 많은 팀(BLUE)의 carol → RED 가능 (1v2), 다시 BLUE의 alice → RED는 차이 2가 되어 거부
+    server.connect({ account: 'carol', roomId: ROOM });
+    expect((await server.switchTeam()).ok).toBe(true);
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.switchTeam()).reason).toBe('teams_unbalanced');
+    for (const a of ['dave', 'erin', 'frank', 'gina', 'hank']) await server.simulateJoin(ROOM, a);
+    r = await roomState(server);
+    const count = (t: string) => Object.values(r.players).filter((p: any) => p.team === t).length;
+    expect(count('BLUE')).toBe(4);
+    expect(count('RED')).toBe(4);
     expect((await server.switchTeam()).reason).toBe('team_full');
     server.connect({ account: 'bob', roomId: ROOM });
     expect((await server.setMode('ffa')).reason).toBe('not_host');
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.startMatch()).ok).toBe(true);
+  });
+
+  test('start balances teams left uneven by leavers (3v1 → 2v2); 2 players start as 1v1', async (server) => {
+    expect((await roomN(server, 6, 'tdm')).ok).toBe(true);
+    let r = await roomState(server);
+    const reds = Object.entries(r.players).filter(([, p]: any) => p.team === 'RED').map(([a]) => a);
+    expect(reds).toHaveLength(3);
+    for (const a of reds.slice(0, 2)) {
+      server.connect({ account: a, roomId: ROOM });
+      await server.bye({ quit: true });
+      await server.simulateLeave(ROOM, a);
+    }
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.startMatch()).ok).toBe(true);
+    r = await roomState(server);
+    const count = (t: string) => Object.values(r.players).filter((p: any) => p.team === t).length;
+    expect(count('BLUE')).toBe(2);
+    expect(count('RED')).toBe(2);
+  });
+
+  test('two players: TDM starts as 1v1', async (server) => {
+    expect((await roomN(server, 2, 'tdm')).ok).toBe(true);
+    expect((await server.startMatch()).ok).toBe(true);
+    const r = await roomState(server);
+    expect(r.players.alice.team === r.players.bob.team).toBe(false);
   });
 
   test('friendly fire blocked, team score, 20 team kills ends with BLUE win; then back to lobby', async (server) => {
@@ -442,6 +496,19 @@ describe('team deathmatch', () => {
 });
 
 describe('free for all', () => {
+  test('eight-player FFA starts; each player keeps its own K/D', async (server) => {
+    expect((await roomN(server, 8, 'ffa')).ok).toBe(true);
+    expect((await server.startMatch()).ok).toBe(true);
+    spin(COUNTDOWN);
+    await shotgunKill(server, 'alice', 'bob');
+    await shotgunKill(server, 'gina', 'hank');
+    const r = await roomState(server);
+    expect(Object.keys(r.players)).toHaveLength(8);
+    expect([r.players.alice.k, r.players.bob.d, r.players.gina.k, r.players.hank.d]).toEqual([1, 1, 1, 1]);
+    expect([r.players.carol.k, r.players.carol.d, r.players.erin.k, r.players.frank.d]).toEqual([0, 0, 0, 0]);
+    for (const p of Object.values(r.players) as any[]) expect(p.team ?? null).toBe(null);
+  });
+
   test('15 kills ends; leaver kept in result; joining mid-match blocked', async (server) => {
     expect((await room4(server, 'ffa')).ok).toBe(true);
     const r = await roomState(server);
@@ -553,15 +620,15 @@ describe('match timer and reconnection', () => {
   });
 
   test('short drop in a full room: the dropped account (still in the 30 s grace) can find the room, others get full', async (server) => {
-    expect((await room4(server, 'tdm')).ok).toBe(true);
+    expect((await roomN(server, 8, 'tdm')).ok).toBe(true);
     await server.startMatch();
     spin(COUNTDOWN);
-    // 끊김 유예 중: 서버 기록에는 아직 4명
+    // 끊김 유예 중: 서버 기록에는 아직 8명
     server.connect({ account: 'carol', roomId: '__no_room__' });
     const f = await server.findRoom(ROOM);
     expect(f.ok).toBe(true);
-    expect(f.count).toBe(4);
-    server.connect({ account: 'erin', roomId: '__no_room__' });
+    expect(f.count).toBe(8);
+    server.connect({ account: 'ivan', roomId: '__no_room__' });
     expect((await server.findRoom(ROOM)).reason).toBe('full');
   });
 
@@ -907,7 +974,7 @@ describe('room list and nicknames', () => {
   test('listRooms shows match rooms with players, mode, phase and joinability; lobby rooms are not listed', async (server) => {
     await server.simulateJoin(ROOM, 'alice');
     await server.simulateJoin(ROOM, 'bob');
-    for (const a of ['c1', 'c2', 'c3', 'c4']) await server.simulateJoin('pb-full01', a);
+    for (const a of ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8']) await server.simulateJoin('pb-full01', a);
     await server.simulateJoin(HUB, 'lobbyguy');
     server.connect({ account: 'zed', roomId: '__no_room__' });
     const r = await server.listRooms();
@@ -918,7 +985,7 @@ describe('room list and nicknames', () => {
     expect(ids.some((id: string) => id.startsWith('lb-'))).toBe(false);
     const open = r.rooms.find((x: any) => x.roomId === ROOM);
     expect(open.players).toBe(2);
-    expect(open.max).toBe(4);
+    expect(open.max).toBe(8);
     expect(open.phase).toBe('lobby');
     expect(open.joinable).toBe(true);
     const full = r.rooms.find((x: any) => x.roomId === 'pb-full01');

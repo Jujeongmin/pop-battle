@@ -32,7 +32,7 @@ export class CreateRoomPanel implements LobbyPanel {
           this.selected = mode;
           mark();
         },
-        `<span class="lb-create-icon">${mode === 'tdm' ? ICON.team : mode === 'ffa' ? ICON.target : ICON.settings}</span><span><small>${rule.short}</small><b>${this.modeName(mode)}</b><em>${mode === 'tdm' ? 'BLUE vs RED 2:2' : mode === 'ffa' ? '4인 개인전' : '연결·전투 점검용'}</em></span>`,
+        `<span class="lb-create-icon">${mode === 'tdm' ? ICON.team : mode === 'ffa' ? ICON.target : ICON.settings}</span><span><small>${rule.short}</small><b>${this.modeName(mode)}</b><em>${mode === 'tdm' ? 'BLUE vs RED 최대 4:4' : mode === 'ffa' ? '최대 8인 개인전' : '연결·전투 점검용'}</em></span>`,
       );
       card.dataset.mode = mode;
       cards.push(card);
@@ -52,8 +52,8 @@ export class CreateRoomPanel implements LobbyPanel {
 
   private ruleText(mode: NetMode): string {
     const rule = NET_MODE_RULES[mode];
-    if (mode === 'tdm') return `BLUE vs RED 2:2 · ${rule.timeLimitMs / 60000}분 · 팀 ${rule.scoreToWin}킬 먼저 · 시간 종료 시 킬이 많은 팀 승리`;
-    if (mode === 'ffa') return `4인 개인전 · ${rule.timeLimitMs / 60000}분 · ${rule.scoreToWin}킬 먼저 · 시간 종료 시 최다 킬 승리`;
-    return `2~4명 · 시간과 점수 제한 없이 자유롭게 테스트`;
+    if (mode === 'tdm') return `BLUE vs RED 최대 4:4 (2~8명) · ${rule.timeLimitMs / 60000}분 · 팀 ${rule.scoreToWin}킬 먼저 · 시간 종료 시 킬이 많은 팀 승리`;
+    if (mode === 'ffa') return `최대 8인 개인전 (2~8명) · ${rule.timeLimitMs / 60000}분 · ${rule.scoreToWin}킬 먼저 · 시간 종료 시 최다 킬 승리`;
+    return `2~8명 · 시간과 점수 제한 없이 자유롭게 테스트`;
   }
 }

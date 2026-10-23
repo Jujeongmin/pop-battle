@@ -31,7 +31,7 @@ export const FFA_RULES: MatchRules = {
   spawns: 'all',
 };
 
-/** 멀티플레이 테스트 (최대 4인): 봇 없음, 시간·점수 종료 사실상 없음 (기술 검증용) */
+/** 멀티플레이 테스트 (최대 8인): 봇 없음, 시간·점수 종료 사실상 없음 (기술 검증용) */
 export const NET_TEST_RULES: MatchRules = {
   mode: 'ffa',
   label: '멀티플레이 테스트',

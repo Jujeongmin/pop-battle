@@ -1,5 +1,5 @@
 /**
- * POP! BATTLE — Verse8 Agent8 GameServer: 멀티플레이 룸 (최대 4인) + 게임 모드 (TDM 2v2 / FFA 4인 / 자유 테스트)
+ * POP! BATTLE — Verse8 Agent8 GameServer: 멀티플레이 룸 (최대 8인) + 게임 모드 (TDM 최대 4v4 / FFA 최대 8인 / 자유 테스트)
  *
  * 역할 분담
  *  - 이동: 클라이언트가 50ms마다 상태 패킷('st', throttle 호출)을 보냄 → 룸 사용자 상태(s)에 저장 → SDK가 다른 클라이언트에 푸시.
@@ -236,7 +236,7 @@ function pickTeam(players: NetPlayers): NetTeam | null {
   return b <= r ? 'BLUE' : 'RED';
 }
 
-/** 모드에 맞게 팀 다시 배정 (TDM: 기존 팀 유지하되 팀당 2명을 넘으면 옮김, 그 외: 팀 없음) */
+/** 모드에 맞게 팀 다시 배정 (TDM: 기존 팀 유지하되 팀당 정원을 넘으면 옮기고 인원 차이 1명 이하로, 그 외: 팀 없음) */
 function assignTeams(players: NetPlayers, mode: NetMode): void {
   const list = Object.values(players).sort((a, b) => a.slot - b.slot);
   if (!NET_MODE_RULES[mode].teams) {
@@ -253,6 +253,24 @@ function assignTeams(players: NetPlayers, mode: NetMode): void {
     const t: NetTeam = counts.BLUE <= counts.RED ? 'BLUE' : 'RED';
     p.team = t;
     counts[t]++;
+  }
+  balanceTeams(players);
+}
+
+/**
+ * TDM 팀 인원 차이를 1명 이하로 (2명 1v1, 3명 2v1 … 8명 4v4): 많은 팀에서 자리 번호가 가장 큰 사람(늦게 들어온 사람)부터
+ * 적은 팀으로 옮김. 이미 맞으면 그대로 (고른 팀 유지)
+ */
+function balanceTeams(players: NetPlayers): void {
+  for (;;) {
+    const b = teamCount(players, 'BLUE');
+    const r = teamCount(players, 'RED');
+    if (Math.abs(b - r) <= 1) return;
+    const from: NetTeam = b > r ? 'BLUE' : 'RED';
+    let mover: NetPlayerRecord | null = null;
+    for (const p of Object.values(players)) if (p.team === from && (!mover || p.slot > mover.slot)) mover = p;
+    if (!mover) return;
+    mover.team = from === 'BLUE' ? 'RED' : 'BLUE';
   }
 }
 
@@ -837,7 +855,7 @@ export class Server {
     });
   }
 
-  /** TDM 대기실: 자기 팀 바꾸기 (상대 팀에 자리가 있을 때만) */
+  /** TDM 대기실: 자기 팀 바꾸기 (상대 팀이 더 적을 때만 → 팀 인원 차이 1명 이하 유지) */
   async switchTeam(): Promise<{ ok: boolean; reason?: string }> {
     if (!roomOf()) return { ok: false, reason: 'not_in_room' };
     const me = $sender.account;
@@ -849,6 +867,7 @@ export class Server {
       if (r.phase === 'countdown' || r.phase === 'playing') return { ok: false, reason: 'in_progress' };
       const to = TEAMS.find((t) => t !== p.team)!;
       if (teamCount(r.players, to) >= NET_TEAM_SIZE) return { ok: false, reason: 'team_full' };
+      if (p.team && teamCount(r.players, to) >= teamCount(r.players, p.team)) return { ok: false, reason: 'teams_unbalanced' };
       p.team = to;
       await saveRoom(roomId, r);
       return { ok: true };
@@ -856,7 +875,7 @@ export class Server {
   }
 
   /**
-   * 방장: 매치 시작. TDM = 4명·팀 2/2, FFA = 4명, 자유 테스트 = 2명 이상.
+   * 방장: 매치 시작. 모든 모드 2~8명. TDM은 시작할 때 팀 인원 차이를 1명 이하로 맞춤 (1v1 … 4v4).
    * 기록·체력 초기화 → 3초 카운트다운(startAt)·제한 시간(endAt)을 서버 시각으로 공유 → 모든 클라이언트가 같은 시점에 시작.
    * opts.timeLimitSec: 테스트용 제한 시간 (20~180초, 클라이언트는 개발 빌드에서만 보냄). 없으면 모드 규칙(3분)
    */
@@ -871,7 +890,7 @@ export class Server {
       const rule = NET_MODE_RULES[r.mode];
       const n = Object.keys(r.players).length;
       if (n < rule.requiredPlayers) return { ok: false, reason: `need_${rule.requiredPlayers}_players` };
-      if (rule.teams && (teamCount(r.players, 'BLUE') !== NET_TEAM_SIZE || teamCount(r.players, 'RED') !== NET_TEAM_SIZE)) return { ok: false, reason: 'teams_unbalanced' };
+      if (rule.teams) assignTeams(r.players, r.mode);
       const now = Date.now();
       const startAt = now + NET_TIMING.countdownMs;
       const t = opts?.timeLimitSec;
