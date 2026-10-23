@@ -1,5 +1,5 @@
-// SHOP: 구조만 (상품·재화·구매는 다음 단계). 작동하는 것처럼 보이지 않게 모두 준비 중으로 표시
-import { comingSoon, el, type LobbyHost, type LobbyPanel, type LobbyWeapon } from './lobbyDom';
+// SHOP: 구조만 (상품·재화·구매는 다음 단계). 작동하는 것처럼 보이지 않게 모두 잠금 + 준비 중으로 표시 (구매 버튼 없음)
+import { el, ICON, type LobbyHost, type LobbyPanel, type LobbyWeapon } from './lobbyDom';
 
 export class ShopPanel implements LobbyPanel {
   readonly id = 'shop';
@@ -10,10 +10,14 @@ export class ShopPanel implements LobbyPanel {
   render(body: HTMLElement): void {
     const fixed = this.host.fixedWeapons();
     const weapons = [...this.host.primaryWeapons(), fixed.secondary, fixed.melee];
-    body.append(
-      comingSoon('상점 준비 중', '캐릭터와 무기 스킨을 준비하고 있어요.'),
-      this.weaponSkinPreview(weapons),
-    );
+    const banner = el('div', 'lb-shop-banner');
+    banner.setAttribute('aria-disabled', 'true');
+    const copy = el('div', 'lb-shop-banner-copy');
+    copy.append(el('b', '', '상점 준비 중'), el('p', '', '캐릭터·무기 스킨을 준비하고 있어요. 지금은 구매할 수 없어요'));
+    const mark = el('span', 'lb-shop-banner-mark');
+    mark.innerHTML = ICON.shop;
+    banner.append(mark, copy);
+    body.append(banner, this.weaponSkinPreview(weapons));
   }
 
   private weaponSkinPreview(weapons: LobbyWeapon[]): HTMLElement {
@@ -33,7 +37,9 @@ export class ShopPanel implements LobbyPanel {
         image.draggable = false;
         visual.appendChild(image);
       }
-      card.append(visual, el('b', '', weapon.name), el('span', 'lb-shop-weapon-badge', '준비 중'));
+      const badge = el('span', 'lb-shop-weapon-badge');
+      badge.innerHTML = `${ICON.lock}<span>준비 중</span>`;
+      card.append(visual, el('b', '', weapon.name), badge);
       row.appendChild(card);
     }
     section.append(title, row);

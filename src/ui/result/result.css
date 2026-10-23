@@ -144,7 +144,8 @@
 .pb-res-card.pb-res-back { width: 112px; }
 .pb-res-card.pb-res-back.pb-res-in { scale: .9; }
 .pb-res-card.pb-res-me { border-image-source: var(--k-selected); }
-.pb-res-card-top { display: flex; align-items: center; justify-content: center; gap: 4px; max-width: 100%; }
+.pb-res-card-top { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 4px; max-width: 100%; }
+.pb-res-card-top .pb-res-nick { min-width: 0; }
 .pb-res-nick { overflow: hidden; font-family: var(--res-font); font-size: 15px; font-weight: 400; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .pb-res-you { flex: 0 0 auto; padding: 0 5px; border-radius: 6px; background: #ffd45e; color: #6b4500; font-size: 10px; font-weight: 900; line-height: 16px; }
 .pb-res-char { color: rgba(39, 50, 92, .6); font-size: 10px; font-weight: 850; letter-spacing: .4px; white-space: nowrap; }
@@ -268,9 +269,12 @@
 
 /* ---------- 낮은 화면 (모바일 가로) ---------- */
 @media (max-height: 460px) {
-  .pb-res-card { width: 112px; padding: 3px 6px 5px; }
-  .pb-res-card.pb-res-back { width: 98px; }
+  .pb-res-card { width: 124px; padding: 3px 6px 5px; }
+  .pb-res-card.pb-res-back { width: 108px; }
   .pb-res-nick { font-size: 13px; }
+  /* 내 카드는 노란 테두리로 구분 → 낮은 화면에서는 '나' 표시를 빼 닉네임 자리 확보 */
+  .pb-res-you { display: none; }
+  .pb-res-card { padding-inline: 4px; }
   .pb-res-char { font-size: 9px; }
   .pb-res-kd span { font-size: 12px; line-height: 16px; }
   .pb-res-crown { width: 34px; }

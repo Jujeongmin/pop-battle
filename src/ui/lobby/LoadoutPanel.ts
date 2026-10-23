@@ -19,8 +19,9 @@ export class LoadoutPanel implements LobbyPanel {
     this.inactive = false;
 
     const primaryWeapons = this.host.primaryWeapons();
+    const fixed = this.host.fixedWeapons();
     const selected = primaryWeapons.find((weapon) => weapon.id === this.host.currentPrimary()) ?? primaryWeapons[0];
-    const preview = this.createPreview(selected);
+    const preview = this.createPreview(selected, [...primaryWeapons, fixed.secondary, fixed.melee]);
     body.appendChild(preview.element);
     this.stopPreview = preview.stop;
     if (selected) preview.show(selected);
@@ -42,7 +43,7 @@ export class LoadoutPanel implements LobbyPanel {
         mark();
         preview.show(weapon);
       });
-      card.appendChild(this.weaponContent(weapon, '주무기'));
+      card.appendChild(this.weaponContent(weapon));
       card.dataset.id = weapon.id;
       card.setAttribute('aria-pressed', 'false');
       cards.push(card);
@@ -51,16 +52,16 @@ export class LoadoutPanel implements LobbyPanel {
     body.appendChild(grid);
     mark();
 
-    const fixed = this.host.fixedWeapons();
     body.appendChild(el('div', 'lb-section', '2 · 보조무기 / 3 · 근접무기 (고정)'));
     const row = el('div', 'lb-weapon-grid lb-two');
-    for (const [weapon, slot] of [[fixed.secondary, '보조무기'], [fixed.melee, '근접무기']] as const) {
+    for (const weapon of [fixed.secondary, fixed.melee]) {
       const card = el('div', 'lb-weapon lb-fixed');
-      card.appendChild(this.weaponContent(weapon, slot));
+      card.appendChild(this.weaponContent(weapon));
+      card.addEventListener('click', () => preview.show(weapon));
       row.appendChild(card);
     }
     body.appendChild(row);
-    body.appendChild(comingSoon('무기 스킨', '무기 색·꾸미기는 정비소 단계에서 열려요. 무기 능력치는 바뀌지 않아요.'));
+    body.appendChild(comingSoon('무기 스킨', '무기 색·꾸미기는 다음 단계에서 열려요'));
   }
 
   deactivate(): void {
@@ -81,7 +82,8 @@ export class LoadoutPanel implements LobbyPanel {
     this.previewBody = null;
   }
 
-  private weaponContent(weapon: LobbyWeapon, slot: string): DocumentFragment {
+  /** 무기 카드: 그림 · 이름 · 종류 */
+  private weaponContent(weapon: LobbyWeapon): DocumentFragment {
     const fragment = document.createDocumentFragment();
     const visual = el('span', 'lb-weapon-icon');
     const source = this.host.weaponImage(weapon.id);
@@ -92,11 +94,40 @@ export class LoadoutPanel implements LobbyPanel {
       image.draggable = false;
       visual.appendChild(image);
     }
-    fragment.append(el('span', 'lb-weapon-slot', slot), visual, el('b', '', weapon.name));
+    fragment.append(visual, el('b', '', weapon.name), el('span', 'lb-weapon-type', weapon.type ?? ''));
     return fragment;
   }
 
-  private createPreview(initial: LobbyWeapon | undefined): {
+  /** 성능 게이지 (위력 = 한 발 × 탄 수, 연사 = 분당, 사거리 m). 길이는 다섯 무기 중 최고값 기준 */
+  private weaponStats(all: LobbyWeapon[]): { element: HTMLElement; show: (weapon: LobbyWeapon) => void } {
+    const element = el('div', 'lb-weapon-stats');
+    const max = (f: (s: NonNullable<LobbyWeapon['stats']>) => number) => Math.max(1, ...all.map((w) => (w.stats ? f(w.stats) : 0)));
+    const rows = [
+      { label: '위력', cls: 'lb-g-power', value: (s: NonNullable<LobbyWeapon['stats']>) => s.damage * s.pellets, text: (s: NonNullable<LobbyWeapon['stats']>) => (s.pellets > 1 ? `${s.damage}×${s.pellets}` : `${s.damage}`) },
+      { label: '연사', cls: 'lb-g-rate', value: (s: NonNullable<LobbyWeapon['stats']>) => s.rpm, text: (s: NonNullable<LobbyWeapon['stats']>) => `${Math.round(s.rpm)}/분` },
+      { label: '사거리', cls: 'lb-g-range', value: (s: NonNullable<LobbyWeapon['stats']>) => s.range, text: (s: NonNullable<LobbyWeapon['stats']>) => `${Math.round(s.range * 10) / 10}m` },
+    ].map((r) => {
+      const gauge = el('div', `lb-gauge ${r.cls}`);
+      const fill = el('i', 'lb-gauge-fill');
+      const track = el('span', 'lb-gauge-track');
+      track.append(fill);
+      const out = el('b', 'lb-gauge-value');
+      gauge.append(el('span', 'lb-gauge-label', r.label), track, out);
+      element.append(gauge);
+      return { ...r, top: max(r.value), fill, out };
+    });
+    const show = (weapon: LobbyWeapon) => {
+      element.hidden = !weapon.stats;
+      if (!weapon.stats) return;
+      for (const r of rows) {
+        r.fill.style.width = `${Math.max(4, Math.min(100, (r.value(weapon.stats) / r.top) * 100))}%`;
+        r.out.textContent = r.text(weapon.stats);
+      }
+    };
+    return { element, show };
+  }
+
+  private createPreview(initial: LobbyWeapon | undefined, all: LobbyWeapon[]): {
     element: HTMLElement;
     show: (weapon: LobbyWeapon) => void;
     stop: () => void;
@@ -105,10 +136,17 @@ export class LoadoutPanel implements LobbyPanel {
     const stage = el('div', 'lb-weapon-preview-stage');
     const canvas = el('canvas', 'lb-weapon-preview-canvas');
     const name = el('b', 'lb-weapon-preview-name', initial?.name ?? '무기 미리보기');
+    const type = el('span', 'lb-weapon-preview-type', initial?.type ?? '');
+    const stats = this.weaponStats(all);
+    if (initial) stats.show(initial);
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', initial ? `${initial.name} 3D 미리보기` : '무기 3D 미리보기');
-    stage.append(canvas, el('span', 'lb-weapon-preview-hint', '좌우로 드래그해서 돌려 보기'));
-    element.append(stage, name);
+    stage.append(canvas, el('span', 'lb-weapon-preview-hint', '드래그해서 돌려 보기'));
+    const info = el('div', 'lb-weapon-preview-info');
+    const head = el('div', 'lb-weapon-preview-head');
+    head.append(name, type);
+    info.append(head, stats.element);
+    element.append(stage, info);
 
     // 실시간 3D: 게임 렌더러가 이 캔버스에 실제 무기 모델을 그림 (각도가 바뀐 프레임에만)
     const preview = this.host.weaponPreview(canvas);
@@ -173,6 +211,8 @@ export class LoadoutPanel implements LobbyPanel {
       angle = 0;
       lastTime = null;
       name.textContent = weapon.name;
+      type.textContent = weapon.type ?? '';
+      stats.show(weapon);
       canvas.setAttribute('aria-label', `${weapon.name} 3D 미리보기`);
       draw();
       startAnimation();

@@ -6,6 +6,10 @@ import { installUiDebug } from './ui/UiDebug';
 import { installScreenRotation } from './core/screenRotation';
 
 const app = document.getElementById('app')!;
+// 이미지·글자를 끌어 옮기지 못하게 (Firefox는 CSS user-drag가 없어 이벤트로). 입력칸은 그대로
+document.addEventListener('dragstart', (e) => {
+  if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) e.preventDefault();
+});
 // 세로로 든 터치 기기에서도 가로형으로 (게임을 만들기 전에 #app 크기를 정해 둠)
 installScreenRotation(app);
 const loading = document.getElementById('loading');

@@ -13,7 +13,10 @@ const IDS: SoundId[] = ['fire', 'hit', 'impact', 'kill', 'reloadStart', 'reloadE
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
+  /** 효과음 버스 (모든 효과음 → 압축기 → 출력) */
   private master: GainNode | null = null;
+  /** 배경음 버스 (음악 → 출력, 효과음 압축기와 별개). 아직 음악 에셋이 없어 연결된 소리 없음 */
+  private music: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private readonly buffers = new Map<SoundId, AudioBuffer>();
   /** 제한 채널별 (기본 = 소리 id, 봇 소리는 별도 채널이라 플레이어 소리를 밀어내지 않음) */
@@ -29,11 +32,23 @@ export class AudioManager {
     swing: (c, o, t) => this.synthSwing(c, o, t),
   };
   volume = 0.6;
+  musicVolume = 0.5;
 
-  /** 전체 소리 크기 (설정 화면). 오디오가 아직 시작 전이면 시작할 때 이 값으로 */
+  /** 효과음 크기 (설정 화면). 오디오가 아직 시작 전이면 시작할 때 이 값으로 */
   setVolume(v: number): void {
     this.volume = Math.min(1, Math.max(0, v));
     if (this.master) this.master.gain.value = this.volume;
+  }
+
+  /** 배경음 크기 (설정 화면) */
+  setMusicVolume(v: number): void {
+    this.musicVolume = Math.min(1, Math.max(0, v));
+    if (this.music) this.music.gain.value = this.musicVolume;
+  }
+
+  /** 배경음을 연결할 버스 (음악 재생이 생기면 여기에 연결, 오디오 시작 전이면 null) */
+  get musicOutput(): AudioNode | null {
+    return this.music;
   }
 
   /** 사용자 입력(클릭) 뒤에 호출해야 브라우저가 소리를 허용한다 */
@@ -48,6 +63,9 @@ export class AudioManager {
       this.master = this.ctx.createGain();
       this.master.gain.value = this.volume;
       this.master.connect(comp).connect(this.ctx.destination);
+      this.music = this.ctx.createGain();
+      this.music.gain.value = this.musicVolume;
+      this.music.connect(this.ctx.destination);
       const len = Math.floor(this.ctx.sampleRate * 0.25);
       this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const data = this.noise.getChannelData(0);

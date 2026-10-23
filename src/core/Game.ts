@@ -69,7 +69,7 @@ import { setKillFeedWeaponIcons, type DeathCause, type KillFeedEvent } from '../
 import { Hud, type MatchHudInfo } from '../ui/Hud';
 import { Lobby } from '../ui/lobby/Lobby';
 import { PauseMenu } from '../ui/lobby/PauseMenu';
-import type { LobbyHost, LobbyPresence, LobbySlider, NicknameResult, PauseHost } from '../ui/lobby/lobbyDom';
+import type { LobbyHost, LobbyPresence, LobbySlider, LobbyWeapon, NicknameResult, PauseHost } from '../ui/lobby/lobbyDom';
 import { loadUserSettings, saveUserSettings, USER_LIMITS } from './UserSettings';
 import { TOUCH_LIMITS } from './TouchInput';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -154,6 +154,14 @@ function dampAngle(current: number, target: number, sharpness: number, dt: numbe
 }
 
 /** 게임 조립과 메인 루프. 각 모듈의 업데이트 순서를 여기서만 관리한다. */
+/** 정비소 표시용 무기 종류 이름 */
+const WEAPON_TYPE: Record<string, string> = { rifle: '돌격소총', shotgun: '산탄총', sniper: '저격총', pistol: '권총', melee: '근접무기' };
+
+/** 로비 화면용 무기 정보 (표시만, 수치는 무기 설정 그대로) */
+function lobbyWeapon(w: WeaponDef): LobbyWeapon {
+  return { id: w.id, name: w.name, type: WEAPON_TYPE[w.id], stats: { damage: w.damage, pellets: w.pellets, rpm: w.rpm, range: w.range } };
+}
+
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
@@ -592,6 +600,7 @@ export class Game {
 
     // 사용자 설정 적용 + 메인 로비 (?net=1로 멀티 메뉴를 바로 열면 메뉴가 먼저 보임)
     this.audio.setVolume(this.userSettings.volume);
+    this.audio.setMusicVolume(this.userSettings.music);
     this.input.mouseSensitivity = this.userSettings.mouseSensitivity;
     this.lobby = new Lobby(this.container, this.lobbyHost());
     this.pauseMenu = new PauseMenu(this.container, this.pauseHost());
@@ -1594,7 +1603,8 @@ export class Game {
       format,
     });
     return {
-      sound: [user('volume', '전체 소리', pct, (v) => this.audio.setVolume(v))],
+      // 배경음: 버스·저장값은 준비됨, 음악 에셋이 아직 없어 잠금 (작동하는 것처럼 보이지 않게)
+      sound: [user('volume', '효과음', pct, (v) => this.audio.setVolume(v)), { ...user('music', '배경음', pct, (v) => this.audio.setMusicVolume(v)), disabled: '준비 중' }],
       controls: [user('mouseSensitivity', '마우스 감도', x, (v) => (this.input.mouseSensitivity = v))],
       touch: [touch('lookSensitivity', '시점 회전 감도', x), touch('joystickScale', '조이스틱 크기', pct), touch('buttonScale', '버튼 크기', pct)],
     };
@@ -1655,7 +1665,7 @@ export class Game {
       previewedCharacter: () => this.previewedCharacter,
       rotatePreview: (dx) => this.rotatePreview(dx),
       resetPreviewRotation: () => this.resetPreviewSpin(),
-      primaryWeapons: () => PRIMARY_WEAPONS.map((w) => ({ id: w.id, name: w.name })),
+      primaryWeapons: () => PRIMARY_WEAPONS.map(lobbyWeapon),
       weaponImage: (id) => this.weaponArt.image(id),
       characterPortrait: (id) => (id in CHARACTERS ? this.characterArt.portrait(id) : Promise.reject(new Error('unknown character'))),
       characterFullBody: (id) => (id in CHARACTERS ? this.characterArt.fullBody(id) : Promise.reject(new Error('unknown character'))),
@@ -1673,7 +1683,7 @@ export class Game {
           dispose: () => void this.weaponPreviews.delete(p),
         };
       },
-      fixedWeapons: () => ({ secondary: { id: SECONDARY_WEAPON.id, name: SECONDARY_WEAPON.name }, melee: { id: MELEE_WEAPON.id, name: MELEE_WEAPON.name } }),
+      fixedWeapons: () => ({ secondary: lobbyWeapon(SECONDARY_WEAPON), melee: lobbyWeapon(MELEE_WEAPON) }),
       currentPrimary: () => this.primary.id,
       selectPrimary: (id) => void this.selectPrimary(id),
       // 연습전 시작 (로비 공간을 치우고 경기장 스폰으로) + 버튼 클릭(사용자 동작) 안에서 포인터 잠금/터치 시작 → 바로 조작

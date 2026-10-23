@@ -9,7 +9,13 @@ export class SettingsPanel implements LobbyPanel {
   constructor(private readonly host: LobbyHost) {}
 
   render(body: HTMLElement): void {
-    body.appendChild(el('div', 'lb-section', '닉네임'));
+    // 두 열 (넓은 화면): 왼쪽 닉네임·사운드, 오른쪽 조작·터치·그래픽. 좁으면 한 열로 이어짐
+    const cols = el('div', 'lb-settings-cols');
+    const left = el('div', 'lb-settings-col');
+    const right = el('div', 'lb-settings-col');
+    cols.append(left, right);
+    body.appendChild(cols);
+    left.appendChild(el('div', 'lb-section', '닉네임'));
     const nickname = el('div', 'lb-settings-nickname');
     const current = el('p', 'lb-settings-nickname-current');
     const name = el('b', '', this.host.playerName());
@@ -45,13 +51,13 @@ export class SettingsPanel implements LobbyPanel {
     });
     current.append(change);
     nickname.append(current, popup);
-    body.appendChild(nickname);
+    left.appendChild(nickname);
 
     const s = this.host.settings();
-    body.appendChild(el('div', 'lb-section', '사운드'));
-    for (const x of s.sound) body.appendChild(slider(x));
-    body.appendChild(el('div', 'lb-section', '조작 (PC)'));
-    for (const x of s.controls) body.appendChild(slider(x));
+    left.appendChild(el('div', 'lb-section', '사운드'));
+    for (const x of s.sound) left.appendChild(slider(x));
+    right.appendChild(el('div', 'lb-section', '조작 (PC)'));
+    for (const x of s.controls) right.appendChild(slider(x));
     const keys = el('div', 'lb-key-guide');
     for (const [key, action] of [
       ['WASD', '이동'],
@@ -60,18 +66,18 @@ export class SettingsPanel implements LobbyPanel {
       ['SPACE', '점프'],
       ['LMB', '사격'],
       ['RMB', '조준'],
-      ['R', '재장전 (매치)'],
+      ['R', '재장전'],
       ['1·2·3 / 휠', '무기 교체'],
-      ['ESC', '일시정지 (매치)'],
-      ['TAB', '메뉴 (로비)'],
+      ['ESC', '일시정지'],
+      ['TAB', '메뉴'],
     ] as const) {
       const item = el('span', 'lb-key-item');
       item.append(el('kbd', '', key), el('small', '', action));
       keys.appendChild(item);
     }
-    body.appendChild(keys);
-    body.appendChild(el('div', 'lb-section', '모바일 터치'));
-    for (const x of s.touch) body.appendChild(slider(x));
-    body.appendChild(comingSoon('그래픽', '그림자·해상도 품질 설정은 다음 단계에서 열려요.'));
+    right.appendChild(keys);
+    right.appendChild(el('div', 'lb-section', '모바일 터치'));
+    for (const x of s.touch) right.appendChild(slider(x));
+    left.appendChild(comingSoon('그래픽', '품질 설정은 다음 단계에서 열려요'));
   }
 }

@@ -322,6 +322,8 @@ export class MultiplayerMenu {
     const n = Object.keys(s.players).length;
     c.append(list);
 
+    // 아래 버튼 줄: 팀 바꾸기(TDM 대기실) · 방 나가기
+    let teamButton: HTMLButtonElement | null = null;
     if (v === 'lobby') {
       const blue = Object.values(s.players).filter((p) => p.team === 'BLUE').length;
       const red = Object.values(s.players).filter((p) => p.team === 'RED').length;
@@ -330,7 +332,7 @@ export class MultiplayerMenu {
         const other = team === 'BLUE' ? red : blue;
         const sw = this.button(`팀 바꾸기 (${team === 'BLUE' ? '→ RED' : '→ BLUE'})`, 'lb-mp-small', () => this.run(() => this.host.switchTeam()));
         sw.disabled = other >= NET_TEAM_SIZE;
-        c.append(sw);
+        teamButton = sw;
       }
       const anyLost = Object.keys(s.players).some((a) => s.isLost(a));
       const enough = n >= rule.requiredPlayers && (!rule.teams || (blue === NET_TEAM_SIZE && red === NET_TEAM_SIZE));
@@ -356,8 +358,10 @@ export class MultiplayerMenu {
     }
     const err = this.notice || s.lastError;
     if (err) c.append(el('p', this.notice ? 'lb-mp-hint' : 'lb-mp-error', err));
-    c.append(el('p', 'lb-mp-ready-note', '준비 버튼은 없어요 · 방장이 시작하면 바로 카운트다운이 시작돼요'));
-    c.append(this.button('방 나가기', 'lb-mp-ghost', () => this.run(() => this.host.leave())));
+    const foot = el('div', 'lb-mp-foot');
+    if (teamButton) foot.append(teamButton);
+    foot.append(this.button('방 나가기', 'lb-mp-ghost', () => this.run(() => this.host.leave())));
+    c.append(foot);
   }
 
   private playerSlot(s: NetSession, entry: { acc: string; p: NetPlayerRecord } | undefined, v: View): HTMLElement {

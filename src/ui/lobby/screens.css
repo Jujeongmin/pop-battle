@@ -333,3 +333,484 @@
 @media (max-height: 520px) {
   .lb-lobby .lb-room-dock .lb-room-mode { height: 20px; padding: 0 5px; }
 }
+
+/* ================= 게임 UI 정리 (2026-10-23): 가독성·계층 =================
+   공통 규칙: 제목·주요 정보 = Jua(--lb-display-font), 본문 = 굵은 고딕. 보조 글씨는 연회색 대신 진한 네이비(--lb-ink2).
+   최소 글자 PC 12px · 낮은 화면(모바일 가로) 11px. 버튼 상태는 kenney.css 규칙 하나 (올림 밝게 · 누름 어둡게 · 선택 노랑 테두리, 이동·확대 없음) */
+.lb-lobby,
+.lb-pause,
+.lb-mp-overlay { --lb-ink2: #46507a; }
+
+/* ---------- 전체 화면 메뉴 틀: 흰 페이지 + 파란 머리띠 → 크림 바탕 + 노란 제목 판, 내용 묶음만 흰 면 ---------- */
+.lb-lobby.lb-fullscreen .lb-menu-layer,
+.lb-lobby.lb-fullscreen.lb-character-open .lb-menu-layer::before {
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, .55) 2px, transparent 2.6px) 0 0 / 26px 26px,
+    linear-gradient(180deg, #ffe9c6, #ffd9b6);
+}
+.lb-lobby.lb-fullscreen .lb-panel,
+.lb-lobby.lb-fullscreen.lb-character-open .lb-panel {
+  border: 0;
+  border-image: none;
+  background: none;
+  box-shadow: none;
+}
+.lb-lobby.lb-fullscreen .lb-panel-head {
+  min-height: 0;
+  padding: 0 0 8px;
+  border: 0;
+  background: none;
+  color: var(--lb-ink);
+}
+.lb-lobby.lb-fullscreen .lb-panel-title {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 22px 2px;
+  border-style: solid;
+  border-color: transparent;
+  border-width: 5px 5px 7px;
+  border-image: var(--k-yellow) var(--k-slice) / var(--k-width) stretch;
+  color: #4a3200;
+  font-family: var(--lb-display-font);
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: .5px;
+  line-height: 1.3;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+.lb-lobby.lb-fullscreen .lb-panel-close { min-height: 44px; font-size: 16px; }
+.lb-lobby.lb-fullscreen .lb-panel-body { gap: 10px; padding: 2px 2px 4px; }
+/* 큰 화면(1920 등): 내용 폭을 넓혀 화면이 비지 않게 */
+@media (min-width: 1500px) and (min-height: 800px) {
+  .lb-lobby.lb-fullscreen .lb-panel-body { width: 100%; max-width: 1240px; margin-inline: auto; }
+  .lb-lobby.lb-fullscreen .lb-weapon-preview-stage { min-height: 50vh; }
+}
+.lb-lobby .lb-section { font-family: var(--lb-display-font); font-size: 17px; font-weight: 400; }
+
+/* ---------- 상단 아이콘 메뉴: 이름이 읽히게 ---------- */
+.lb-lobby .lb-topbar .lb-top-icon-btn { width: 76px; }
+.lb-lobby .lb-topbar .lb-top-icon { width: 30px; height: 30px; }
+.lb-lobby .lb-topbar .lb-top-icon-btn b { font-size: 15px; }
+
+/* ---------- 방 목록: 방 제목이 주인공, 모드·인원·상태는 보조 ---------- */
+.lb-lobby .lb-room-dock { background: #fffaf0; box-shadow: 0 12px 26px rgba(39, 50, 92, .2); }
+.lb-lobby .lb-room-dock .lb-room-tools-copy b { font-size: 22px; }
+.lb-lobby .lb-room-dock .lb-room-title { font-size: 20px; }
+.lb-lobby .lb-room-dock .lb-room-no { color: var(--lb-ink2); font-size: 12px; }
+/* 모드: 작은 알약 배지 대신 색 글씨 */
+.lb-lobby .lb-room-dock .lb-room-mode { height: auto; padding: 0; border-radius: 0; background: none; color: #3653a6; font-family: var(--lb-display-font); font-size: 15px; font-weight: 400; }
+.lb-lobby .lb-room-dock .lb-room-mode-tdm { background: none; color: #c23d5d; }
+.lb-lobby .lb-room-dock .lb-room-mode-test { background: none; color: #5a4cb0; }
+.lb-lobby .lb-room-dock .lb-room-slots b { font-family: var(--lb-display-font); font-size: 17px; font-weight: 400; }
+.lb-lobby .lb-room-dock .lb-room-status { font-size: 13px; }
+.lb-lobby .lb-room-dock .lb-room-join { min-width: 92px; font-size: 17px; }
+.lb-lobby .lb-room-dock .lb-room-join:disabled { font-size: 13px; color: var(--lb-ink2); }
+.lb-lobby .lb-room-dock .lb-room-state b { font-size: 19px; }
+.lb-lobby .lb-room-dock .lb-room-state p { color: var(--lb-ink2); font-size: 13px; font-weight: 800; }
+.lb-lobby .lb-room-dock .lb-code-join label { font-size: 13px; }
+.lb-lobby .lb-room-dock .lb-code-join input { height: 38px; font-size: 15px; }
+.lb-lobby .lb-room-dock .lb-room-practice { min-width: 92px; }
+
+/* ---------- 캐릭터: 이름·능력치 숫자를 크게, 보조 글씨는 진하게 ---------- */
+.lb-lobby .lb-char-compare .lb-char-card-copy b { font-size: 19px; }
+.lb-lobby .lb-char-compare .lb-char-card-copy small { color: var(--lb-ink2); font-size: 12px; }
+.lb-lobby .lb-char-stats { gap: 4px; }
+.lb-lobby .lb-gauge { display: grid; min-width: 0; grid-template-columns: 38px minmax(0, 1fr) 48px; align-items: center; gap: 6px; }
+.lb-lobby .lb-gauge-label { color: var(--lb-ink); font-size: 13px; font-weight: 900; white-space: nowrap; }
+.lb-lobby .lb-gauge-track { display: block; height: 11px; overflow: hidden; border-radius: 999px; background: #dfe4f0; box-shadow: inset 0 1px 0 rgba(39, 50, 92, .14); }
+.lb-lobby .lb-gauge-fill { display: block; height: 100%; border-radius: 999px; }
+.lb-lobby .lb-gauge-value { color: var(--lb-ink); font-family: var(--lb-display-font); font-size: 15px; font-weight: 400; text-align: right; white-space: nowrap; }
+.lb-lobby .lb-char-stats .lb-gauge { grid-template-columns: 34px minmax(0, 1fr) 46px; }
+.lb-lobby .lb-char-stats .lb-gauge-label { font-size: 13px; }
+.lb-lobby .lb-char-stats .lb-gauge-value { font-size: 15px; }
+.lb-lobby .lb-char-stats .lb-gauge-track { height: 11px; }
+.lb-lobby .lb-char-compare .lb-card-equipped { padding: 2px 10px; font-size: 13px; }
+.lb-lobby .lb-lock { padding: 3px 7px; }
+.lb-lobby .lb-lock i { font-size: 12px; }
+.lb-lobby .lb-char-compare .lb-char-card.lb-locked .lb-char-portrait img { filter: grayscale(1) opacity(.55); }
+.lb-lobby .lb-char-bar { padding: 8px 12px; border-style: solid; border-color: transparent; border-width: 5px 5px 7px; border-image: var(--k-white) var(--k-slice) / var(--k-width) stretch; border-radius: 0; background: none; }
+.lb-lobby .lb-char-bar .lb-char-name { font-size: 26px; }
+.lb-lobby .lb-char-bar .lb-char-state { font-size: 13px; }
+.lb-lobby .lb-char-bar .lb-char-note { color: var(--lb-ink2); font-size: 13px; font-weight: 800; }
+
+/* ---------- 장비: 왼쪽 큰 3D 미리보기 + 이름·종류·성능, 오른쪽 무기 카드 ---------- */
+.lb-lobby .lb-panel-body:has(> .lb-weapon-preview) { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); column-gap: 16px; }
+.lb-lobby .lb-weapon-preview { gap: 8px; padding: 8px; background: none; }
+.lb-lobby .lb-weapon-preview-stage { border: 0; border-radius: 6px; }
+.lb-lobby.lb-fullscreen .lb-weapon-preview-stage { min-height: 40vh; }
+.lb-lobby .lb-weapon-preview-hint { padding: 3px 8px; border: 0; border-radius: 8px; background: rgba(39, 50, 92, .72); color: #fff; font-size: 12px; font-weight: 800; }
+.lb-lobby .lb-weapon-preview-info { display: grid; gap: 8px; padding: 0 4px 2px; }
+.lb-lobby .lb-weapon-preview-head { display: flex; min-width: 0; align-items: baseline; gap: 10px; }
+.lb-lobby .lb-weapon-preview-name { overflow: hidden; font-family: var(--lb-display-font); font-size: 26px; font-weight: 400; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lobby .lb-weapon-preview-type { flex: 0 0 auto; color: var(--lb-ink2); font-size: 14px; font-weight: 900; }
+.lb-lobby .lb-weapon-stats { display: grid; gap: 6px; }
+.lb-lobby .lb-weapon-stats[hidden] { display: none; }
+.lb-lobby .lb-weapon-stats .lb-gauge { grid-template-columns: 52px minmax(0, 1fr) 64px; }
+.lb-lobby .lb-g-power .lb-gauge-fill { background: #f2719a; }
+.lb-lobby .lb-g-rate .lb-gauge-fill { background: #ffb02e; }
+.lb-lobby .lb-g-range .lb-gauge-fill { background: #5b8cff; }
+.lb-lobby .lb-weapon { min-height: 112px; grid-template-rows: 1fr auto auto; gap: 2px; padding: 6px 8px; text-align: center; transform: none; }
+.lb-lobby .lb-weapon.lb-selected { transform: none; }
+.lb-lobby .lb-weapon-icon { height: 62px; }
+.lb-lobby .lb-weapon-icon img { max-height: 58px; }
+.lb-lobby .lb-weapon b { font-family: var(--lb-display-font); font-size: 17px; font-weight: 400; }
+.lb-lobby .lb-weapon-type { color: var(--lb-ink2); font-size: 12px; font-weight: 900; }
+.lb-lobby .lb-weapon.lb-fixed { cursor: pointer; }
+/* 주무기 3종은 한 줄 (비교하기 쉽게, 스크롤 줄임) */
+.lb-lobby .lb-panel-body:has(> .lb-weapon-preview) .lb-weapon-grid:not(.lb-two) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/* ---------- 준비 중 안내: 작고 차분하게 (작동하는 버튼처럼 보이지 않게) ---------- */
+.lb-lobby .lb-soon { grid-template-columns: 34px minmax(0, 1fr); gap: 8px; padding: 6px 8px; background: none; color: var(--lb-ink2); }
+.lb-lobby .lb-soon-mark { width: 32px; height: 32px; border: 0; border-radius: 9px; background: #c3c8d6; font-size: 18px; }
+.lb-lobby .lb-soon-copy b { color: var(--lb-ink); font-family: var(--lb-display-font); font-size: 16px; font-weight: 400; }
+.lb-lobby .lb-soon-copy p { color: var(--lb-ink2); font-size: 13px; font-weight: 800; }
+.lb-lobby .lb-soon-badge { border: 0; border-radius: 6px; background: #dfe3ee; color: var(--lb-ink2); font-size: 12px; }
+.lb-lobby .lb-room-dock .lb-code-join label > span { color: var(--lb-ink2); font-size: 13px; }
+.lb-lobby .lb-stage-badge { padding: 2px 8px; font-size: 12px; }
+.lb-lobby .lb-stage-name { font-size: 22px; }
+.lb-lobby .lb-stage-role { color: var(--lb-ink2); font-size: 13px; }
+
+/* ---------- 상점: 게임 상점 간판 + 잠긴 상품 칸 (구매 버튼 없음) ---------- */
+.lb-lobby .lb-shop-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-style: solid;
+  border-color: transparent;
+  border-width: 5px 5px 7px;
+  border-image: var(--k-pink) var(--k-slice) / var(--k-width) stretch;
+  color: #5c1730;
+}
+.lb-lobby .lb-shop-banner-mark { display: grid; width: 46px; height: 46px; flex: 0 0 auto; place-items: center; border-radius: 12px; background: rgba(255, 255, 255, .7); color: #e0588c; }
+.lb-lobby .lb-shop-banner-mark svg { width: 28px; height: 28px; }
+.lb-lobby .lb-shop-banner-copy { display: grid; gap: 2px; min-width: 0; }
+.lb-lobby .lb-shop-banner-copy b { font-family: var(--lb-display-font); font-size: 22px; font-weight: 400; }
+.lb-lobby .lb-shop-banner-copy p { margin: 0; font-size: 14px; font-weight: 800; }
+.lb-lobby .lb-shop-weapon-title { padding: 0; border: 0; background: none; color: var(--lb-ink); font-family: var(--lb-display-font); font-size: 17px; font-weight: 400; }
+.lb-lobby.lb-fullscreen .lb-shop-weapon-row { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.lb-lobby .lb-shop-weapon-card { filter: none; }
+.lb-lobby .lb-shop-weapon-card b { order: 2; padding: 4px 6px 0; color: var(--lb-ink); font-family: var(--lb-display-font); font-size: 16px; font-weight: 400; }
+.lb-lobby .lb-shop-weapon-image { order: 1; margin: 6px 6px 0; border-radius: 6px; background: radial-gradient(circle at 50% 60%, #fff 0%, #e8ebf6 75%); }
+.lb-lobby.lb-fullscreen .lb-shop-weapon-image { height: 96px; }
+.lb-lobby.lb-fullscreen .lb-shop-weapon-image img { max-height: 84px; filter: saturate(.75); }
+.lb-lobby .lb-shop-weapon-badge {
+  order: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 4px 6px 6px;
+  padding: 4px;
+  border-image-source: var(--k-grey);
+  color: var(--lb-ink2);
+  font-size: 13px;
+  font-weight: 900;
+}
+.lb-lobby .lb-shop-weapon-badge svg { width: 14px; height: 14px; }
+
+/* ---------- 설정: 옵션 한 줄 = 이름 · 슬라이더 · 값 ---------- */
+.lb-lobby .lb-slider { grid-template-columns: 150px minmax(0, 1fr) 64px; min-height: 54px; padding: 4px 12px; }
+.lb-lobby .lb-slider-label { color: var(--lb-ink); font-size: 15px; font-weight: 900; }
+.lb-lobby .lb-slider-val { padding: 3px 6px; border: 0; border-radius: 8px; background: var(--lb-yellow); color: #4a3200; font-family: var(--lb-display-font); font-size: 15px; font-weight: 400; }
+.lb-lobby .lb-key-guide { gap: 6px; }
+.lb-lobby .lb-key-item { gap: 8px; padding: 6px 8px; border: 0; border-radius: 10px; background: rgba(255, 255, 255, .7); }
+.lb-lobby .lb-key-item kbd { min-width: 34px; border-width: 2px; background: #fff; font-size: 12px; text-align: center; }
+.lb-lobby .lb-key-item small { color: var(--lb-ink); font-size: 14px; font-weight: 800; white-space: nowrap; }
+.lb-lobby .lb-settings-nickname { padding: 6px 12px; background: none; }
+.lb-lobby .lb-settings-nickname-current span { color: var(--lb-ink2); font-size: 13px; opacity: 1; }
+.lb-lobby .lb-settings-nickname-current b { font-family: var(--lb-display-font); font-size: 20px; font-weight: 400; }
+.lb-lobby .lb-nick-change { min-width: 72px; font-family: var(--lb-display-font); font-size: 16px; font-weight: 400; }
+/* 옵션 두 열 (SettingsPanel이 열을 나눔): 예전 CSS 다단은 높이가 모자라면 셋째 열이 화면 밖으로 생겨 끔 */
+.lb-lobby.lb-fullscreen .lb-panel-body:has(.lb-slider) { display: block; column-count: auto; overflow-y: auto; }
+.lb-lobby .lb-settings-cols { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 8px 16px; }
+.lb-lobby .lb-settings-col { display: grid; min-width: 0; gap: 8px; }
+@media (min-width: 600px) {
+  .lb-lobby .lb-settings-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-height: 520px) {
+  .lb-lobby .lb-settings-col { gap: 6px; }
+  .lb-lobby .lb-room-dock .lb-room-card .lb-room-no { font-size: 11px; }
+}
+/* ---------- 슬라이더 (설정·일시정지 공용): 두꺼운 알약 트랙 + 손잡이 왼쪽은 색으로 채움 + 동그란 노란 손잡이 ----------
+   채움 비율은 lobbyDom.slider가 --p로. 트랙 높이 = 내용 10px + 테두리 2px×2 (content-box), 손잡이 28px는 입력 칸(40px) 안 → 잘림 없음 */
+.lb-lobby .lb-slider input[type='range'],
+.lb-pause .lb-slider input[type='range'] { --p: 50%; height: 40px; }
+.lb-lobby .lb-slider input[type='range']::-webkit-slider-runnable-track,
+.lb-pause .lb-slider input[type='range']::-webkit-slider-runnable-track {
+  box-sizing: content-box;
+  height: 10px;
+  border: 2px solid var(--lb-ink, #27325c);
+  border-image: none;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6f9bff 0, #5bc0f0 var(--p), #e3e8f4 var(--p), #e3e8f4 100%);
+  box-shadow: inset 0 2px 0 rgba(39, 50, 92, .14);
+}
+.lb-lobby .lb-slider input[type='range']::-moz-range-track,
+.lb-pause .lb-slider input[type='range']::-moz-range-track {
+  box-sizing: content-box;
+  height: 10px;
+  border: 2px solid var(--lb-ink, #27325c);
+  border-image: none;
+  border-radius: 999px;
+  background: #e3e8f4;
+}
+.lb-lobby .lb-slider input[type='range']::-moz-range-progress,
+.lb-pause .lb-slider input[type='range']::-moz-range-progress {
+  height: 10px;
+  border: 2px solid var(--lb-ink, #27325c);
+  border-right: 0;
+  border-radius: 999px 0 0 999px;
+  background: linear-gradient(90deg, #6f9bff, #5bc0f0);
+}
+.lb-lobby .lb-slider input[type='range']::-webkit-slider-thumb,
+.lb-pause .lb-slider input[type='range']::-webkit-slider-thumb {
+  width: 28px;
+  height: 28px;
+  /* 트랙 내용 높이 10px의 가운데: (10 - 28) / 2 */
+  margin-top: -9px;
+  border: 3px solid var(--lb-ink, #27325c);
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #fff 0 22%, transparent 24%), #ffd45e;
+  box-shadow: 0 3px 0 rgba(39, 50, 92, .35);
+  transition: filter .15s ease;
+}
+.lb-lobby .lb-slider input[type='range']::-moz-range-thumb,
+.lb-pause .lb-slider input[type='range']::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--lb-ink, #27325c);
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #fff 0 22%, transparent 24%), #ffd45e;
+  box-shadow: 0 3px 0 rgba(39, 50, 92, .35);
+}
+@media (hover: hover) {
+  .lb-lobby .lb-slider input[type='range']:hover::-webkit-slider-thumb,
+  .lb-pause .lb-slider input[type='range']:hover::-webkit-slider-thumb { filter: brightness(1.1); }
+}
+.lb-lobby .lb-slider input[type='range']:active::-webkit-slider-thumb,
+.lb-pause .lb-slider input[type='range']:active::-webkit-slider-thumb { filter: brightness(.92); }
+.lb-lobby .lb-slider input[type='range']:focus-visible,
+.lb-pause .lb-slider input[type='range']:focus-visible { outline: 3px solid var(--lb-blue, #5b8cff); outline-offset: 2px; border-radius: 12px; }
+
+/* 잠긴 옵션 (기능 준비 중): 흐린 트랙·회색 손잡이, 값 칸은 회색 '준비 중' */
+.lb-lobby .lb-slider.lb-slider-off,
+.lb-pause .lb-slider.lb-slider-off { cursor: default; }
+.lb-lobby .lb-slider-off input[type='range'],
+.lb-pause .lb-slider-off input[type='range'] { --p: 0%; cursor: default; opacity: .45; }
+.lb-lobby .lb-slider-off input[type='range']::-webkit-slider-thumb,
+.lb-pause .lb-slider-off input[type='range']::-webkit-slider-thumb { background: #c3c8d6; box-shadow: none; }
+.lb-lobby .lb-slider-off input[type='range']::-moz-range-thumb,
+.lb-pause .lb-slider-off input[type='range']::-moz-range-thumb { background: #c3c8d6; box-shadow: none; }
+.lb-lobby .lb-slider-off .lb-slider-val,
+.lb-pause .lb-slider-off .lb-slider-val { padding: 3px 2px; background: #dfe3ee; color: var(--lb-ink2); font-family: var(--font); font-size: 12px; font-weight: 900; letter-spacing: -.3px; white-space: nowrap; }
+@media (max-height: 520px) {
+  .lb-lobby .lb-slider-off .lb-slider-val,
+  .lb-pause .lb-slider-off .lb-slider-val { font-size: 11px; }
+}
+
+/* 사람이 정한 문장(방 제목·닉네임)은 Jua 대신 굵은 고딕: Jua는 작은 크기에서 'ㅌ' 가운데 획이 붙어 '같'이 '갇'처럼 보임 */
+.lb-lobby .lb-room-dock .lb-room-title,
+.lb-lobby .lb-settings-nickname-current b,
+.pb-result .pb-res-nick { font-family: var(--font); font-weight: 900; letter-spacing: -.2px; }
+
+/* ---------- 일시정지 메뉴: 제목·버튼을 로비와 같은 글꼴로 ---------- */
+.lb-pause .lb-pause-title { color: var(--lb-ink); font-family: var(--lb-display-font); font-size: 28px; font-weight: 400; text-shadow: none; }
+.lb-pause .lb-pause-label { color: var(--lb-ink2); font-size: 12px; }
+.lb-pause .lb-btn { font-family: var(--lb-display-font); font-size: 17px; font-weight: 400; }
+.lb-pause .lb-pause-resume { font-size: 22px; }
+.lb-pause .lb-pause-note { color: var(--lb-ink); font-size: 12px; }
+.lb-pause .lb-section { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding: 0; border: 0; background: none; color: var(--lb-ink); font-family: var(--lb-display-font); font-size: 16px; font-weight: 400; }
+.lb-pause .lb-section::before { content: ''; flex: 0 0 auto; width: 9px; height: 9px; border: 2px solid var(--lb-ink); border-radius: 3px; background: var(--lb-yellow, #ffd45e); transform: rotate(45deg); }
+.lb-pause .lb-section::after { display: none; }
+.lb-pause .lb-pause-back { font-size: 28px; }
+.lb-pause .lb-pause-confirm-text b { font-family: var(--lb-display-font); font-size: 22px; font-weight: 400; }
+.lb-pause .lb-pause-confirm-text p { color: var(--lb-ink2); font-size: 13px; font-weight: 800; }
+.lb-pause .lb-slider { display: grid; grid-template-columns: 96px minmax(0, 1fr) 56px; align-items: center; gap: 8px; min-height: 48px; padding: 2px 10px; }
+.lb-pause .lb-slider-label { color: var(--lb-ink); font-size: 14px; font-weight: 900; }
+.lb-pause .lb-slider-val { padding: 3px 4px; border: 0; border-radius: 8px; background: var(--lb-yellow, #ffd45e); color: #4a3200; font-family: var(--lb-display-font); font-size: 14px; font-weight: 400; text-align: center; }
+
+/* ---------- 멀티 대기실 (room.css 위): 6~10px 글자를 읽히게, 방 코드·팀·닉네임 계층 ---------- */
+.lb-mp-overlay .lb-mp-title { color: var(--lb-ink); font-family: var(--lb-display-font); font-size: 24px; font-weight: 400; -webkit-text-stroke: 0; text-shadow: none; }
+.lb-mp-overlay .lb-mp-room-title b { font-family: var(--lb-display-font); font-size: 24px; font-weight: 400; }
+.lb-mp-overlay .lb-mp-room-title small { color: var(--lb-ink2); font-size: 11px; }
+.lb-mp-overlay .lb-mp-code-value { font-size: 15px; font-weight: 900; }
+.lb-mp-overlay .lb-mp-btn { font-family: var(--lb-display-font); font-size: 15px; font-weight: 400; }
+.lb-mp-overlay .lb-mp-primary { font-size: 20px; }
+.lb-mp-overlay .lb-mp-player-count,
+.lb-mp-overlay .lb-mp-mode-badge { font-size: 13px; }
+.lb-mp-overlay .lb-mp-mode-line b { font-family: var(--lb-display-font); font-size: 15px; font-weight: 400; }
+.lb-mp-overlay .lb-mp-mode-line .lb-mp-hint,
+.lb-mp-overlay .lb-mp-hint { color: var(--lb-ink2); font-size: 12px; font-weight: 800; }
+.lb-mp-overlay .lb-mp-label { color: var(--lb-ink2); font-size: 12px; }
+.lb-mp-overlay .lb-mp-team-column h3 { font-family: var(--lb-display-font); font-size: 18px; font-weight: 400; }
+.lb-mp-overlay .lb-mp-player-copy b { font-size: 15px; font-weight: 900; }
+.lb-mp-overlay .lb-mp-player-copy small { color: var(--lb-ink2); font-size: 12px; }
+.lb-mp-overlay .lb-mp-player-copy em { padding: 1px 6px; font-size: 11px; }
+.lb-mp-overlay .lb-mp-connection { padding: 2px 6px; font-size: 11px; }
+.lb-mp-overlay .lb-mp-stats { font-size: 12px; }
+.lb-mp-overlay .lb-mp-ready-note { color: var(--lb-ink2); font-size: 12px; }
+.lb-mp-overlay .lb-mp-foot { display: flex; justify-content: center; gap: 8px; }
+.lb-mp-overlay .lb-mp-foot .lb-mp-btn { min-width: 150px; }
+.lb-mp-overlay .lb-mp-empty { align-items: center; font-family: var(--lb-display-font); font-size: 17px; }
+.lb-mp-overlay .lb-mp-empty b { line-height: 1; padding-top: 2px; }
+/* 빈 자리 '+': 글자는 글꼴마다 위아래로 치우침 → 막대 두 개로 그려 칸 정가운데 */
+.lb-mp-overlay .lb-mp-empty-icon { position: relative; width: 28px; height: 28px; flex: 0 0 auto; font-size: 0; }
+.lb-mp-overlay .lb-mp-empty-icon::before,
+.lb-mp-overlay .lb-mp-empty-icon::after { position: absolute; top: 50%; left: 50%; width: 12px; height: 3px; border-radius: 2px; background: currentColor; content: ''; transform: translate(-50%, -50%); }
+.lb-mp-overlay .lb-mp-empty-icon::after { transform: translate(-50%, -50%) rotate(90deg); }
+@media (max-width: 760px), (max-height: 520px) {
+  /* 방 머리줄이 방 코드를 보여 주므로 '멀티플레이' 제목은 숨김 → 시작 버튼까지 한 화면 */
+  .lb-mp-overlay .lb-mp-card:has(.lb-mp-room-head) .lb-mp-title { display: none; }
+  .lb-mp-overlay .lb-mp-room-head ~ * { flex-shrink: 0; }
+  .lb-mp-overlay .lb-mp-room-title b { font-size: 18px; }
+  .lb-mp-overlay .lb-mp-code-value { width: 92px; font-size: 13px; }
+  .lb-mp-overlay .lb-mp-code-tools .lb-mp-btn { font-size: 12px; }
+  .lb-mp-overlay .lb-mp-btn { font-size: 13px; }
+  .lb-mp-overlay .lb-mp-mode { min-height: 34px; font-size: 13px; }
+  .lb-mp-overlay .lb-mp-primary { min-height: 42px; font-size: 17px; }
+  .lb-mp-overlay .lb-mp-player-count,
+  .lb-mp-overlay .lb-mp-mode-badge { font-size: 11px; }
+  .lb-mp-overlay .lb-mp-mode-line { padding: 3px 8px; }
+  .lb-mp-overlay .lb-mp-mode-line b { font-size: 13px; }
+  .lb-mp-overlay .lb-mp-mode-line .lb-mp-hint { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-mp-overlay .lb-mp-team-column h3 { font-size: 14px; }
+  .lb-mp-overlay .lb-mp-player { min-height: 56px; }
+  .lb-mp-overlay .lb-mp-char-swatch { height: 48px; }
+  .lb-mp-overlay .lb-mp-player-copy b { font-size: 13px; }
+  .lb-mp-overlay .lb-mp-player-copy small { font-size: 11px; }
+  .lb-mp-overlay .lb-mp-player-copy em,
+  .lb-mp-overlay .lb-mp-connection,
+  .lb-mp-overlay .lb-mp-ready-note,
+  .lb-mp-overlay .lb-mp-label,
+  .lb-mp-overlay .lb-mp-stats { font-size: 11px; }
+  .lb-mp-overlay .lb-mp-empty { min-height: 56px; font-size: 14px; }
+  /* 낮은 화면: '연결됨'은 생략하고 끊김만 표시, 상태 문구 칸 낮게 → 버튼까지 스크롤 없이 */
+  .lb-mp-overlay .lb-mp-connection:not(.lb-mp-lost) { display: none; }
+  .lb-mp-overlay .lb-mp-status,
+  .lb-mp-overlay .lb-mp-error { padding: 4px 8px; font-size: 12px; }
+  .lb-mp-overlay .lb-mp-foot .lb-mp-btn { min-height: 36px; }
+  .lb-mp-overlay .lb-mp-card { gap: 4px; }
+  .lb-mp-overlay .lb-mp-room-head { padding: 4px 6px; }
+}
+
+/* 터치 기기: PC 키 안내는 숨김 */
+@media (hover: none) and (pointer: coarse) {
+  .lb-lobby .lb-key-guide { display: none; }
+}
+
+/* ---------- 낮은 화면 (모바일 가로 667×375 · 844×390): 글자를 억지로 줄이지 않고 여백·부가 정보만 줄임 ---------- */
+@media (max-height: 520px) {
+  /* 제목 판·로비로 버튼은 상단 메뉴 줄의 빈 가운데(로고와 아이콘 사이)로 → 내용 높이 확보 */
+  .lb-lobby.lb-fullscreen .lb-panel,
+  .lb-lobby.lb-fullscreen.lb-character-open .lb-panel { overflow: visible; }
+  .lb-lobby.lb-fullscreen .lb-panel-head {
+    position: absolute;
+    top: calc(1px - var(--lb-nav-bottom, 52px));
+    right: 256px;
+    left: 78px;
+    height: 44px;
+    padding: 0;
+  }
+  /* 캐릭터 화면은 패널이 화면 30%에서 시작 (왼쪽 3D 무대) → 제목 판이 같은 화면 위치가 되게 */
+  .lb-lobby.lb-fullscreen.lb-character-open .lb-panel { left: 30%; }
+  .lb-lobby.lb-fullscreen.lb-character-open .lb-panel-head { left: calc(84px - 30vw); }
+  /* 카드: 왼쪽 세로 전신 · 오른쪽 이름·게이지 (낮은 칸에서도 전신이 보이게) */
+  .lb-lobby .lb-char-compare .lb-char-card { grid-template-columns: 54px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); align-content: center; column-gap: 6px; row-gap: 2px; padding: 3px 6px 3px 3px; }
+  .lb-lobby .lb-char-compare .lb-char-portrait { grid-column: 1; grid-row: 1 / span 2; align-self: stretch; overflow: hidden; }
+  .lb-lobby .lb-char-compare .lb-char-portrait img { inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 70%; }
+  .lb-lobby .lb-char-compare .lb-char-card-copy { grid-column: 2; grid-row: 1; align-self: end; }
+  .lb-lobby .lb-char-compare .lb-char-stats { grid-column: 2; grid-row: 2; align-self: start; gap: 1px; }
+  /* 게이지: 윗줄 "라벨 … 숫자", 아랫줄 막대 */
+  .lb-lobby .lb-char-stats .lb-gauge { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'label value' 'track track'; row-gap: 1px; }
+  .lb-lobby .lb-char-stats .lb-gauge-label { grid-area: label; }
+  .lb-lobby .lb-char-stats .lb-gauge-value { grid-area: value; }
+  .lb-lobby .lb-char-stats .lb-gauge-track { grid-area: track; height: 6px; }
+  /* 장착 중·잠김 표시는 초상 위 (이름을 가리지 않게) */
+  .lb-lobby .lb-char-compare .lb-card-equipped { left: 30px; }
+  .lb-lobby .lb-char-compare .lb-lock { top: auto; right: auto; bottom: 5px; left: 4px; padding: 1px 4px; }
+  .lb-lobby.lb-fullscreen .lb-panel-title { padding: 0 14px 1px; font-size: 19px; }
+  .lb-lobby.lb-fullscreen .lb-panel-close { min-height: 36px; font-size: 14px; }
+  .lb-lobby.lb-fullscreen .lb-panel-body { gap: 6px; }
+  .lb-lobby .lb-section { font-size: 14px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn { width: 60px; }
+  .lb-lobby .lb-topbar .lb-top-icon { width: 22px; height: 22px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn b { font-size: 12px; }
+
+  .lb-lobby .lb-room-dock .lb-room-tools-copy b { font-size: 17px; }
+  .lb-lobby .lb-room-dock .lb-room-title { font-size: 16px; }
+  .lb-lobby .lb-room-dock .lb-room-no { font-size: 11px; }
+  .lb-lobby .lb-room-dock .lb-room-mode { height: auto; padding: 0; font-size: 13px; }
+  .lb-lobby .lb-room-dock .lb-room-slots b { font-size: 14px; }
+  .lb-lobby .lb-room-dock .lb-room-status { font-size: 11px; }
+  .lb-lobby .lb-room-dock .lb-room-join { min-width: 64px; font-size: 14px; }
+  .lb-lobby .lb-room-dock .lb-room-join:disabled { font-size: 11px; }
+  .lb-lobby .lb-room-dock .lb-room-state b { font-size: 15px; }
+  .lb-lobby .lb-room-dock .lb-room-state p { font-size: 11px; }
+  .lb-lobby .lb-room-dock .lb-room-practice { min-width: 0; }
+  .lb-lobby .lb-room-dock .lb-code-join input { height: 32px; font-size: 13px; }
+
+  .lb-lobby .lb-char-compare .lb-char-card-copy b { font-size: 15px; }
+  /* 역할은 아래 장착 바에 (카드는 이름·능력치만) */
+  .lb-lobby .lb-char-compare .lb-char-card-copy small { display: none; }
+  .lb-lobby .lb-gauge { grid-template-columns: 30px minmax(0, 1fr) 38px; gap: 4px; }
+  .lb-lobby .lb-gauge-label { font-size: 11px; }
+  .lb-lobby .lb-gauge-value { font-size: 12px; }
+  .lb-lobby .lb-gauge-track { height: 8px; }
+  .lb-lobby .lb-char-stats .lb-gauge-label { font-size: 11px; }
+  .lb-lobby .lb-char-stats .lb-gauge-value { font-size: 12px; }
+  .lb-lobby .lb-char-compare .lb-card-equipped { top: -9px; padding: 1px 6px; font-size: 11px; }
+  .lb-lobby .lb-lock i { display: inline; font-size: 11px; }
+  /* 6종을 스크롤 없이 한 화면에서 비교: 카드 2줄을 남은 높이에 맞춤 (큰 전신은 왼쪽 3D 무대) */
+  .lb-lobby .lb-char-grid.lb-char-compare { grid-template-rows: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; overflow: visible; padding-top: 10px; }
+  /* 장착 바 한 줄: 이름 · 장착 버튼 (상태는 버튼 글자로) */
+  .lb-lobby .lb-char-bar { min-height: 0; padding: 0 4px 0 10px; }
+  .lb-lobby .lb-char-bar .lb-char-name { font-size: 18px; }
+  .lb-lobby .lb-char-bar .lb-char-state { display: none; }
+  .lb-lobby .lb-char-bar .lb-char-equip { min-width: 112px; min-height: 36px; font-size: 16px; }
+  .lb-lobby .lb-char-bar { margin-top: 4px; }
+
+  .lb-lobby .lb-panel-body:has(> .lb-weapon-preview) { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); column-gap: 8px; }
+  .lb-lobby .lb-panel-body:has(> .lb-weapon-preview) .lb-weapon { width: auto; min-width: 0; flex: none; }
+  .lb-lobby.lb-fullscreen .lb-weapon-preview-stage { min-height: 0; height: 128px; }
+  .lb-lobby .lb-weapon-preview { gap: 4px; padding: 4px; }
+  .lb-lobby .lb-weapon-preview-info { gap: 4px; }
+  .lb-lobby .lb-weapon-preview-name { font-size: 18px; }
+  .lb-lobby .lb-weapon-preview-type { font-size: 12px; }
+  .lb-lobby .lb-weapon-preview-hint { font-size: 11px; }
+  .lb-lobby .lb-weapon-stats { gap: 3px; }
+  .lb-lobby .lb-weapon-stats .lb-gauge { grid-template-columns: 40px minmax(0, 1fr) 54px; }
+  .lb-lobby .lb-weapon { min-height: 82px; padding: 3px 5px; }
+  .lb-lobby .lb-weapon-icon { height: 38px; }
+  .lb-lobby .lb-weapon-icon img { max-height: 36px; }
+  .lb-lobby .lb-weapon b { font-size: 13px; }
+  .lb-lobby .lb-weapon-type { font-size: 11px; }
+
+  .lb-lobby .lb-soon { padding: 3px 6px; }
+  .lb-lobby .lb-soon-mark { width: 26px; height: 26px; }
+  .lb-lobby .lb-soon-copy b { font-size: 14px; }
+  .lb-lobby .lb-soon-copy p { font-size: 11px; }
+  .lb-lobby .lb-soon .lb-soon-badge { display: none; }
+
+  .lb-lobby .lb-shop-banner { padding: 3px 10px; }
+  .lb-lobby .lb-shop-banner-mark { width: 34px; height: 34px; }
+  .lb-lobby .lb-shop-banner-mark svg { width: 20px; height: 20px; }
+  .lb-lobby .lb-shop-banner-copy b { font-size: 17px; }
+  .lb-lobby .lb-shop-banner-copy p { font-size: 12px; }
+  .lb-lobby .lb-shop-weapon-title { font-size: 14px; }
+  .lb-lobby.lb-fullscreen .lb-shop-weapon-row { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .lb-lobby .lb-shop-weapon-card b { font-size: 13px; }
+  .lb-lobby.lb-fullscreen .lb-shop-weapon-image { height: 58px; }
+  .lb-lobby.lb-fullscreen .lb-shop-weapon-image img { max-height: 52px; }
+  .lb-lobby .lb-shop-weapon-badge { font-size: 11px; }
+
+  .lb-lobby .lb-slider { grid-template-columns: 112px minmax(0, 1fr) 52px; min-height: 44px; padding: 0 8px; }
+  .lb-lobby .lb-slider-label { font-size: 13px; }
+  .lb-lobby .lb-slider-val { font-size: 13px; }
+  .lb-lobby .lb-key-item { gap: 5px; padding: 4px 6px; }
+  .lb-lobby .lb-key-item kbd { font-size: 11px; }
+  .lb-lobby .lb-key-item small { font-size: 12px; }
+  .lb-lobby .lb-settings-nickname-current b { font-size: 17px; }
+}

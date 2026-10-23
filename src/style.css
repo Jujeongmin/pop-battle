@@ -11,6 +11,10 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #bfe3ff; font-family: var(--font); color: var(--ink); }
 #app { position: fixed; inset: 0; }
+/* 게임 화면: 글자 선택·끌기 금지 (드래그로 시점·슬라이더를 움직일 때 글자가 파랗게 잡히지 않게). 입력칸·개발용 디버그 패널만 예외 */
+html, body, #app { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+img, svg, canvas { -webkit-user-drag: none; user-drag: none; }
+input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * { -webkit-user-select: text; user-select: text; }
 #app canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
 #loading {

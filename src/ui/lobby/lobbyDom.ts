@@ -18,6 +18,10 @@ export interface LobbyCharacter {
 export interface LobbyWeapon {
   id: string;
   name: string;
+  /** 종류 표시 (돌격소총·산탄총 …) */
+  type?: string;
+  /** 성능 표시용 (무기 설정 값 그대로): 한 발 피해 × 탄 수, 분당 발사, 사거리 m */
+  stats?: { damage: number; pellets: number; rpm: number; range: number };
 }
 
 export interface LobbySlider {
@@ -28,6 +32,8 @@ export interface LobbySlider {
   get(): number;
   set(v: number): void;
   format(v: number): string;
+  /** 있으면 잠긴 옵션 (아직 기능이 없음): 값 칸에 이 글자, 조작 불가 */
+  disabled?: string;
 }
 
 /** 로비 → 게임 요청 (Game이 구현). 실제 기능이 있는 것만 둔다 */
@@ -209,11 +215,21 @@ export function slider(s: LobbySlider): HTMLElement {
   input.max = String(s.max);
   input.step = String(s.step);
   input.value = String(s.get());
+  // 트랙 채움 비율 (CSS --p, 손잡이 왼쪽만 색으로)
+  const fill = () => input.style.setProperty('--p', `${((Number(input.value) - s.min) / Math.max(1e-6, s.max - s.min)) * 100}%`);
+  fill();
   input.addEventListener('input', () => {
     const v = Number(input.value);
     s.set(v);
     val.textContent = s.format(v);
+    fill();
   });
+  if (s.disabled) {
+    input.disabled = true;
+    input.style.removeProperty('--p');
+    row.classList.add('lb-slider-off');
+    val.textContent = s.disabled;
+  }
   row.append(el('span', 'lb-slider-label', s.label), input, val);
   return row;
 }

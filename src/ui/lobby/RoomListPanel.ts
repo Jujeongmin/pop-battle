@@ -55,7 +55,7 @@ export class RoomListPanel implements LobbyPanel {
     body.textContent = '';
     const tools = el('div', 'lb-room-tools');
     const copy = el('div', 'lb-room-tools-copy');
-    copy.append(el('b', '', '방 목록'), el('span', '', '5초마다 자동 갱신'));
+    copy.append(el('b', '', '방 목록'));
     this.refreshButton = button('', 'lb-room-refresh', () => void this.load(), `${ICON.refresh}<span>새로고침</span>`);
     this.refreshButton.setAttribute('aria-label', '방 목록 새로고침');
     const actions = el('div', 'lb-room-actions');
@@ -142,7 +142,7 @@ export class RoomListPanel implements LobbyPanel {
     this.selected = null;
     const state = this.clearList();
     if (!state) return;
-    state.append(el('b', '', '현재 생성된 방이 없습니다'), el('p', '', '위의 방 만들기로 첫 방을 만들거나 연습전을 해 보세요!'));
+    state.append(el('b', '', '현재 생성된 방이 없습니다'), el('p', '', '방을 만들거나 빠른 시작으로 바로 들어가 보세요'));
   }
 
   /**
