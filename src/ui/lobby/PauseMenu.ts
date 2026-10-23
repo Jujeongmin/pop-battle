@@ -5,7 +5,7 @@ import './pause.css';
 // Kenney UI 스킨: 로비·방·일시정지 CSS 모두 뒤에 와야 함 (Game 모듈 import 순서상 이 파일이 마지막)
 import './kenney.css';
 import './screens.css';
-import { button, el, slider, type PauseHost } from './lobbyDom';
+import { button, el, slider, type PauseHost, trapFocus } from './lobbyDom';
 
 type View = 'main' | 'settings' | 'controls';
 
@@ -74,6 +74,8 @@ export class PauseMenu {
     this.confirmBox.hidden = true;
     this.card.append(this.body, this.confirmBox);
     this.root.append(el('div', 'lb-pause-backdrop'), this.card);
+    // 열린 동안 Tab은 메뉴 안에서만
+    trapFocus(this.card, this.abort.signal);
     container.appendChild(this.root);
   }
 

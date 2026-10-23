@@ -912,3 +912,46 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   .coach-skip { min-height: 30px; }
 }
 @media (prefers-reduced-motion: reduce) { .coach { animation: none; } }
+.lb-lobby .lb-settings-tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; margin-bottom: 8px; padding: 2px 0 6px; background: inherit; }
+.lb-lobby .lb-settings-tab {
+  min-width: 96px; min-height: 44px; padding: 0 16px; border: 3px solid var(--lb-ink); border-image: none; border-radius: 999px; background: #fff;
+  color: var(--lb-ink); box-shadow: 0 3px 0 var(--lb-ink); font-family: var(--lb-display-font); font-size: 16px; font-weight: 400; cursor: pointer;
+}
+.lb-lobby .lb-settings-tab.lb-active { background: #ffd45e; }
+.lb-lobby .lb-settings-tab:focus-visible { outline: 3px solid #2a6ee8; outline-offset: 2px; }
+.lb-lobby .lb-settings-cols.lb-settings-tabbed { display: block; }
+.lb-lobby .lb-settings-cols.lb-settings-tabbed > .lb-settings-col { max-width: 640px; }
+.lb-lobby .lb-settings-cols.lb-settings-tabbed > .lb-settings-col[hidden] { display: none; }
+.lb-lobby .lb-settings-note { margin: 8px 2px 0; color: var(--lb-ink2, #5b6582); font-size: 12px; font-weight: 800; }
+@media (max-height: 520px) {
+  .lb-lobby .lb-settings-tab { min-width: 76px; padding: 0 10px; border-width: 2px; font-size: 13px; box-shadow: 0 2px 0 var(--lb-ink); }
+}
+
+/* 확장 화면 추천 (ui/FullscreenPrompt.ts) */
+.fs-offer { position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(28, 36, 74, .45); }
+.fs-offer-card {
+  display: grid; width: min(420px, 100%); gap: 10px; padding: 18px 20px; border: 3px solid #27325c; border-radius: 18px; background: #fffaf0;
+  box-shadow: 0 5px 0 #27325c; color: #27325c; font-family: var(--font); animation: fs-in .18s ease-out;
+}
+.fs-offer-card h2 { margin: 0; font-family: 'POP Jua', var(--font); font-size: 22px; font-weight: 400; outline: none; }
+.fs-offer-card p { margin: 0; color: #5b6582; font-size: 14px; font-weight: 700; line-height: 1.45; }
+.fs-offer-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.fs-offer-row button {
+  min-height: 44px; flex: 1 1 160px; padding: 0 14px; border: 3px solid #27325c; border-radius: 999px; box-shadow: 0 3px 0 #27325c;
+  font: 900 15px var(--font); cursor: pointer;
+}
+.fs-offer-yes { background: linear-gradient(180deg, #5aa2ff, #2a6ee8); color: #fff; }
+.fs-offer-no { background: #fff; color: #27325c; }
+.fs-offer-row button:focus-visible { outline: 3px solid #ffd45e; outline-offset: 2px; }
+@keyframes fs-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .fs-offer-card { animation: none; } }
+
+/* 좁은 세로 화면(돌려 그리지 않는 경우)의 전투: 가로 화면 권장 안내 */
+.hud .portrait-hint { display: none; }
+@media (orientation: portrait) and (max-width: 700px) {
+  .hud.playing:not(.in-lobby) .portrait-hint {
+    position: absolute; left: 50%; top: 40%; z-index: 3; display: block; max-width: calc(100% - 32px); padding: 10px 14px; border: 2px solid #fff;
+    border-radius: 14px; background: rgba(28, 36, 74, .82); color: #fff; font-size: 14px; font-weight: 900; text-align: center; transform: translateX(-50%);
+  }
+}
+:root.pop-rotated .hud .portrait-hint { display: none !important; }

@@ -1,3 +1,4 @@
+import { withFullscreenOffer } from '../ui/FullscreenPrompt';
 import { CoachMarks, type CoachStep } from '../ui/CoachMarks';
 import type { RankingResult } from '../net/shared/ranking';
 import { levelInfo } from '../net/shared/progression';
@@ -1875,12 +1876,14 @@ export class Game {
         void this.selectPrimary(id);
       },
       // 연습전 시작 (로비 공간을 치우고 경기장 스폰으로) + 버튼 클릭(사용자 동작) 안에서 포인터 잠금/터치 시작 → 바로 조작
-      playPractice: () => {
-        // 멀티 입장 때 지운 봇은 로비로 돌아올 때 다시 만듦 (혹시 남아 있으면 여기서)
-        if (this.botsRemoved) this.rebuildBots();
-        this.startMatch();
-        this.input.requestLock();
-      },
+      playPractice: () =>
+        // 처음 매치: 확장 화면 추천 (고른 버튼 클릭 안에서 이어서 시작 → 포인터 잠금이 막히지 않음)
+        withFullscreenOffer(this.container, this.input.touchMode, () => {
+          // 멀티 입장 때 지운 봇은 로비로 돌아올 때 다시 만듦 (혹시 남아 있으면 여기서)
+          if (this.botsRemoved) this.rebuildBots();
+          this.startMatch();
+          this.input.requestLock();
+        }),
       openMultiplayer: (mode) => {
         this.mpMenu?.openWith(mode);
         this.refreshMultiplayerMenu();
@@ -1904,9 +1907,9 @@ export class Game {
       presence: () => this.lobbyPresence(),
       retryLobby: () => this.hub?.retryNow(),
       listRooms: () => this.listRooms(),
-      createRoom: (mode) => this.mpMenu?.createNow(mode),
-      joinRoom: (code) => this.mpMenu?.joinNow(code),
-      quickMatch: () => this.mpMenu?.quickMatchNow(),
+      createRoom: (mode) => withFullscreenOffer(this.container, this.input.touchMode, () => this.mpMenu?.createNow(mode)),
+      joinRoom: (code) => withFullscreenOffer(this.container, this.input.touchMode, () => this.mpMenu?.joinNow(code)),
+      quickMatch: () => withFullscreenOffer(this.container, this.input.touchMode, () => this.mpMenu?.quickMatchNow()),
     };
   }
 
@@ -2685,6 +2688,10 @@ export class Game {
       switchTeam: async () => {
         const r = await this.ensureNet().session.switchTeam();
         if (!r.ok) this.mpMenu?.setNotice(`팀 변경 실패: ${this.netReason(r.reason)}`);
+      },
+      moveSeat: async (team, seat) => {
+        const r = await this.ensureNet().session.moveSeat(team, seat);
+        if (!r.ok) this.mpMenu?.setNotice(`자리 이동 실패: ${this.netReason(r.reason)}`);
       },
       resultOpen: () => !!this.resultScreen?.open,
       join: (code) =>

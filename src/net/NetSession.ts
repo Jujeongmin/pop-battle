@@ -236,6 +236,11 @@ export class NetSession {
     return this.hostCall('setMode', [mode]);
   }
 
+  /** TDM 대기실: 빈 칸으로 옮기기 (어느 팀이든) */
+  async moveSeat(team: NetTeam, seat: number): Promise<{ ok: boolean; reason?: string }> {
+    return this.hostCall('moveSeat', [team, seat]);
+  }
+
   /** TDM 대기실: 내 팀 바꾸기 */
   async switchTeam(): Promise<{ ok: boolean; reason?: string }> {
     return this.hostCall('switchTeam', []);

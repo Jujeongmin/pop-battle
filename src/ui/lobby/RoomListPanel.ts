@@ -1,6 +1,5 @@
-// 공개 방 목록 (넓은 화면 = 오른쪽 떠 있는 칸, 좁은·낮은 화면 = 아래 시트): 서버가 준 값만 표시, 보이는 동안 5초마다 갱신.
-// 머리: 손잡이(접기·펼치기) · 제목 · 방 수 · 새로고침(아이콘). 그 아래 시작 버튼 위계: 빠른 시작(가장 크게) > 연습전 > 방 만들기.
-// 접어도 머리·시작 버튼은 보임 (빠른 시작은 늘 누를 수 있음). 방 코드 참가는 접힌 보조 기능. 목록만 안에서 스크롤.
+// 공개 방 목록 (로비 화면 위쪽 가운데에 늘 보이는 칸): 서버가 준 값만 표시, 보이는 동안 5초마다 갱신.
+// 머리: 방 만들기(크게) · 빠른 시작 · 연습전 · 새로고침. 세로 한 줄에 방 하나 (칸 높이 = 방 2개, 3개부터 목록 안 스크롤).
 // 방마다: 제목(서버가 정한 번호 → 보는 사람 언어) · 모드 · 코드(작게) · 인원 · 상태 · 참가.
 // 갱신 때 방 코드 기준으로 같은 줄을 고쳐 씀 (다시 만들지 않음) → 깜빡임·스크롤 위치·선택·입력 중인 코드 유지.
 import { NET_MODE_RULES } from '../../net/shared/protocol';
@@ -42,9 +41,6 @@ export class RoomListPanel implements LobbyPanel {
   private loading = false;
   private loadedOnce = false;
   private readonly openCreate: () => void;
-  private countEl: HTMLElement | null = null;
-  /** 접힘 (손잡이로 바꿈, 처음엔 넓은 화면 펼침 · 좁은 화면 접힘) */
-  private collapsed: boolean | null = null;
 
   constructor(private readonly host: LobbyHost, openCreate: () => void) {
     this.openCreate = openCreate;
@@ -57,63 +53,31 @@ export class RoomListPanel implements LobbyPanel {
   render(body: HTMLElement): void {
     this.body = body;
     body.textContent = '';
-    body.classList.add('lb-dock2');
-    if (this.collapsed === null) this.collapsed = matchMedia('(max-width: 899px), (max-height: 520px)').matches;
-    body.classList.toggle('lb-dock-collapsed', this.collapsed);
-    // 머리: 손잡이 · 제목 · 방 수 · 새로고침
-    const head = el('div', 'lb-dock-head');
-    const handle = button('', 'lb-dock-handle', () => this.setCollapsed(!this.collapsed), '<i aria-hidden="true"></i>');
-    handle.setAttribute('aria-controls', 'lb-dock-body');
-    const title = el('b', 'lb-dock-title', '방 목록');
-    this.countEl = el('span', 'lb-dock-count');
-    this.refreshButton = button('', 'lb-room-refresh lb-icon-btn', () => void this.load(), ICON.refresh);
+    const tools = el('div', 'lb-room-tools');
+    const copy = el('div', 'lb-room-tools-copy');
+    copy.append(el('b', '', '방 목록'));
+    this.refreshButton = button('', 'lb-room-refresh', () => void this.load(), `${ICON.refresh}<span>새로고침</span>`);
     this.refreshButton.setAttribute('aria-label', '방 목록 새로고침');
-    this.refreshButton.title = '방 목록 새로고침';
-    head.append(handle, title, this.countEl, this.refreshButton);
-    // 시작 버튼 위계: 빠른 시작(주) > 연습전(보조) > 방 만들기(3순위)
-    const cta = el('div', 'lb-dock-cta');
-    const quick = button('', 'lb-room-quick lb-cta-primary', () => this.host.quickMatch(), `${ICON.play}<span class="lb-cta-copy"><b>빠른 시작</b><small>바로 매치 참가</small></span>`);
-    quick.title = '사람이 기다리는 방에 자동으로 참가 (없으면 새 방)';
-    const row = el('div', 'lb-dock-cta-row');
-    const practice = button('', 'lb-room-practice lb-cta-secondary', () => this.host.playPractice(), `${ICON.bot}<span>연습전</span>`);
+    const actions = el('div', 'lb-room-actions');
+    const practice = button('', 'lb-room-practice', () => this.host.playPractice(), `${ICON.bot}<span>연습전</span>`);
     practice.title = '봇 3명과 개인전 (3분 · 15킬 먼저)';
-    const create = button('', 'lb-room-create lb-cta-tertiary', this.openCreate, `${ICON.create}<span>방 만들기</span>`);
+    const quick = button('', 'lb-room-quick lb-room-quick-main', () => this.host.quickMatch(), `${ICON.play}<span>빠른 시작</span>`);
+    quick.title = '사람이 기다리는 방에 자동으로 참가 (없으면 새 방)';
+    const create = button('', 'lb-room-create', this.openCreate, `${ICON.create}<span>방 만들기</span>`);
     create.title = '모드를 골라 새 방 만들기';
-    row.append(practice, create);
-    cta.append(quick, row);
+    this.refreshButton.title = '방 목록 새로고침';
+    // 시작 버튼 위계: 빠른 시작(가장 크고 진함) > 연습전 > 방 만들기
+    actions.append(this.refreshButton, create, practice, quick);
+    tools.append(copy, actions);
     this.rows.clear();
     this.stateBox = null;
     this.list = el('div', 'lb-room-list');
     this.list.setAttribute('role', 'listbox');
     this.list.setAttribute('aria-label', '열려 있는 방');
-    const bodyBox = el('div', 'lb-dock-body');
-    bodyBox.id = 'lb-dock-body';
-    bodyBox.append(this.list, this.codeJoin());
-    body.append(head, cta, bodyBox);
-    this.syncHandle();
+    body.append(tools, this.list, this.codeJoin());
     if (this.loadedOnce && this.rooms.length) this.drawRooms(this.rooms);
     else this.drawLoading();
     if (this.active) void this.load();
-  }
-
-  /** 접기·펼치기 (머리와 시작 버튼은 늘 보임) */
-  private setCollapsed(on: boolean): void {
-    this.collapsed = on;
-    this.body?.classList.toggle('lb-dock-collapsed', on);
-    this.syncHandle();
-  }
-
-  private syncHandle(): void {
-    const h = this.body?.querySelector<HTMLButtonElement>('.lb-dock-handle');
-    if (!h) return;
-    h.setAttribute('aria-expanded', String(!this.collapsed));
-    const label = this.collapsed ? '방 목록 펼치기' : '방 목록 접기';
-    h.setAttribute('aria-label', label);
-    h.title = label;
-  }
-
-  private setCount(text: string): void {
-    if (this.countEl && this.countEl.textContent !== text) this.countEl.textContent = text;
   }
 
   activate(): void {
@@ -172,8 +136,6 @@ export class RoomListPanel implements LobbyPanel {
     const state = this.clearList();
     if (!state) return;
     state.classList.add('lb-room-loading');
-    state.setAttribute('role', 'status');
-    this.setCount('');
     // 첫 조회는 서버 연결부터 (이후 자동 새로고침은 목록 조회만)
     state.append(el('i', 'lb-room-spinner'), el('b', '', this.loadedOnce ? '방 목록을 불러오는 중…' : '서버에 연결하는 중…'));
   }
@@ -183,9 +145,7 @@ export class RoomListPanel implements LobbyPanel {
     this.selected = null;
     const state = this.clearList();
     if (!state) return;
-    state.setAttribute('role', 'status');
-    this.setCount('0개');
-    state.append(el('b', '', '열린 방이 없어요'), el('p', '', '빠른 시작으로 바로 들어가거나 방을 만들어 보세요'));
+    state.append(el('b', '', '현재 생성된 방이 없습니다'), el('p', '', '방을 만들거나 빠른 시작으로 바로 들어가 보세요'));
   }
 
   /**
@@ -198,8 +158,6 @@ export class RoomListPanel implements LobbyPanel {
     const state = this.clearList();
     if (!state) return;
     state.classList.add('lb-room-error');
-    state.setAttribute('role', 'alert');
-    this.setCount('');
     const [title, desc] =
       reason === 'offline'
         ? ['이 빌드에는 멀티플레이 서버가 없어요', '· Verse8에 올린 게임에서 방 목록을 볼 수 있어요']
@@ -218,7 +176,6 @@ export class RoomListPanel implements LobbyPanel {
    */
   private drawRooms(rooms: LobbyRoomInfo[]): void {
     this.rooms = rooms;
-    this.setCount(`${rooms.length}개`);
     if (this.selected && !rooms.some((r) => r.code === this.selected)) this.selected = null;
     const list = this.list;
     if (!list) return;
@@ -323,10 +280,7 @@ export class RoomListPanel implements LobbyPanel {
     }
   }
 
-  /** 방 코드로 참가: 기본 접힘 (보조 기능) */
   private codeJoin(): HTMLElement {
-    const details = el('details', 'lb-code-details');
-    details.append(el('summary', '', '방 코드로 참가'));
     const wrap = el('form', 'lb-code-join');
     const label = el('label');
     label.append(el('span', '', '방 코드로 참가'));
@@ -348,11 +302,7 @@ export class RoomListPanel implements LobbyPanel {
     });
     label.append(input);
     wrap.append(label, join);
-    // 새로고침 전에 있던 방 (같은 탭) 다시 입장
-    const last = this.host.lastRoomCode();
-    if (last) wrap.append(button('', 'lb-room-rejoin', () => this.host.rejoinLastRoom(), `${ICON.return}<span>이전 방</span>`));
-    details.append(wrap);
-    return details;
+    return wrap;
   }
 
   private phaseLabel(phase: LobbyRoomInfo['phase']): string {

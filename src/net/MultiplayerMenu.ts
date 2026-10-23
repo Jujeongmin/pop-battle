@@ -3,7 +3,7 @@
 // 표시는 전부 서버가 확인한 상태(NetSession)만 읽는다 — 클라이언트가 임의로 성공·결과를 만들지 않음.
 import { levelBadge } from '../ui/popgun';
 import { displayCode, type NetSession } from './NetSession';
-import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEAM_SIZE, NET_TEST_TIME_LIMIT_SEC, type NetMode, type NetPlayerRecord, type NetTeam } from './shared/protocol';
+import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEST_TIME_LIMIT_SEC, teamSeats, type NetMode, type NetPlayerRecord, type NetTeam } from './shared/protocol';
 import '../ui/lobby/room.css';
 
 export interface MultiplayerMenuHost {
@@ -33,6 +33,8 @@ export interface MultiplayerMenuHost {
   quickMatch(): Promise<void>;
   setMode(mode: NetMode): Promise<void>;
   switchTeam(): Promise<void>;
+  /** TDM 대기실: 빈 칸 클릭 → 그 팀·칸으로 */
+  moveSeat(team: NetTeam, seat: number): Promise<void>;
   /** timeLimitSec: 개발 빌드 테스트용 제한 시간 (없으면 모드 규칙) */
   start(timeLimitSec?: number): Promise<void>;
   /** 새로고침 전에 있던 룸 코드 (같은 탭) */
@@ -177,7 +179,7 @@ export class MultiplayerMenu {
     const s = this.host.session();
     const ps = s
       ? Object.entries(s.players)
-          .map(([a, p]) => `${a}:${p.slot}:${p.char}:${p.team}:${p.k}:${p.d}:${s.isLost(a)}:${s.remotes.has(a)}`)
+          .map(([a, p]) => `${a}:${p.slot}:${p.char}:${p.team}:${p.seat ?? -1}:${p.k}:${p.d}:${s.isLost(a)}:${s.remotes.has(a)}`)
           .join('|')
       : '';
     return [v, s?.reconnectAttempt, this.notice, this.createMode, this.testTime, this.host.lastRoomCode(), s?.roomId, s?.host, s?.mode, s?.matchPhase, s?.result?.endedAt, s?.lastError, s?.client.status, ps, this.host.matchStarted(), this.host.characterName()].join('#');
@@ -186,7 +188,6 @@ export class MultiplayerMenu {
   private render(v: View): void {
     const c = this.card;
     c.textContent = '';
-    c.append(el('div', 'lb-mp-kicker', 'POP! BATTLE'), el('h2', 'lb-mp-title', '멀티플레이'));
     const s = this.host.session();
     if (v === 'busy') {
       c.append(el('p', 'lb-mp-status', s?.inRoom ? '처리하는 중…' : '서버에 연결하는 중…'));
@@ -221,9 +222,6 @@ export class MultiplayerMenu {
       el('p', 'lb-mp-hint', modeRuleText(this.createMode)),
     );
     const create = this.button('방 만들기', 'lb-mp-primary', () => this.run(() => this.host.create(this.createMode)));
-    // 새로고침·끊김 뒤: 같은 탭에서 마지막으로 있던 룸으로 (진행 중 매치도 같은 계정이면 기록 그대로 복귀)
-    const last = this.host.lastRoomCode();
-    if (last) c.append(this.button(`이전 방 다시 입장 (${displayCode(last)})`, 'lb-mp-primary', () => this.run(() => this.host.rejoin())));
     const row = el('div', 'lb-mp-join');
     const input = el('input', 'lb-mp-code-input');
     input.placeholder = '방 코드';
@@ -302,7 +300,6 @@ export class MultiplayerMenu {
     const modeRow = el('div', 'lb-mp-mode-line');
     modeRow.append(el('b', '', rule.label), el('span', 'lb-mp-hint', modeRuleText(mode)));
     c.append(modeRow);
-    if (v === 'lobby' && s.isHost) c.append(this.modePicker(mode, (m) => void this.run(() => this.host.setMode(m))));
 
     const bySlot = new Map(Object.entries(s.players).map(([acc, p]) => [p.slot, { acc, p }]));
     const list = el('div', `lb-mp-players${rule.teams ? ' lb-mp-teams' : ' lb-mp-ffa'}`);
@@ -310,11 +307,27 @@ export class MultiplayerMenu {
       for (const team of ['BLUE', 'RED'] as const) {
         const column = el('section', `lb-mp-team-column lb-mp-team-${team.toLowerCase()}`);
         column.append(el('h3', '', `${team} TEAM`));
-        const entries = Object.entries(s.players).filter(([, p]) => p.team === team).sort((a, b) => a[1].slot - b[1].slot);
-        for (let index = 0; index < NET_TEAM_SIZE; index++) {
-          const entry = entries[index];
-          column.append(this.playerSlot(s, entry ? { acc: entry[0], p: entry[1] } : undefined, v));
-        }
+        teamSeats(s.players, team).forEach((acc, seat) => {
+          const p = acc ? s.players[acc] : undefined;
+          const box = this.playerSlot(s, acc && p ? { acc, p } : undefined, v);
+          // 대기실 빈 칸: 클릭하면 그 팀·그 칸으로 이동
+          if (!p && v === 'lobby') {
+            box.classList.add('lb-mp-seat-open');
+            box.tabIndex = 0;
+            box.setAttribute('role', 'button');
+            box.setAttribute('aria-label', `${team} 팀 ${seat + 1}번 자리로 이동`);
+            box.title = '이 자리로 이동';
+            const go = () => void this.run(() => this.host.moveSeat(team, seat));
+            box.addEventListener('click', go);
+            box.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                go();
+              }
+            });
+          }
+          column.append(box);
+        });
         list.append(column);
       }
     } else {
@@ -323,20 +336,11 @@ export class MultiplayerMenu {
     const n = Object.keys(s.players).length;
     c.append(list);
 
-    // 아래 버튼 줄: 팀 바꾸기(TDM 대기실) · 방 나가기
-    let teamButton: HTMLButtonElement | null = null;
+    // 아래 버튼 줄: 방 나가기 (TDM 팀·자리는 빈 칸 클릭으로 옮김)
     if (v === 'lobby') {
       const blue = Object.values(s.players).filter((p) => p.team === 'BLUE').length;
       const red = Object.values(s.players).filter((p) => p.team === 'RED').length;
-      if (rule.teams) {
-        const team = this.host.localTeam();
-        const other = team === 'BLUE' ? red : blue;
-        const mine = team === 'BLUE' ? blue : red;
-        const sw = this.button(`팀 바꾸기 (${team === 'BLUE' ? '→ RED' : '→ BLUE'})`, 'lb-mp-small', () => this.run(() => this.host.switchTeam()));
-        // 팀 인원 차이 1명 이하 유지: 상대 팀이 더 적을 때만
-        sw.disabled = other >= NET_TEAM_SIZE || other >= mine;
-        teamButton = sw;
-      }
+      if (rule.teams) c.append(el('p', 'lb-mp-hint', '빈 자리를 누르면 그 자리로 옮겨요 (팀 인원 차이는 시작할 때 자동으로 맞춰요)'));
       const anyLost = Object.keys(s.players).some((a) => s.isLost(a));
       // TDM 팀 인원은 시작할 때 서버가 차이 1명 이하로 맞춤 (1v1 … 4v4)
       const enough = n >= rule.requiredPlayers;
@@ -363,7 +367,6 @@ export class MultiplayerMenu {
     const err = this.notice || s.lastError;
     if (err) c.append(el('p', this.notice ? 'lb-mp-hint' : 'lb-mp-error', err));
     const foot = el('div', 'lb-mp-foot');
-    if (teamButton) foot.append(teamButton);
     foot.append(this.button('방 나가기', 'lb-mp-ghost', () => this.run(() => this.host.leave())));
     c.append(foot);
   }
@@ -392,15 +395,22 @@ export class MultiplayerMenu {
     const copy = el('span', 'lb-mp-player-copy');
     // 닉네임(서버 검사 값) 우선, 없으면 자리 번호. 계정·캐릭터 id는 표시하지 않음
     const nick = s.nickOf(entry.acc) ?? (mine ? s.nick : null);
-    const player = el('b', 'lb-mp-name-row');
-    player.append(levelBadge(entry.p.lv ?? 1, 'popgun-badge lb-mp-level'), el('span', 'lb-mp-name', mine ? `${nick ?? '나'} (나)` : nick ?? `P${entry.p.slot + 1}`));
-    const character = el('small', '', this.host.characterLabel(entry.p.char));
-    const team = s.mode === 'tdm' && entry.p.team ? ` · ${entry.p.team} 팀` : ' · 개인전';
-    character.append(team);
+    // 닉네임 줄은 닉네임만 ("나"는 아래 배지) · 긴 닉네임은 글자를 조금 작게 (최대 12자가 두 줄 안에)
+    const name = nick ?? (mine ? '나' : `P${entry.p.slot + 1}`);
+    const player = el('b', name.length > 7 ? 'lb-mp-name lb-mp-name-long' : 'lb-mp-name', name);
+    player.title = name;
+    // 계급 아이콘·레벨은 둘째 줄 (닉네임 줄 폭을 차지하지 않게)
+    const character = el('small', 'lb-mp-meta');
+    character.append(levelBadge(entry.p.lv ?? 1, 'popgun-badge lb-mp-level'), this.host.characterLabel(entry.p.char));
     copy.append(player, character);
     if (s.host === entry.acc) copy.append(el('em', '', '★ 방장'));
     const connection = el('span', lost ? 'lb-mp-connection lb-mp-lost' : 'lb-mp-connection', lost ? '연결 끊김 대기' : '연결됨');
     row.append(swatch, copy, connection);
+    // 내 칸: 초상 모서리 "나" 표시 (닉네임 줄 폭을 쓰지 않게)
+    if (mine) {
+      row.classList.add('lb-mp-mine');
+      row.append(el('span', 'lb-mp-me', '나'));
+    }
     if (v === 'paused') row.append(el('span', 'lb-mp-stats', `HP ${Math.round(entry.p.hp)}/${entry.p.max}${entry.p.dead ? ' · 사망' : ''} · K${entry.p.k}/D${entry.p.d}`));
     return row;
   }

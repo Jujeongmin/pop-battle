@@ -364,3 +364,8 @@
 .lb-mp-name-row { display: flex; min-width: 0; align-items: center; gap: 4px; }
 .lb-mp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-mp-level img { width: 20px; height: 20px; }
+
+/* 대기실: 둘째 줄 = 팝건 계급·레벨 + 캐릭터 · 모드 (닉네임 줄은 닉네임만, 잘림 방지) */
+.lb-mp-meta { display: flex; min-width: 0; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; }
+.lb-mp-meta .popgun-badge { flex: none; }
+.lb-mp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

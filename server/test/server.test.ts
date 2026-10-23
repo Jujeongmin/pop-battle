@@ -430,6 +430,31 @@ describe('team deathmatch', () => {
     expect((await server.startMatch()).ok).toBe(true);
   });
 
+  test('TDM lobby: click any empty seat (either team), taken seats refused, others keep their seats', async (server) => {
+    await server.simulateJoin(ROOM, 'alice');
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.setMode('tdm')).ok).toBe(true);
+    for (const a of ['bob', 'carol']) await server.simulateJoin(ROOM, a);
+    // alice BLUE 0 · bob RED 0 · carol BLUE 1
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.moveSeat('BLUE', 3)).ok).toBe(true);
+    let r = await roomState(server);
+    expect([r.players.alice.team, r.players.alice.seat, r.players.carol.seat]).toEqual(['BLUE', 3, 1]);
+    // 같은 팀 많은 쪽으로도 이동 가능 (시작할 때 맞춤)
+    server.connect({ account: 'bob', roomId: ROOM });
+    expect((await server.moveSeat('BLUE', 0)).ok).toBe(true);
+    expect((await server.moveSeat('BLUE', 1)).reason).toBe('seat_taken');
+    expect((await server.moveSeat('RED', 9)).reason).toBe('bad_seat');
+    r = await roomState(server);
+    expect(Object.values(r.players).every((p: any) => p.team === 'BLUE')).toBe(true);
+    server.connect({ account: 'alice', roomId: ROOM });
+    expect((await server.startMatch()).ok).toBe(true);
+    r = await roomState(server);
+    const count = (t: string) => Object.values(r.players).filter((p: any) => p.team === t).length;
+    expect(Math.abs(count('BLUE') - count('RED')) <= 1).toBe(true);
+    expect((await server.moveSeat('RED', 2)).reason).toBe('in_progress');
+  });
+
   test('start balances teams left uneven by leavers (3v1 → 2v2); 2 players start as 1v1', async (server) => {
     expect((await roomN(server, 6, 'tdm')).ok).toBe(true);
     let r = await roomState(server);

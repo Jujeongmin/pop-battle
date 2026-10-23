@@ -242,6 +242,7 @@ export class Hud {
       <div class="blocked-marker"></div>
       <div class="hitmarker"><i></i><i></i><i></i><i></i><b></b></div>
       <div class="pop-burst" aria-hidden="true">POP!</div>
+      <div class="portrait-hint" role="note">가로 화면으로 돌리면 더 넓게 볼 수 있어요</div>
       <div class="low-vignette" aria-hidden="true"></div>
       <div class="reload"><svg class="rl-ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="rl-track" cx="18" cy="18" r="14"/><circle class="rl-fill" cx="18" cy="18" r="14" pathLength="100"/><path class="rl-check" d="M11.5 18.5l4.5 4.5 8.5-9"/></svg><span class="rl-label"></span></div>
       <div class="fps">-- FPS</div>

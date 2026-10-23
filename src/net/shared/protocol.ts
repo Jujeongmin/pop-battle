@@ -297,6 +297,8 @@ export interface NetPlayerRecord {
   d: number;
   /** TDM 팀 (FFA·테스트는 null) */
   team?: NetTeam | null;
+  /** TDM 대기실에서 고른 팀 안 칸 (0~NET_TEAM_SIZE-1, 없으면 teamSeats가 빈 칸에 채움) */
+  seat?: number;
   /** 표시 닉네임 (sanitizeNick 통과, 없으면 화면은 자리 번호) */
   nick?: string;
   /** 플레이어 레벨 (서버 저장 경험치 기준, 입장·매치 종료 때 갱신) */
@@ -308,6 +310,27 @@ export interface NetPlayerRecord {
 }
 
 export type NetPlayers = Record<string, NetPlayerRecord>;
+
+/**
+ * TDM 대기실 칸 배치 (서버·클라이언트 공용): 팀마다 NET_TEAM_SIZE칸. 고른 칸(seat)이 있으면 그 칸,
+ * 나머지는 자리 번호 순으로 남은 빈 칸을 앞에서부터 채움. null = 빈 칸
+ */
+export function teamSeats(players: NetPlayers, team: NetTeam): (string | null)[] {
+  const seats: (string | null)[] = new Array<string | null>(NET_TEAM_SIZE).fill(null);
+  const rest: string[] = [];
+  const list = Object.entries(players).filter(([, p]) => p.team === team).sort((a, b) => a[1].slot - b[1].slot);
+  for (const [acc, p] of list) {
+    const s = p.seat;
+    if (typeof s === 'number' && Number.isInteger(s) && s >= 0 && s < NET_TEAM_SIZE && seats[s] === null) seats[s] = acc;
+    else rest.push(acc);
+  }
+  for (const acc of rest) {
+    const i = seats.indexOf(null);
+    if (i < 0) break;
+    seats[i] = acc;
+  }
+  return seats;
+}
 
 /** 결과 화면 한 줄 (매치 중 나간 사람도 남김) */
 export interface NetStanding {

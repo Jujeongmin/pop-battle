@@ -7,7 +7,7 @@ import { toGame, viewH } from '../../core/screenRotation';
 import { CharacterPanel } from './CharacterPanel';
 import { CreateRoomPanel } from './CreateRoomPanel';
 import { LoadoutPanel } from './LoadoutPanel';
-import { button, el, ICON, type LobbyCharacter, type LobbyHost, type LobbyPanel, type LobbyRoamState } from './lobbyDom';
+import { button, el, ICON, type LobbyCharacter, type LobbyHost, type LobbyPanel, type LobbyRoamState, trapFocus } from './lobbyDom';
 import { PlayPanel } from './PlayPanel';
 import { RoomListPanel } from './RoomListPanel';
 import { SettingsPanel } from './SettingsPanel';
@@ -445,6 +445,7 @@ export class Lobby {
   private buildNicknameModal(): NicknameEditor {
     const titleId = 'lb-nickname-title';
     this.nicknameModal.setAttribute('role', 'dialog');
+    trapFocus(this.nicknameModal, this.abort.signal);
     this.nicknameModal.setAttribute('aria-modal', 'true');
     this.nicknameModal.setAttribute('aria-labelledby', titleId);
     this.nicknameModal.setAttribute('aria-hidden', 'true');
@@ -570,16 +571,11 @@ export class Lobby {
     this.root.style.setProperty('--lb-nav-bottom', `${this.nav.offsetTop + this.nav.offsetHeight}px`);
     this.root.style.setProperty('--lb-nav-right', `${Math.max(0, this.root.clientWidth - this.nav.offsetLeft - this.nav.offsetWidth)}px`);
     this.layoutCharacterStage();
-    this.fitSheet();
-    // 3D가 보이는 빈 영역 (넓은 화면: 오른쪽 방 목록 칸 왼쪽 · 좁은 화면: 아래 시트 위) → 게임이 캐릭터를 그 가운데에
+    // 3D가 보이는 빈 영역 = 위쪽 방 목록 칸 아래 → 게임이 캐릭터를 그 가운데에
     if (this.visible && this.dockOn) {
       const w = this.root.clientWidth;
       const h = this.root.clientHeight;
-      const top = this.nav.offsetTop + this.nav.offsetHeight;
-      const side = this.roomDock.offsetLeft > w * 0.4 && this.roomDock.offsetTop < h * 0.5;
-      this.host.uiAreaChanged(
-        side ? { top, bottom: h, left: 0, right: this.roomDock.offsetLeft - 8 } : { top, bottom: this.roomDock.offsetTop - 8, left: 0, right: w },
-      );
+      this.host.uiAreaChanged({ top: this.roomDock.offsetTop + this.roomDock.offsetHeight, bottom: h, left: 0, right: w });
     } else this.host.uiAreaChanged(null);
     if (!this.visible || !this.menu || this.open !== 'character') {
       this.host.panelChanged(null);
@@ -589,34 +585,6 @@ export class Lobby {
     const left = Math.max(8, 18 * scale);
     const right = this.panelBox.offsetLeft;
     this.host.panelChanged(right > left ? (left + right) / 2 : null);
-  }
-
-  /**
-   * 아래 시트(좁은·낮은 화면) + 터치 조작: 왼쪽 조이스틱과 오른쪽 점프·슬라이딩 버튼 사이에만 (버튼 크기 설정을 따라 실제 위치로).
-   * 넓은 화면 오른쪽 칸·마우스 조작이면 CSS 위치 그대로
-   */
-  private fitSheet(): void {
-    const d = this.roomDock;
-    const sheet = matchMedia('(max-width: 899px), (max-height: 520px)').matches;
-    const layer = document.querySelector('.touch-layer:not(.hidden)');
-    const stick = layer?.querySelector('.tc-stick');
-    const btns = layer ? [...layer.querySelectorAll<HTMLElement>('.tc-jump, .tc-slide')].filter((b) => b.offsetParent) : [];
-    if (!sheet || !stick || btns.length === 0) {
-      for (const k of ['left', 'right', 'width', 'transform', 'min-width'] as const) d.style.removeProperty(k);
-      return;
-    }
-    const w = this.root.clientWidth;
-    const left = Math.round(stick.getBoundingClientRect().right + 8);
-    const right = Math.round(w - Math.min(...btns.map((b) => b.getBoundingClientRect().left)) + 8);
-    if (w - left - right < 260) {
-      for (const k of ['left', 'right', 'width', 'transform', 'min-width'] as const) d.style.removeProperty(k);
-      return;
-    }
-    d.style.left = `${left}px`;
-    d.style.right = `${right}px`;
-    d.style.width = 'auto';
-    d.style.minWidth = '0';
-    d.style.transform = 'none';
   }
 
   private layoutCharacterStage(): void {

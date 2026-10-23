@@ -45,7 +45,16 @@ export class CharacterPanel implements LobbyPanel {
         this.gauge('HP', 'lb-g-hp', character.maxHp / hpMax, String(character.maxHp)),
         this.gauge('이동', 'lb-g-speed', character.speed / speedMax, `${Math.round(character.speed * 100)}%`),
       );
-      card.append(figure, copy, stats, el('span', 'lb-card-equipped', '장착 중'));
+      card.append(figure, copy, stats, el('span', 'lb-card-equipped', '✓ 장착 중'), el('span', 'lb-card-preview', '미리보기'));
+      // 마우스를 올리면 바로 3D 미리보기 (PC, 잠깐 지나가는 것은 무시)
+      let hover = 0;
+      card.addEventListener('mouseenter', () => {
+        window.clearTimeout(hover);
+        hover = window.setTimeout(() => {
+          if (this.preview !== character.id) this.show(character, true);
+        }, 140);
+      });
+      card.addEventListener('mouseleave', () => window.clearTimeout(hover));
       if (character.locked) {
         const lock = el('span', 'lb-lock');
         lock.innerHTML = `${ICON.lock}<i>잠김</i>`;
@@ -91,7 +100,7 @@ export class CharacterPanel implements LobbyPanel {
     const fill = el('span', 'lb-gauge-fill');
     fill.style.width = `${Math.max(0, Math.min(100, ratio * 100)).toFixed(1)}%`;
     track.appendChild(fill);
-    row.append(el('span', 'lb-gauge-label', label), track, el('b', 'lb-gauge-value', value));
+    row.append(el('span', 'lb-gauge-label', label), track, el('b', 'lb-gauge-value', value), el('em', 'lb-gauge-delta'));
     return row;
   }
 
@@ -202,6 +211,21 @@ export class CharacterPanel implements LobbyPanel {
 
   private mark(): void {
     const equipped = this.host.currentCharacter();
+    // 장착 캐릭터 대비 증감 (HP +10 · 이동 -5%), 장착 카드는 비움
+    const base = this.characters.find((c) => c.id === equipped);
+    for (const card of this.cards) {
+      const c = this.characters.find((x) => x.id === card.dataset.id);
+      const [hp, speed] = card.querySelectorAll<HTMLElement>('.lb-gauge-delta');
+      if (c && base && hp && speed) {
+        const dh = c.maxHp - base.maxHp;
+        const ds = Math.round((c.speed - base.speed) * 100);
+        const fmt = (n: number, unit: string) => (c.id === equipped || n === 0 ? '' : `${n > 0 ? '+' : ''}${n}${unit}`);
+        hp.textContent = fmt(dh, '');
+        speed.textContent = fmt(ds, '%');
+        hp.className = `lb-gauge-delta${dh > 0 ? ' lb-up' : dh < 0 ? ' lb-down' : ''}`;
+        speed.className = `lb-gauge-delta${ds > 0 ? ' lb-up' : ds < 0 ? ' lb-down' : ''}`;
+      }
+    }
     for (const card of this.cards) {
       const isEquipped = card.dataset.id === equipped;
       const isPreview = card.dataset.id === this.preview;

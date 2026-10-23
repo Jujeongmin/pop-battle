@@ -56,6 +56,7 @@ export class LoadoutPanel implements LobbyPanel {
     const row = el('div', 'lb-weapon-grid lb-two');
     for (const weapon of [fixed.secondary, fixed.melee]) {
       const card = el('div', 'lb-weapon lb-fixed');
+      card.setAttribute('aria-label', `${weapon.name} (고정 장비)`);
       card.appendChild(this.weaponContent(weapon));
       card.addEventListener('click', () => preview.show(weapon));
       row.appendChild(card);
@@ -139,6 +140,7 @@ export class LoadoutPanel implements LobbyPanel {
     const type = el('span', 'lb-weapon-preview-type', initial?.type ?? '');
     const stats = this.weaponStats(all);
     if (initial) stats.show(initial);
+    stats.element.append(el('p', 'lb-weapon-legend', '위력 = 한 발 피해 × 탄 수 · 연사 = 분당 발사 수 · 사거리 = 탄이 닿는 최대 거리 · 막대 = 5종 중 최고 기준'));
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', initial ? `${initial.name} 3D 미리보기` : '무기 3D 미리보기');
     stage.append(canvas, el('span', 'lb-weapon-preview-hint', '드래그해서 돌려 보기'));

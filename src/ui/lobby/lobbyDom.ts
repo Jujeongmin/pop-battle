@@ -318,3 +318,28 @@ export interface PauseHost {
   leaveMatch(): Promise<void>;
 }
 
+/** 모달 안에서만 Tab 이동 (열린 동안 뒤 화면으로 포커스가 빠지지 않게) */
+export function trapFocus(root: HTMLElement, signal?: AbortSignal): void {
+  root.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key !== 'Tab') return;
+      const items = [...root.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select, textarea, [href], [tabindex]:not([tabindex="-1"])')].filter(
+        (x) => x.offsetParent !== null,
+      );
+      if (items.length === 0) return;
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && (active === first || !root.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !root.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    },
+    signal ? { signal } : undefined,
+  );
+}
+

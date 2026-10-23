@@ -33,6 +33,7 @@ import {
   NET_WEAPONS,
   ROOM_TITLE_COUNT,
   netDamage,
+  teamSeats,
   type NetHitClaim,
   type NetHitResult,
   type NetMatchPhase,
@@ -278,7 +279,10 @@ function pickTeam(players: NetPlayers): NetTeam | null {
 function assignTeams(players: NetPlayers, mode: NetMode): void {
   const list = Object.values(players).sort((a, b) => a.slot - b.slot);
   if (!NET_MODE_RULES[mode].teams) {
-    for (const p of list) p.team = null;
+    for (const p of list) {
+      p.team = null;
+      delete p.seat;
+    }
     return;
   }
   const counts: Record<NetTeam, number> = { BLUE: 0, RED: 0 };
@@ -290,6 +294,7 @@ function assignTeams(players: NetPlayers, mode: NetMode): void {
     if (p.team) continue;
     const t: NetTeam = counts.BLUE <= counts.RED ? 'BLUE' : 'RED';
     p.team = t;
+    delete p.seat;
     counts[t]++;
   }
   balanceTeams(players);
@@ -309,6 +314,7 @@ function balanceTeams(players: NetPlayers): void {
     for (const p of Object.values(players)) if (p.team === from && (!mover || p.slot > mover.slot)) mover = p;
     if (!mover) return;
     mover.team = from === 'BLUE' ? 'RED' : 'BLUE';
+    delete mover.seat;
   }
 }
 
@@ -1073,6 +1079,32 @@ export class Server {
       if (teamCount(r.players, to) >= NET_TEAM_SIZE) return { ok: false, reason: 'team_full' };
       if (p.team && teamCount(r.players, to) >= teamCount(r.players, p.team)) return { ok: false, reason: 'teams_unbalanced' };
       p.team = to;
+      await saveRoom(roomId, r);
+      return { ok: true };
+    });
+  }
+
+  /**
+   * TDM 대기실: 빈 칸 클릭 → 그 팀·그 칸으로 옮기기 (어느 팀이든, 팀 인원 차이는 시작할 때 서버가 1명 이하로 맞춤).
+   * 다른 사람은 지금 보이는 칸 그대로 고정
+   */
+  async moveSeat(team: string, seat: number): Promise<{ ok: boolean; reason?: string }> {
+    if (!roomOf()) return { ok: false, reason: 'not_in_room' };
+    const to = TEAMS.find((t) => t === team);
+    if (!to || !Number.isInteger(seat) || seat < 0 || seat >= NET_TEAM_SIZE) return { ok: false, reason: 'bad_seat' };
+    const me = $sender.account;
+    const roomId = roomOf()!;
+    return $lock(`room:${roomId}`, async () => {
+      const r = await readRoom();
+      const p = r.players[me];
+      if (!p || r.mode !== 'tdm') return { ok: false, reason: 'not_tdm' };
+      if (r.phase === 'countdown' || r.phase === 'playing') return { ok: false, reason: 'in_progress' };
+      const target = teamSeats(r.players, to)[seat];
+      if (target === me) return { ok: true };
+      if (target) return { ok: false, reason: 'seat_taken' };
+      for (const t of TEAMS) teamSeats(r.players, t).forEach((acc, i) => acc && (r.players[acc]!.seat = i));
+      p.team = to;
+      p.seat = seat;
       await saveRoom(roomId, r);
       return { ok: true };
     });
