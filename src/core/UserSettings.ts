@@ -1,19 +1,25 @@
-// 사용자 설정 (이 기기·브라우저에만 저장). 게임 밸런스 값은 없음 — 소리 크기와 마우스 시점 감도 배율만.
+// 사용자 설정 (이 기기·브라우저에만 저장). 게임 밸런스 값은 없음 — 소리(전체·효과음·배경음·음소거)와 마우스 시점 감도 배율만.
 // 모바일 터치 설정은 TouchInput이 따로 저장 (popbattle.touch).
 
 export interface UserSettings {
+  /** 전체 크기 0..1 (효과음·배경음 공통) */
+  master: number;
   /** 효과음 크기 0..1 (예전 '전체 소리' 저장값을 그대로 이어 씀) */
   volume: number;
-  /** 배경음 크기 0..1 (배경음 버스, 음악이 아직 없어 설정 화면에서는 잠김) */
+  /** 배경음 크기 0..1 */
   music: number;
+  /** 음소거 (0 = 소리 켬, 1 = 끔 — 숫자로 저장해 다른 설정과 같은 검사) */
+  muted: number;
   /** PC 마우스 시점 감도 배율 (기본 1 = 기존 감도) */
   mouseSensitivity: number;
 }
 
-export const USER_DEFAULTS: UserSettings = { volume: 0.6, music: 0.5, mouseSensitivity: 1 };
+export const USER_DEFAULTS: UserSettings = { master: 0.8, volume: 0.6, music: 0.5, muted: 0, mouseSensitivity: 1 };
 export const USER_LIMITS = {
+  master: [0, 1, 0.05],
   volume: [0, 1, 0.05],
   music: [0, 1, 0.05],
+  muted: [0, 1, 1],
   mouseSensitivity: [0.4, 2.5, 0.05],
 } as const;
 

@@ -151,6 +151,8 @@ export class PlayerAvatar {
 
   private state: AnimState = 'idle';
   private stateTime = 0;
+  /** 효과음용 이번 프레임 동작 (점프·착지·슬라이딩·사망, audio/GameSounds가 읽음) */
+  readonly motion = { jumped: false, landed: false, airTime: 0, sliding: false, dead: false };
   private jumpStartTimer = 0;
   private landTimer = 0;
   private hipTwist = 0;
@@ -832,6 +834,12 @@ export class PlayerAvatar {
   private updateStateMachine(f: AvatarFrame): void {
     const a = CHARACTER.anim;
     this.stateTime += f.dt;
+    const m = this.motion;
+    m.jumped = f.justJumped;
+    m.landed = f.justLanded;
+    m.airTime = f.landedAirTime;
+    m.sliding = f.mode === 'slide';
+    m.dead = f.dead;
     this.jumpStartTimer = Math.max(0, this.jumpStartTimer - f.dt);
     this.landTimer = Math.max(0, this.landTimer - f.dt);
     if (f.justJumped) this.jumpStartTimer = a.jumpStartHold;
@@ -876,6 +884,15 @@ export class PlayerAvatar {
       const scale = THREE.MathUtils.clamp(speed / ref, a.minTimeScale, a.maxTimeScale);
       action.timeScale = this.movingBackward(f) ? -scale : scale;
     }
+  }
+
+  /** 발소리용: 걷기·달리기 클립 진행 (0..1, 한 주기 = 두 걸음). 걷거나 뛰는 중이 아니면 null */
+  stepPhase(): { phase: number; run: boolean } | null {
+    if (this.state !== 'walk' && this.state !== 'run') return null;
+    const action = this.actions.get(this.state);
+    if (!action) return null;
+    const d = action.getClip().duration;
+    return { phase: (((action.time % d) + d) % d) / d, run: this.state === 'run' };
   }
 
   /** 조준 이동 중 몸 기준 이동 방향 (라디안, 0 = 정면) */

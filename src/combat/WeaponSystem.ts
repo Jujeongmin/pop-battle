@@ -54,6 +54,8 @@ export interface WeaponCallbacks {
   onMelee?(result: MeleeResult, def: WeaponDef): void;
   /** 재장전 시작 / 완료 (사운드) */
   onReload?(phase: 'start' | 'end'): void;
+  /** 빈 탄창으로 방아쇠 (사운드만, 판정·재장전 규칙과 무관) */
+  onDryFire?(): void;
   onRecoil(pitchRad: number, yawRad: number, recoveryRatio: number, recoverySharpness: number): void;
 }
 
@@ -246,7 +248,10 @@ export class WeaponSystem {
     const result = w.update(f.dt, triggerHeld, { now: this.clock, canFire: this.ready });
     if (result.reloadFinished) this.cb.onReload?.('end');
     // 빈 탄창으로 방아쇠 → 자동 재장전 (예비 탄약이 없으면 Weapon.canReload가 막는다)
-    if (result.dryFire) this.requestReload();
+    if (result.dryFire) {
+      this.cb.onDryFire?.();
+      this.requestReload();
+    }
 
     this.lastSpreadDeg = w.spreadDeg({
       moving: f.moving,

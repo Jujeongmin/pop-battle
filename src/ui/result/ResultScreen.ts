@@ -12,6 +12,8 @@ export interface ResultHost {
   toRoom(): Promise<boolean>;
   /** 메인 로비로 (멀티는 방을 나감) */
   toMainLobby(): Promise<void>;
+  /** 단계 알림 (소리): banner = 종료 배너, shown = 결과 카드·무대 표시 */
+  onPhase?(phase: 'banner' | 'shown', data: ResultData): void;
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -156,6 +158,7 @@ export class ResultScreen {
     const built = this.stage.build(data);
     this.finishEl.textContent = data.reason === 'score' ? 'FINISH!' : 'TIME UP!';
     this.root.classList.add('pb-res-banner');
+    this.host.onPhase?.('banner', data);
     await sleep(1100);
     if (token !== this.token) return;
     this.root.classList.add('pb-res-cover');
@@ -172,6 +175,7 @@ export class ResultScreen {
     this.update(0);
     this.root.classList.add('pb-res-shown');
     this.root.classList.remove('pb-res-cover');
+    this.host.onPhase?.('shown', data);
   }
 
   private setStage(on: boolean): void {

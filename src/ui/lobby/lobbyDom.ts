@@ -34,6 +34,8 @@ export interface LobbySlider {
   format(v: number): string;
   /** 있으면 잠긴 옵션 (아직 기능이 없음): 값 칸에 이 글자, 조작 불가 */
   disabled?: string;
+  /** 켜기/끄기 스위치 (값 0 = 끔, 1 = 켬; 음소거 등) */
+  toggle?: boolean;
 }
 
 /** 로비 → 게임 요청 (Game이 구현). 실제 기능이 있는 것만 둔다 */
@@ -207,6 +209,7 @@ export function comingSoon(title: string, desc: string): HTMLElement {
 }
 
 export function slider(s: LobbySlider): HTMLElement {
+  if (s.toggle) return toggleRow(s);
   const row = el('label', 'lb-slider');
   const val = el('span', 'lb-slider-val', s.format(s.get()));
   const input = el('input');
@@ -231,6 +234,29 @@ export function slider(s: LobbySlider): HTMLElement {
     val.textContent = s.disabled;
   }
   row.append(el('span', 'lb-slider-label', s.label), input, val);
+  return row;
+}
+
+/** 켜기/끄기 스위치 줄 (슬라이더와 같은 칸 배치) */
+function toggleRow(s: LobbySlider): HTMLElement {
+  const row = el('div', 'lb-slider lb-toggle-row');
+  const val = el('span', 'lb-slider-val');
+  const sw = el('button', 'lb-switch');
+  sw.type = 'button';
+  sw.setAttribute('role', 'switch');
+  sw.setAttribute('aria-label', s.label);
+  const show = () => {
+    const on = s.get() >= 0.5;
+    sw.classList.toggle('on', on);
+    sw.setAttribute('aria-checked', String(on));
+    val.textContent = s.format(s.get());
+  };
+  sw.addEventListener('click', () => {
+    s.set(s.get() >= 0.5 ? 0 : 1);
+    show();
+  });
+  show();
+  row.append(el('span', 'lb-slider-label', s.label), sw, val);
   return row;
 }
 

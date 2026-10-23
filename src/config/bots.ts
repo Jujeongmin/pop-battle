@@ -121,6 +121,4 @@ export const BOT = {
     minZ: -29,
     maxZ: 29,
   },
-  /** 봇 효과음 거리 감쇠: 이 거리에서 0 */
-  soundFalloff: 36,
 };

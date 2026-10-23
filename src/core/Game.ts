@@ -6,7 +6,6 @@ import { WeaponArt } from '../assets/weaponArt';
 import { CharacterArt } from '../assets/characterArt';
 import type { Bot } from '../bots/Bot';
 import { BotManager } from '../bots/BotManager';
-import { BOT } from '../config/bots';
 import { COMBAT, TEAMS } from '../config/combat';
 import { FFA_RULES, NET_TEST_RULES } from '../config/match';
 import { NET_MODE } from '../net/netConfig';
@@ -56,6 +55,8 @@ import {
 import type { MeleeResult } from '../combat/melee';
 import { WeaponSystem, type ShotPrediction, type ShotResult } from '../combat/WeaponSystem';
 import { AudioManager } from '../audio/AudioManager';
+import { GameSounds, type SoundActor } from '../audio/GameSounds';
+import { FIRE_SOUND, MIX, type MusicId } from '../config/audio';
 import { CAMERA, CHARACTER, MOVEMENT, RENDER } from '../config/gameConfig';
 import { assistTouchLook, type AssistTarget } from '../combat/aimAssist';
 import { areHostile } from '../combat/teams';
@@ -172,6 +173,11 @@ export class Game {
   private readonly input: GameInput;
   private readonly hud: Hud;
   private readonly audio = new AudioManager();
+  /** 상태로 정하는 소리 (발소리·카운트다운·배경음·UI 클릭) */
+  private sounds!: GameSounds;
+  /** 결과 화면 배경음 (배너 동안 null = 조용히, 카드가 뜨면 승리·패배) */
+  private resultMusic: MusicId | null = null;
+  private readonly soundActors: SoundActor[] = [];
   private readonly resizeObserver = new ResizeObserver(() => this.resize());
   /** 모바일 조이스틱 자동 달리기 (입력 장치가 조이스틱일 때만) */
   private readonly autoSprint = new JoystickAutoSprint();
@@ -365,6 +371,9 @@ export class Game {
     this.hud.onSlotTap = (i) => this.input.touch.pressSlot(i + 1);
     this.hud.onTouchSettings = () => this.input.touch.openSettings();
     this.hud.onTouchStart = () => this.input.requestLock();
+    // 소리: 첫 사용자 입력(클릭·터치·키)에서 오디오 시작 (모바일 자동 재생 제한), UI 클릭음은 화면 전체 위임
+    this.audio.attachUnlock(window);
+    this.sounds = new GameSounds(this.audio, container);
     this.input.onLockChange = (locked) => {
       this.hud.setLocked(locked);
       // 브라우저 자동 재생 정책: 사용자 클릭(포인터 잠금) 뒤에 오디오 시작
@@ -432,6 +441,16 @@ export class Game {
         return (await s.toLobby()).ok;
       },
       toMainLobby: () => this.returnToLobby(),
+      // 종료 배너: 승리·패배 효과음 + 전투 음악 끔 → 카드가 뜨면 결과 효과음 + 승리·패배 음악 (무승부는 차분한 곡)
+      onPhase: (phase, data) => {
+        if (phase === 'banner') {
+          this.resultMusic = null;
+          if (data.outcome !== 'draw') this.audio.play(data.outcome === 'win' ? 'win' : 'lose');
+        } else {
+          this.audio.play('resultShow');
+          this.resultMusic = data.outcome === 'win' ? 'victory' : 'defeat';
+        }
+      },
     });
     // 킬로그 무기 아이콘 = 실제 모델 실루엣 (처음 처치 때 멈칫하지 않게 미리 그림)
     for (const id of Object.keys(WEAPONS)) this.weaponArt.silhouette(id);
@@ -458,7 +477,7 @@ export class Game {
         this.effects.muzzleFlash(muzzle, this.muzzle, def.effects.flashScale);
         this.muzzlePop(muzzle, this.muzzleDir, def.id, this.combatant.id);
         this.muzzleDebug?.onFlash(muzzle, this.muzzle);
-        this.audio.play('fire', { gain: def.effects.fireGain, pitch: def.effects.firePitch });
+        this.audio.play(FIRE_SOUND[def.id] ?? 'fireRifle');
         this.combatant.notifyFired();
       },
       onShot: (r) => {
@@ -477,6 +496,7 @@ export class Game {
         this.net?.recordMelee(r, this.muzzle);
       },
       onReload: (phase) => this.audio.play(phase === 'start' ? 'reloadStart' : 'reloadEnd'),
+      onDryFire: () => this.audio.play('dryFire'),
       onRecoil: (p, y, ratio, sharp) => this.tpsCamera.addRecoil(p, y, ratio, sharp),
     });
 
@@ -504,11 +524,11 @@ export class Game {
       onFire: (bot, muzzle) => {
         this.effects.muzzleFlash(muzzle, bot.muzzle);
         this.muzzlePop(muzzle, bot.aimDir, bot.weapon.def.id, bot.id);
-        this.audio.play('fire', { gain: this.botSoundGain(muzzle) * 0.75, channel: 'botFire' });
+        this.audio.play(FIRE_SOUND[bot.weapon.def.id] ?? 'fireRifle', { pos: muzzle, gain: MIX.otherGain, channel: 'otherFire' });
       },
       onShot: (_bot, r) => this.presentShot(r),
       onReload: (bot, phase) =>
-        this.audio.play(phase === 'start' ? 'reloadStart' : 'reloadEnd', { gain: this.botSoundGain(bot.muzzle) * 0.6, channel: 'botReload' }),
+        this.audio.play(phase === 'start' ? 'reloadStart' : 'reloadEnd', { pos: bot.muzzle, gain: MIX.otherGain * 0.7, channel: 'otherReload' }),
       // 킬·데스 집계 (PLAYING에서만, 한 번의 사망에 한 번)
       onDeath: (bot, killer, hit) => {
         this.match.recordDeath(bot.id, killer?.id ?? null);
@@ -605,6 +625,8 @@ export class Game {
     this.hud.setLoadout(this.primary.id, false);
 
     // 사용자 설정 적용 + 메인 로비 (?net=1로 멀티 메뉴를 바로 열면 메뉴가 먼저 보임)
+    this.audio.setMaster(this.userSettings.master);
+    this.audio.setMuted(this.userSettings.muted >= 0.5);
     this.audio.setVolume(this.userSettings.volume);
     this.audio.setMusicVolume(this.userSettings.music);
     this.input.mouseSensitivity = this.userSettings.mouseSensitivity;
@@ -1003,6 +1025,7 @@ export class Game {
     this.netPanel?.update(dt);
     // 멀티 측정 패널: F9 네트워크 디버그를 열었을 때만 (정식 HUD와 겹치지 않게)
     this.netHud?.update(dt, this.netGame && !!this.netPanel?.isOpen);
+    this.updateSounds();
     this.mpRefreshTimer -= dt;
     if (this.mpRefreshTimer <= 0 && this.mpMenu) {
       this.mpRefreshTimer = 0.25;
@@ -1100,7 +1123,7 @@ export class Game {
               this.bullets.splat(at, n, color, vfx.diameter * 1.6 * vfx.impactScale);
               this.bullets.burst(at, n, color, vfx.impactDroplets, 0.035 * vfx.impactScale, 2.2, 0.8, 0.3);
               this.effects.toyImpact(at, n, color, vfx.impactScale);
-              this.audio.play('impact', byPlayer ? undefined : { gain: this.botSoundGain(at), channel: 'botImpact' });
+              this.audio.play('impact', byPlayer ? { pos: at } : { pos: at, gain: MIX.otherGain, channel: 'otherImpact' });
             };
     }
     this.bullets.fire(weaponId, from, end, arrive, color);
@@ -1137,15 +1160,14 @@ export class Game {
   }
 
   /**
-   * 확정된 명중 피드백 (히트마커 + 소리, 글자 없음): 일반 = 짧은 명중음, 헤드샷 = 높은 명중음, 처치 = 처치음만
+   * 확정된 명중 피드백 (히트마커 + 소리, 글자 없음): 일반·헤드샷 = 같은 명중음, 처치 = 처치음만
    * (명중음과 겹치지 않게). 로비에서는 없음
    */
   private hitFeedback(headshot: boolean, killed: boolean): void {
     if (this.lobbyShown) return;
     this.hud.showHit(headshot, killed);
-    if (killed) this.audio.play('kill', headshot ? { pitch: 1.12 } : undefined);
-    else if (headshot) this.audio.play('hit', { pitch: 1.4, gain: 1.15 });
-    else this.audio.play('hit');
+    // 헤드샷 전용 소리 없음: 명중은 모두 같은 소리, 처치만 다른 소리
+    this.audio.play(killed ? 'kill' : 'hit');
   }
 
   /** 근접 판정 결과 연출 (헤드샷 표시 없음) */
@@ -1160,10 +1182,11 @@ export class Game {
       this.hud.damagePopup(h.point, h.damage, false);
       killed ||= h.killed;
     }
+    if (r.hits.length > 0) this.audio.play('meleeHit');
     if (local > 0) this.hitFeedback(false, killed);
     else if (r.hits.length === 0 && r.wall) {
       this.effects.worldImpact(r.wall.point, r.wall.normal);
-      this.audio.play('impact');
+      this.audio.play('meleeHit', { gain: 0.6 });
     }
   }
 
@@ -1179,6 +1202,7 @@ export class Game {
   private switchSlot(index: number, force = false): void {
     const def = this.loadout[index];
     if (!def || (index === this.slotIndex && !force)) return;
+    if (!force) this.audio.play('weaponSwitch');
     this.slotIndex = index;
     this.weapons.equip(def);
     this.avatar.setWeapon(this.weaponModels.get(def), def.mount);
@@ -1612,11 +1636,40 @@ export class Game {
       format,
     });
     return {
-      // 배경음: 버스·저장값은 준비됨, 음악 에셋이 아직 없어 잠금 (작동하는 것처럼 보이지 않게)
-      sound: [user('volume', '효과음', pct, (v) => this.audio.setVolume(v)), { ...user('music', '배경음', pct, (v) => this.audio.setMusicVolume(v)), disabled: '준비 중' }],
+      sound: [
+        user('master', '전체 소리', pct, (v) => this.audio.setMaster(v)),
+        user('volume', '효과음', pct, (v) => this.audio.setVolume(v)),
+        user('music', '배경음', pct, (v) => this.audio.setMusicVolume(v)),
+        { ...user('muted', '음소거', (v) => (v >= 0.5 ? '켜짐' : '꺼짐'), (v) => this.audio.setMuted(v >= 0.5)), toggle: true },
+      ],
       controls: [user('mouseSensitivity', '마우스 감도', x, (v) => (this.input.mouseSensitivity = v))],
       touch: [touch('lookSensitivity', '시점 회전 감도', x), touch('joystickScale', '조이스틱 크기', pct), touch('buttonScale', '버튼 크기', pct)],
     };
+  }
+
+  /** 매치 진행 중 (연습전: 카운트다운·전투, 멀티: 방의 매치가 결과 단계 전) */
+  private get matchRunning(): boolean {
+    const s = this.net?.session;
+    return this.netGame ? !!s?.inRoom && s.inMatch && s.matchPhase !== 'result' : this.match.state === 'COUNTDOWN' || this.match.state === 'PLAYING';
+  }
+
+  /**
+   * 매 프레임 소리 상태: 화면별 배경음(로비·전투·결과), 카운트다운, 발소리 등을 낼 캐릭터 (내 캐릭터 + 매치 중 봇·원격 플레이어)
+   */
+  private updateSounds(): void {
+    const running = this.matchRunning;
+    const music: MusicId | null = this.resultScreen?.open ? this.resultMusic : running ? 'battle' : 'lobby';
+    const actors = this.soundActors;
+    actors.length = 0;
+    actors.push({ key: 'me', avatar: this.avatar, pos: this.renderFeet, local: true });
+    if (running && !this.botsRemoved) for (const b of this.bots.bots) actors.push({ key: b.id, avatar: b.avatar, pos: b.renderFeet, local: false });
+    if (running && this.net) for (const r of this.net.remotes.values()) if (r.alive) actors.push({ key: r.id, avatar: r.avatar, pos: r.renderFeet, local: false });
+    this.sounds.update({
+      camera: this.tpsCamera.camera,
+      actors,
+      music,
+      countdown: this.match.state === 'COUNTDOWN' ? this.match.countdownLeft : null,
+    });
   }
 
   /**
@@ -1626,16 +1679,20 @@ export class Game {
   private syncPauseMenu(): void {
     const pm = this.pauseMenu;
     if (!pm) return;
-    const s = this.net?.session;
-    const running = this.netGame ? !!s?.inRoom && s.inMatch && s.matchPhase !== 'result' : this.match.state === 'COUNTDOWN' || this.match.state === 'PLAYING';
+    const running = this.matchRunning;
     const want = running && !this.inLobby && !this.input.isLocked && !this.debugPanel.visible;
     // 매치 시작 직후 포인터 잠금이 잡히는 사이(몇 프레임)에는 열지 않음 → 0.15초 넘게 조작이 없을 때만
     const now = performance.now();
     if (!want) this.pauseWantSince = -1;
     else if (this.pauseWantSince < 0) this.pauseWantSince = now;
     const open = want && now - this.pauseWantSince >= 150;
-    if (open && !pm.visible) pm.show();
-    else if (!want && pm.visible) pm.hide();
+    if (open && !pm.visible) {
+      pm.show();
+      this.sounds.ui('uiOpen');
+    } else if (!want && pm.visible) {
+      pm.hide();
+      this.sounds.ui('uiClose');
+    }
   }
 
   /** 일시정지 메뉴가 게임에 요청하는 동작 */
@@ -1669,7 +1726,10 @@ export class Game {
           return { id, name: c.name, role: sel.role, color: sel.color, maxHp: c.stats.maxHp, speed: c.stats.speed, locked: sel.locked, selectable: isCharacterSelectable(id) };
         }),
       currentCharacter: () => this.avatar.character.id,
-      selectCharacter: (id) => this.selectCharacter(id as CharacterId),
+      selectCharacter: (id) => {
+        this.sounds.ui('uiSelect');
+        return this.selectCharacter(id as CharacterId);
+      },
       previewCharacter: (id) => this.previewCharacter(id),
       previewedCharacter: () => this.previewedCharacter,
       rotatePreview: (dx) => this.rotatePreview(dx),
@@ -1694,7 +1754,10 @@ export class Game {
       },
       fixedWeapons: () => ({ secondary: lobbyWeapon(SECONDARY_WEAPON), melee: lobbyWeapon(MELEE_WEAPON) }),
       currentPrimary: () => this.primary.id,
-      selectPrimary: (id) => void this.selectPrimary(id),
+      selectPrimary: (id) => {
+        this.sounds.ui('uiEquip');
+        void this.selectPrimary(id);
+      },
       // 연습전 시작 (로비 공간을 치우고 경기장 스폰으로) + 버튼 클릭(사용자 동작) 안에서 포인터 잠금/터치 시작 → 바로 조작
       playPractice: () => {
         // 멀티 입장 때 지운 봇은 로비로 돌아올 때 다시 만듦 (혹시 남아 있으면 여기서)
@@ -1735,6 +1798,7 @@ export class Game {
    * 닫힘 = 같은 사용자 동작 안에서 포인터 잠금·터치 조작을 다시 요청 (브라우저가 거부하면 "클릭해서 움직이기" 안내)
    */
   private onLobbyMenu(open: boolean, panel: string | null): void {
+    if (open !== this.lobbyMenuOpen) this.sounds.ui(open ? 'uiOpen' : 'uiClose');
     this.lobbyMenuOpen = open;
     this.lobbyPanel = open ? panel : null;
   }
@@ -2157,15 +2221,10 @@ export class Game {
     return { primary: this.primary.id, slot: this.slotIndex + 1, weapon: this.weapons.def.id };
   }
 
-  /** 봇 효과음 거리 감쇠 (카메라 기준) */
-  private botSoundGain(pos: THREE.Vector3): number {
-    const d = this.tpsCamera.camera.position.distanceTo(pos);
-    return THREE.MathUtils.clamp(1 - d / BOT.soundFalloff, 0, 1) ** 1.5 * 0.9 + 0.1 * (d < BOT.soundFalloff ? 1 : 0);
-  }
-
   /** 플레이어 피격: 피해 방향·섬광, 체력 0이면 사망 */
   private onPlayerDamaged(hit: HitInfo, applied: number): void {
     this.hud.showDamage(hit.attacker?.position ?? null, applied);
+    if (applied > 0 && this.combatant.alive) this.audio.play('hurt');
     if (!this.combatant.alive && !this.dead) this.kill(hit.attacker ?? null, hit, 'weapon');
   }
 
@@ -2187,6 +2246,7 @@ export class Game {
    * (체력·탄약·사망·무적·ADS·재장전·봇 결정 초기화) → 카운트다운.
    */
   private beginMatch(): void {
+    this.sounds.ui('matchEnter');
     this.lobbyDone = true;
     this.releaseLobbySpace();
     this.combatant.active = true;
@@ -2270,8 +2330,11 @@ export class Game {
     this.beginMatch();
   }
 
-  private onMatchState(state: MatchState, _prev: MatchState): void {
-    if (state === 'PLAYING') this.hud.flashGo();
+  private onMatchState(state: MatchState, prev: MatchState): void {
+    if (state === 'PLAYING') {
+      this.hud.flashGo();
+      if (prev === 'COUNTDOWN') this.audio.play('countGo');
+    }
   }
 
   /** 매치 종료 (한 번만): 전투 정지, 조준·재장전 해제, 결과 화면 (포인터 잠금 해제 → 버튼 클릭 가능) */
@@ -2332,6 +2395,7 @@ export class Game {
     if (cause !== 'weapon') this.net?.selfDeath(cause);
     this.reportDeath(this.combatant.id, killer, hit, cause);
     this.appearances.get(this.combatant.id)?.setDead(true);
+    this.audio.play('death');
     this.killedBy = killer?.name ?? null;
     this.match.recordDeath(this.combatant.id, killer?.id ?? null);
     this.combatant.health.kill();
@@ -2415,6 +2479,8 @@ export class Game {
   }
 
   private respawn(): void {
+    // 전투 중 부활만 (매치 시작 배치는 입장음)
+    if (this.dead && this.match.state === 'PLAYING') this.audio.play('respawn');
     this.dead = false;
     this.queueSpawnFx(this.avatar);
     // 멀티 테스트 시작 때만 자리별 고정 스폰 (P1 / P2 서로 다른 곳), 이후 리스폰은 기존 규칙
@@ -2857,6 +2923,7 @@ export class Game {
   private beginNetMatch(): void {
     const s = this.net?.session;
     if (!s || this.match.state !== 'WAITING') return;
+    this.sounds.ui('matchEnter');
     // 결과 화면을 보던 중 방장이 새 매치를 시작 → 결과를 닫고 경기장으로
     this.resultScreen?.close();
     this.hud.setMatchOver(false);
@@ -2911,14 +2978,17 @@ export class Game {
         const def = WEAPONS[wid] ?? RIFLE;
         this.effects.muzzleFlash(muzzle, follow, def.effects.flashScale);
         this.muzzlePop(muzzle, dir, wid, shooterId);
-        this.audio.play('fire', { gain: this.botSoundGain(muzzle) * def.effects.fireGain, pitch: def.effects.firePitch, channel: 'botFire' });
+        this.audio.play(FIRE_SOUND[def.id] ?? 'fireRifle', { pos: muzzle, gain: MIX.otherGain, channel: 'otherFire' });
       },
       localHp: (hp, maxHp) => {
         const h = this.combatant.health;
         if (Math.abs(h.maxHp - maxHp) > 1e-6) h.setMaxHp(maxHp);
         h.hp = hp;
       },
-      localDamaged: (source, amount) => this.hud.showDamage(source, amount),
+      localDamaged: (source, amount) => {
+        this.hud.showDamage(source, amount);
+        if (amount > 0 && !this.dead) this.audio.play('hurt');
+      },
       localKilled: (killer, hit, cause) => {
         if (this.dead) return;
         this.combatant.health.hp = 0;
@@ -3091,6 +3161,7 @@ export class Game {
     this.timer.dispose();
     this.resizeObserver.disconnect();
     this.input.dispose();
+    this.sounds.dispose();
     this.audio.dispose();
     this.scene.traverse((o) => {
       const mesh = o as THREE.Mesh;
