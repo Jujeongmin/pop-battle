@@ -838,6 +838,10 @@
 @font-face {
   font-family: 'POP Jua';
   src: url('./fonts/Jua-Regular.woff2') format('woff2');
+  /* 세로 중앙: 원래 줄 상자(위 0.8 · 아래 0.2em)는 글자 잉크(한글·숫자·영문 대문자 중심 ≈ 기준선 위 0.37em)보다
+     중심이 0.07em 낮아, 배지·버튼 안 글자가 위로 떠 보였음 → 줄 높이 합(1em)은 그대로 두고 중심만 잉크에 맞춤 */
+  ascent-override: 87%;
+  descent-override: 13%;
   font-weight: 400;
   font-style: normal;
   font-display: swap;
