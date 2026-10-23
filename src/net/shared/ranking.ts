@@ -1,12 +1,11 @@
-// 공식 전적·랭킹 (서버·클라이언트 공용, 순수 데이터·함수만). 레벨·경험치와 별개 (레벨이 높아도 순위가 오르지 않음).
+// 랭킹·공식 전적 (서버·클라이언트 공용, 순수 데이터·함수만).
 //
-// 전적은 서버가 매치 종료 때 확정 결과로만 누적 (TDM·FFA, TEST·개발용 제한 시간·20초 미만 경기 제외).
-// 중도 이탈은 경기 수에 들어가고 TDM 패배 · FFA 순위 점수 0으로 기록 (나가서 전적을 지키는 것 방지). 재접속해 끝까지 남으면 정상 집계.
+// 랭킹 = 레벨 기준 통합 랭킹 (TDM·FFA 구분 없음): 레벨 높은 순 → 같은 레벨이면 누적 경험치 높은 순 → 같으면 사용자 ID로 고정 순서.
+// 레벨은 누적 경험치로 정해지므로 정렬 키 하나 = 경험치 × 2^20 + ID에서 만든 값(0..2^20-1). 전적은 순위에 쓰지 않음 (표시만).
+// 서버가 키 내림차순으로 상위 100명만 읽고, 내 순위는 "내 키보다 큰 사람 수 + 1" (목록 밖이어도). 키 0 = 공식 경기 기록 없음.
 //
-// 랭킹은 정렬 키(숫자 하나) 3개를 랭킹 컬렉션에 저장 → 서버가 키 내림차순으로 상위 100명만 읽고, 내 순위는 "내 키보다 큰 사람 수 + 1".
-// 키가 같으면 같은 순위. 키 0 = 그 모드 기록 없음 (목록 제외, '순위 없음').
-
-export type RankKind = 'all' | 'tdm' | 'ffa';
+// 전적은 서버가 매치 종료 때 확정 결과로만 누적 (TDM·FFA, TEST·개발용 제한 시간·20초 미만 경기 제외, 같은 경기 id 한 번만).
+// 표시: 팀전 승·패 (무승부는 따로 세고 표시 안 함), 개인전 최종 1위 횟수. 중도 이탈은 팀전 패배로 기록.
 
 export interface RankStats {
   /** 공통: 공식 경기 수 · 킬 · 데스 */
@@ -24,12 +23,10 @@ export interface RankStats {
   f2: number;
   f3: number;
   fk: number;
-  /** 전체 랭킹 점수 (RANK_POINTS) */
-  pt: number;
 }
 
 export function emptyStats(): RankStats {
-  return { m: 0, k: 0, d: 0, tw: 0, tl: 0, td: 0, tk: 0, fm: 0, f1: 0, f2: 0, f3: 0, fk: 0, pt: 0 };
+  return { m: 0, k: 0, d: 0, tw: 0, tl: 0, td: 0, tk: 0, fm: 0, f1: 0, f2: 0, f3: 0, fk: 0 };
 }
 
 /** 저장값 → 전적 (모르는 키·이상한 값은 0) */
@@ -44,19 +41,12 @@ export function readStats(v: unknown): RankStats {
   return s;
 }
 
-/**
- * 전체 랭킹 점수: 경기당 기대값이 TDM·FFA 모두 같게 (한 모드만 유리하지 않게).
- * TDM 승 30 · 무 10 · 패 0 (승률 50% → 평균 15), FFA 순위 = 30 × (인원 − 순위) ÷ (인원 − 1) (1위 30 → 꼴찌 0, 평균 15).
- * 킬은 경기 결과보다 작게 1점 (두 모드 평균 킬 수가 비슷: 약 5킬)
- */
-export const RANK_POINTS = { tdmWin: 30, tdmDraw: 10, ffaTop: 30, kill: 1 } as const;
-
 export interface RankMatchInput {
   mode: 'tdm' | 'ffa';
   k: number;
   d: number;
   left: boolean;
-  /** TDM: win | lose | draw (이탈은 lose) */
+  /** TDM: win | lose | draw (이탈은 lose), FFA: 단독 1위면 win */
   outcome: 'win' | 'lose' | 'draw';
   /** FFA 순위 (공동 순위 같은 값) */
   rank: number;
@@ -66,53 +56,46 @@ export interface RankMatchInput {
 /** 경기 하나 반영한 새 전적 */
 export function addMatch(prev: RankStats, m: RankMatchInput): RankStats {
   const s = { ...prev };
-  const P = RANK_POINTS;
   s.m++;
   s.k += m.k;
   s.d += m.d;
-  s.pt += m.k * P.kill;
   if (m.mode === 'tdm') {
     const out = m.left ? 'lose' : m.outcome;
-    if (out === 'win') {
-      s.tw++;
-      s.pt += P.tdmWin;
-    } else if (out === 'draw') {
-      s.td++;
-      s.pt += P.tdmDraw;
-    } else s.tl++;
+    if (out === 'win') s.tw++;
+    else if (out === 'draw') s.td++;
+    else s.tl++;
     s.tk += m.k;
   } else {
     s.fm++;
     s.fk += m.k;
     if (!m.left) {
-      if (m.rank === 1) s.f1++;
+      // 1위 = 최종 단독 1위 (공동 1위·무승부는 1위 횟수에 넣지 않음)
+      if (m.rank === 1 && m.outcome === 'win') s.f1++;
       else if (m.rank === 2) s.f2++;
       else if (m.rank === 3) s.f3++;
-      if (m.players > 1) s.pt += Math.round((P.ffaTop * (m.players - Math.min(m.rank, m.players))) / (m.players - 1));
     }
   }
   return s;
 }
 
-const rate = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 1000) : 0);
-
-/**
- * 정렬 키 (클수록 위, 0 = 기록 없음). 여러 기준을 숫자 하나로 (서버 컬렉션 정렬이 한 필드로 되게):
- * - 전체: 점수 → 누적 킬
- * - TDM: 승리 수 → 승률 → TDM 킬
- * - FFA: 누적 킬 → 1위 횟수 → 1위 비율
- */
-export function rankKeys(s: RankStats): Record<RankKind, number> {
-  const tdmGames = s.tw + s.tl + s.td;
-  return {
-    all: s.m > 0 ? 1 + s.pt * 1e7 + Math.min(s.k, 9_999_999) : 0,
-    tdm: tdmGames > 0 ? 1 + s.tw * 1e7 + rate(s.tw, tdmGames) * 1e4 + Math.min(s.tk, 9_999) : 0,
-    ffa: s.fm > 0 ? 1 + s.fk * 1e7 + Math.min(s.f1, 999) * 1e4 + rate(s.f1, s.fm) : 0,
-  };
+/** 사용자 ID → 0..2^20-1 (같은 경험치일 때 고정 순서, FNV-1a) */
+function idOrder(account: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < account.length; i++) {
+    h ^= account.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h & 0xfffff;
 }
 
-/** 랭킹 컬렉션 필드 이름 (정렬 키) */
-export const RANK_KEY_FIELD: Record<RankKind, string> = { all: 'ka', tdm: 'kt', ffa: 'kf' };
+/** 정렬 키 (클수록 위): 누적 경험치 → 사용자 ID 고정 순서. 공식 경기 기록이 없으면 0 */
+export function rankKey(xp: number, account: string, stats: RankStats): number {
+  if (stats.m <= 0) return 0;
+  return 1 + Math.max(0, Math.floor(xp)) * 0x100000 + idOrder(account);
+}
+
+/** 랭킹 컬렉션 정렬 키 필드 */
+export const RANK_KEY_FIELD = 'kx';
 
 /** 랭킹 컬렉션 이름 (계정마다 한 줄) */
 export const RANK_COLLECTION = 'pb_rank';
@@ -131,10 +114,9 @@ export interface RankRow {
 export interface RankingResult {
   ok: boolean;
   reason?: string;
-  kind: RankKind;
   rows: RankRow[];
   /** 내 줄 (공식 기록이 없으면 rank 0 = 순위 없음) */
   mine: RankRow | null;
-  /** 이 랭킹에 기록이 있는 전체 인원 */
+  /** 랭킹에 오른 전체 인원 */
   total: number;
 }

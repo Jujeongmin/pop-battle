@@ -525,20 +525,17 @@ describe('experience (XP)', () => {
     server.connect({ account: 'bob', roomId: '__no_room__' });
     expect((await server.progressGet()).xp).toBe(b.total);
 
-    // 공식 전적 → 랭킹 (서버 정렬·상위만, 계정 id 없이)
-    const tdm = await server.rankingGet('tdm');
-    expect(tdm.ok).toBe(true);
-    expect(tdm.total).toBe(4);
-    expect(tdm.rows.map((x: any) => x.rank)).toEqual([1, 1, 3, 3]);
-    expect(tdm.rows.some((x: any) => 'acc' in x)).toBe(false);
-    expect([tdm.mine.rank, tdm.mine.s.tw, tdm.mine.s.tl]).toEqual([3, 0, 1]);
-    const ffa = await server.rankingGet('ffa');
-    expect([ffa.total, ffa.mine.rank]).toEqual([0, 0]);
+    // 레벨(경험치) 랭킹: 서버 정렬·상위만, 계정 id 없이. 이긴 팀(경험치 많음)이 위, 같은 경험치는 ID 고정 순서(같은 순위 없음)
+    const rk = await server.rankingGet();
+    expect(rk.ok).toBe(true);
+    expect(rk.total).toBe(4);
+    expect(rk.rows.map((x: any) => x.rank)).toEqual([1, 2, 3, 4]);
+    expect(rk.rows.some((x: any) => 'acc' in x)).toBe(false);
+    expect([rk.mine.rank >= 3, rk.mine.s.tw, rk.mine.s.tl]).toEqual([true, 0, 1]);
     server.connect({ account: 'alice', roomId: '__no_room__' });
-    const all = await server.rankingGet('all');
-    expect(all.mine.rank).toBe(1);
-    expect(all.mine.s.m).toBe(1);
-    expect(all.rows[0].me || all.rows[1].me).toBe(true);
+    const mine = (await server.rankingGet()).mine;
+    expect(mine.rank <= 2).toBe(true);
+    expect([mine.s.tw, mine.s.tl, mine.s.f1]).toEqual([1, 0, 0]);
   });
 });
 

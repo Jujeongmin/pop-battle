@@ -1,5 +1,5 @@
 // 로비 공용: DOM 도우미 + 로비가 게임에 요청하는 동작(LobbyHost). 패널은 이 인터페이스만 알고 Game 내부는 모름.
-import type { RankingResult, RankKind } from '../../net/shared/ranking';
+import type { RankingResult } from '../../net/shared/ranking';
 import type { NetMode } from '../../net/shared/protocol';
 import type { NickFailReason } from '../../net/shared/nickFilter';
 
@@ -95,8 +95,8 @@ export interface LobbyHost {
   menuChanged(open: boolean, panel: string | null): void;
   /** 내 표시 닉네임 (아직 정하지 않았으면 기본 이름 "플레이어") */
   playerName(): string;
-  /** 전체 유저 랭킹 (서버가 정렬한 상위 100명 + 내 순위). 서버 없는 빌드는 ok:false reason 'offline' */
-  ranking(kind: RankKind): Promise<RankingResult>;
+  /** 레벨 랭킹 (서버가 정렬한 상위 100명 + 내 순위). 서버 없는 빌드는 ok:false reason 'offline' */
+  ranking(): Promise<RankingResult>;
   /** 내 레벨·경험치 (서버 저장값의 사본, 로비 레벨 카드) */
   progress(): { level: number; into: number; need: number; max: boolean };
   /** 저장된 닉네임 (null = 아직 정하지 않음 → 처음 접속 닉네임 입력 창) */
