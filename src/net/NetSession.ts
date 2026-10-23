@@ -1,5 +1,6 @@
 // 네트워크 레이어 2/2: 최대 8인 룸 흐름 (만들기·입장·나가기·끊김), 상태 패킷 전송, 원격 상태 보간 버퍼, 서버 이벤트 전달.
 // 게임 객체는 모른다 → 결과는 NetSessionEvents 콜백으로만 내보냄 (게임 모드 쪽: NetGameMode).
+import { safeDisplayNick } from './shared/nickFilter';
 import { errText, NetClient } from './NetClient';
 import { SnapshotBuffer } from './SnapshotBuffer';
 import {
@@ -24,6 +25,12 @@ export type RoomPhase = 'lobby' | 'joining' | 'in-room';
 /** 룸 코드 표시용 ('pb-abc123' → 'ABC123') */
 export function displayCode(roomId: string | null): string {
   return roomId ? roomId.replace(/^pb-/, '').toUpperCase() : '';
+}
+
+/** 방 만들기·빠른 시작 응답: 방 id, 거절이면 이유 문구로 실패 */
+function roomOrThrow(r: { roomId?: string; reason?: string }): string {
+  if (r.roomId) return r.roomId;
+  throw new Error(JOIN_ERRORS[r.reason ?? ''] ?? `입장 불가 (${r.reason ?? '알 수 없음'})`);
 }
 
 /** 마지막 룸 (새로고침 뒤 "다시 입장"용, 탭 단위) */
@@ -53,6 +60,7 @@ const JOIN_ERRORS: Record<string, string> = {
   in_progress: '매치가 진행 중이라 지금은 들어갈 수 없어요 (끝나고 다시 시도)',
   left_match: 'Leave Room으로 나간 매치에는 다시 들어갈 수 없어요 (매치가 끝나면 입장 가능)',
   team_full: '원래 팀에 자리가 없어 복귀할 수 없어요',
+  nick_required: '닉네임 변경이 필요해요 (운영 정책) — 새 닉네임을 정한 뒤 들어갈 수 있어요',
 };
 
 /** 자동 재접속 간격 (ms): 1·2·3·5·8·10초 → 약 29초 (서버 30초 유예 안 + 지난 뒤에도 기록 복구) */
@@ -177,7 +185,8 @@ export class NetSession {
   /** 서버에 저장된 표시 닉네임 (없으면 null) */
   nickOf(account: string): string | null {
     const p = this.players[account] ?? this.gone[account] ?? this.result?.standings.find((s) => s.account === account);
-    return p?.nick || null;
+    // 예전 규칙으로 저장된 이름이 지금 규칙에 걸리면 '닉네임 변경 필요' (계정·전적은 그대로)
+    return safeDisplayNick(p?.nick);
   }
 
   /** 닉네임이 없을 때 쓰는 자리 이름 (P1~P8) */
@@ -225,7 +234,7 @@ export class NetSession {
 
   /** 방 만들기 + 방장으로 모드 지정 (서버가 모드·팀을 확정해 룸 상태로 알려 줌) */
   async createRoom(characterId: string, mode: NetMode = 'test'): Promise<boolean> {
-    const ok = await this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('createRoom')).roomId);
+    const ok = await this.enter(characterId, async () => roomOrThrow(await this.client.call<{ roomId?: string; reason?: string }>('createRoom')));
     if (ok && this.mode !== mode) await this.setMode(mode);
     if (ok) this.logEvent('Room Created', { mode });
     return ok;
@@ -274,7 +283,7 @@ export class NetSession {
   }
 
   async quickMatch(characterId: string): Promise<boolean> {
-    const ok = await this.enter(characterId, async () => (await this.client.call<{ roomId: string }>('quickMatch')).roomId);
+    const ok = await this.enter(characterId, async () => roomOrThrow(await this.client.call<{ roomId?: string; reason?: string }>('quickMatch')));
     // 기다리는 방이 없어 새 방을 만든 경우(내가 방장): 서버 새 방 기본값이 자유 테스트라 개인전으로 (자유 테스트 방이 생기지 않게)
     if (ok && this.isHost && this.mode === 'test') await this.setMode('ffa');
     return ok;

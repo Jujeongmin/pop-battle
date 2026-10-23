@@ -7,6 +7,7 @@
 // - EN_CONTAINS: 영어 욕설·혐오 표현 중 정상 단어 안에 거의 나오지 않는 것. 어디에 있어도 차단
 // - EN_WORD: 정상 단어 안에 자주 나오는 짧은 말 (ass → class, sex → essex 등). 단어 전체가 같을 때만 차단
 // - ALLOW: 금칙어를 품은 정상 단어. 검사 전에 지움 (예: 시발점, 시바견)
+// - 운영자·관리자 사칭은 KO_CONTAINS / EN_CONTAINS / EN_WORD 끝의 '사칭' 묶음
 
 export const KO_CONTAINS: readonly string[] = [
   // 일반 욕설
@@ -17,6 +18,8 @@ export const KO_CONTAINS: readonly string[] = [
   '보지', '자지', '섹스', '섹수', '야동', '창녀', '창놈', '강간', '딸딸이', '자위', '펠라',
   // 혐오·차별 표현
   '한남충', '김치녀', '된장녀', '맘충', '틀딱', '급식충', '짱깨', '쪽바리', '깜둥이', '흑형', '똥꼬충', '호모새', '장애새', '정신병자', '찐따',
+  // 사칭 (운영자·관리자·개발자인 척)
+  '운영자', '운영진', '운영팀', '관리자', '관리팀', '개발자', '개발팀', '공식계정', '팝배틀운영', '팝배틀공식',
 ];
 
 export const KO_JAMO: readonly string[] = ['ㅅㅂ', 'ㅆㅂ', 'ㅄ', 'ㅂㅅ', 'ㅈㄹ', 'ㅈㄴ', 'ㄴㄱㅁ', 'ㅁㅊ', 'ㅆㄹㄱ', 'ㅅㄲ'];
@@ -26,8 +29,14 @@ export const EN_CONTAINS: readonly string[] = [
   'nigger', 'nigga', 'faggot', 'retard', 'kike', 'chink', 'tranny', 'hitler',
   // 한국어 욕설의 로마자 표기·한/영 전환 없이 친 자판 그대로 (씨발 → tlqkf, 병신 → qudtls, 지랄 → wlfkf, 개새끼 → rotoRl)
   'sibal', 'ssibal', 'shibal', 'tlqkf', 'qudtls', 'wlfkf', 'rotorl', 'byungsin', 'byeongsin',
+  // 사칭
+  'admin', 'moderator', 'gamemaster', 'operator', 'official', 'popbattleteam',
 ];
 
-export const EN_WORD: readonly string[] = ['ass', 'asses', 'dick', 'dicks', 'cock', 'cocks', 'sex', 'sexy', 'cum', 'fag', 'fags', 'spic', 'nazi', 'nazis', 'rape', 'tits', 'boobs', 'damn', 'wtf', 'stfu', 'rapist', 'rapists'];
+export const EN_WORD: readonly string[] = [
+  'ass', 'asses', 'dick', 'dicks', 'cock', 'cocks', 'sex', 'sexy', 'cum', 'fag', 'fags', 'spic', 'nazi', 'nazis', 'rape', 'tits', 'boobs', 'damn', 'wtf', 'stfu', 'rapist', 'rapists',
+  // 사칭 (짧아서 단어 전체가 같을 때만: GM · GM 팝배틀 → 차단, gamer → 통과)
+  'gm', 'staff', 'mod', 'sysop',
+];
 
 export const ALLOW: readonly string[] = ['시발점', '시발역', '시발택시', '시바견', '시바이누', '스시바', '새끼손가락', '새끼발가락', '자지러', '보지마', '보지않', '꺼져가', 'scunthorpe', 'cockpit', 'peacock', 'shitake', 'shiitake'];

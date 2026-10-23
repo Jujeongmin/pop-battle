@@ -4,7 +4,7 @@
  * 하네스는 실제 네트워크 없이 같은 isolated-vm 런타임에서 훅·함수를 호출한다 → 지연·패킷·푸시 동작은 여기서 검증되지 않음.
  */
 
-import { checkNickname } from '../../src/net/shared/nickFilter';
+import { checkNickname, safeDisplayNick } from '../../src/net/shared/nickFilter';
 
 const ROOM = 'pb-test01';
 /** 정원 8명 */
@@ -1318,5 +1318,47 @@ describe('retention (developer console)', () => {
     expect(cohort.data[0].users).toBe(2);
     expect(cohort.data[0].cells.every((c: any) => c.rate === null)).toBe(true);
     expect((await server.retentionGet('weird')).reason).toBe('bad_view');
+  });
+});
+
+describe('nickname policy (legacy names, bypasses, impersonation)', () => {
+  test('jamo / lookalike / repeat bypasses and impersonation are blocked; normal names stay allowed', async () => {
+    for (const n of ['보ㅈㅣ킹', '보 지 킹', 'ㅂㅗㅈㅣ킹', '보ㅈl킹', '보ㅈ1킹', '보ㅗ지킹', '보오오지', '운영자', '관리자짱', 'GM', 'GM 팝배틀', 'admin', 'Admin123', '팝배틀운영', '개발자'])
+      expect(checkNickname(n).ok).toBe(false);
+    for (const n of ['보지마', '하늘빛', '조지', '시바견', '팝배틀테스터', 'gamer', 'Model', 'Dev Kim', '모드', '관리', '운영', 'Lily', '지니', '보물'])
+      expect(checkNickname(n).ok).toBe(true);
+    expect(safeDisplayNick('보ㅈㅣ킹')).toBe('닉네임 변경 필요');
+    expect(safeDisplayNick(' 하늘빛 ')).toBe('하늘빛');
+  });
+
+  test('legacy bad nickname: must change on login, match entry blocked, immediate change allowed, data kept, ranking hides it', async (server) => {
+    // 정책 강화 전에 저장된 이름 + 레벨·전적·구매 캐릭터
+    const row = await $global.addCollectionItem('pb_rank', { acc: 'mallory', nick: '보ㅈㅣ킹', xp: 5000, kx: 999, s: {} });
+    await $global.updateUserState('mallory', { nick: '보ㅈㅣ킹', nickAt: Date.now(), xp: 5000, st: { m: 3, tw: 2 }, chars: ['white'], rid: row.__id });
+    server.connect({ account: 'mallory' });
+    const g = await server.nickGet();
+    expect(g.mustChange).toBe(true);
+    expect(g.nick).toBe(null);
+    expect((await server.createRoom()).reason).toBe('nick_required');
+    expect((await server.quickMatch()).reason).toBe('nick_required');
+    const rk = await server.rankingGet();
+    expect(rk.rows.find((r: any) => r.nick.includes('ㅈ'))).toBe(undefined);
+    expect(rk.rows.some((r: any) => r.nick === '닉네임 변경 필요')).toBe(true);
+    // 바로 바꿀 수 있음 (변경 간격 제한 예외), 바꾸면 정상 이용
+    const set = await server.nickSet('새로운이름');
+    expect(set.ok).toBe(true);
+    const g2 = await server.nickGet();
+    expect(g2.mustChange === undefined).toBe(true);
+    expect(g2.nick).toBe('새로운이름');
+    expect((await server.createRoom()).ok).toBe(true);
+    // 다른 데이터는 그대로
+    const st = await $global.getUserState('mallory');
+    expect(st.xp).toBe(5000);
+    expect(st.st.tw).toBe(2);
+    expect(st.chars).toEqual(['white']);
+    expect(st.nickBad).toBe(false);
+    expect((await server.shopOwned()).chars).toEqual(['white']);
+    const rr = await $global.getCollectionItem('pb_rank', row.__id);
+    expect(rr.nick).toBe('새로운이름');
   });
 });

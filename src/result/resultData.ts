@@ -1,5 +1,6 @@
 // 결과 화면 데이터: 연습전(로컬 Match)·멀티(서버 확정 NetMatchResult)를 같은 형식으로 바꾼다 (렌더링과 무관한 순수 로직).
 // 승패·무승부는 원래 판정(Match.finish / 서버 finishMatch) 값을 그대로 쓰고 여기서 다시 계산하지 않는다.
+import { safeDisplayNick } from '../net/shared/nickFilter';
 import { standingRanks, type XpAward } from '../net/shared/progression';
 import { CHARACTERS, type CharacterId } from '../config/characters';
 import type { MatchResult } from '../match/Match';
@@ -95,7 +96,7 @@ function finish(raw: RawEntry[], winners: ReadonlySet<string>): ResultEntry[] {
 export function fromNetResult(r: NetMatchResult, me: string, roomId: string, myNick: string | null): ResultData {
   const raw: RawEntry[] = r.standings.map((s) => ({
     id: s.account,
-    nick: s.nick ?? (s.account === me ? myNick ?? '플레이어' : `P${s.slot + 1}`),
+    nick: safeDisplayNick(s.nick) ?? (s.account === me ? myNick ?? '플레이어' : `P${s.slot + 1}`),
     char: s.char,
     team: s.team,
     k: s.k,

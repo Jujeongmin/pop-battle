@@ -66,6 +66,9 @@ export class Lobby {
   private readonly presenceRetry = button('다시 시도', 'lb-presence-retry', () => this.host.retryLobby());
   private readonly controlHint = el('div', 'lb-control-hint');
   private readonly nicknameModal = el('div', 'lb-nickname-modal');
+  private nickEyebrow: HTMLElement | null = null;
+  private nickTitle: HTMLElement | null = null;
+  private nickCopy: HTMLElement | null = null;
   private readonly nicknameEditor: NicknameEditor;
   private open: string | null = null;
   private menu = false;
@@ -464,8 +467,11 @@ export class Lobby {
     logo.innerHTML = '<b>POP!</b><span>BATTLE</span>';
     const eyebrow = el('span', 'lb-nickname-eyebrow', 'WELCOME');
     const title = el('h2', 'lb-nickname-title', '닉네임을 정해 주세요');
+    this.nickEyebrow = eyebrow;
+    this.nickTitle = title;
     title.id = titleId;
     const copy = el('p', 'lb-nickname-copy', '다른 플레이어에게 보일 이름이에요. 나중에 SETTINGS에서 바꿀 수 있어요.');
+    this.nickCopy = copy;
     const editor = nicknameEditor(this.host, {
       buttonLabel: '확인',
       onSuccess: () => {
@@ -484,6 +490,16 @@ export class Lobby {
     if (this.host.nickname() !== null || !this.host.nicknameReady()) {
       if (this.nicknameOpen) this.closeRequiredNickname();
       return;
+    }
+    // 처음 정하기 / 운영 정책으로 변경 필요 (같은 창, 문구만)
+    const must = this.host.nicknameMustChange();
+    this.nicknameModal.classList.toggle('lb-nickname-must', must);
+    if (this.nickEyebrow) this.nickEyebrow.textContent = must ? '안내' : 'WELCOME';
+    if (this.nickTitle) this.nickTitle.textContent = must ? '닉네임 변경이 필요합니다' : '닉네임을 정해 주세요';
+    if (this.nickCopy) {
+      this.nickCopy.textContent = must
+        ? '현재 닉네임이 운영 정책에 맞지 않아 변경이 필요합니다. 새로운 닉네임을 설정해 주세요.'
+        : '다른 플레이어에게 보일 이름이에요. 나중에 SETTINGS에서 바꿀 수 있어요.';
     }
     if (this.nicknameOpen) return;
     if (this.menu) this.closeMenu();

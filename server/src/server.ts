@@ -52,6 +52,7 @@ import {
 import { levelInfo, MATCH_XP, matchXp, MAX_XP, standingRanks, type StoredProgress, type XpAward } from '../../src/net/shared/progression';
 import { addMatch, RANK_COLLECTION, RANK_KEY_FIELD, RANK_PAGE, rankKey, readStats, type RankingResult, type RankRow, type RankStats } from '../../src/net/shared/ranking';
 import { canUseCharacter, characterOfProduct, isPaidCharacter, ownedCharacters } from '../../src/net/shared/shop';
+import { safeDisplayNick } from '../../src/net/shared/nickFilter';
 import { dayLabel, rate, RETENTION_DAYS, utcDay, type RetentionCohortRow, type RetentionDailyRow, type RetentionResult, type RetentionView } from '../../src/net/shared/retention';
 
 const NO_ROOM = '__no_room__';
@@ -228,6 +229,23 @@ async function releaseNick(account: string, nick: string): Promise<void> {
     const owner = await nickOwner(key);
     if (owner && owner.acc === account) await $global.deleteCollectionItem(NICK_COLLECTION, owner.id);
   });
+}
+
+/**
+ * 저장된 닉네임이 지금 규칙에 걸림 (정책 강화 전에 정한 이름 등) → 바꾸기 전에는 매치 입장 불가.
+ * 저장값은 지우거나 바꾸지 않음 (본인이 새 이름을 정할 때까지 표시만 NICK_PLACEHOLDER)
+ */
+function nickNeedsChange(st: Record<string, unknown> | null): boolean {
+  const raw = st?.nick;
+  return typeof raw === 'string' && raw.trim() !== '' && !checkNickname(raw).ok;
+}
+
+async function myNickNeedsChange(): Promise<boolean> {
+  try {
+    return nickNeedsChange(((await $global.getMyState()) || {}) as Record<string, unknown>);
+  } catch {
+    return false;
+  }
 }
 
 async function storedNick(): Promise<string | null> {
@@ -617,7 +635,8 @@ export class Server {
   // ---------------- 매칭 (룸 밖에서 호출) ----------------
 
   /** 새 룸 id. 실제 생성은 첫 플레이어가 joinRoom 할 때 (SDK 규칙). 오래된 룸 요약도 정리 */
-  async createRoom(): Promise<{ ok: true; roomId: string }> {
+  async createRoom(): Promise<{ ok: true; roomId: string } | { ok: false; reason: string }> {
+    if (await myNickNeedsChange()) return { ok: false, reason: 'nick_required' };
     const now = Date.now();
     const all = (await $global.getGlobalState()) || {};
     const stale = Object.keys(all).filter((k) => k.startsWith('room_') && !(now - ((all[k] as RoomMirror)?.t ?? 0) < MIRROR_TTL_MS));
@@ -633,6 +652,7 @@ export class Server {
   async findRoom(code: string): Promise<{ ok: boolean; roomId?: string; reason?: string; count?: number; phase?: NetMatchPhase; mode?: NetMode }> {
     const id = normalizeCode(code);
     if (!id) return { ok: false, reason: 'bad_code' };
+    if (await myNickNeedsChange()) return { ok: false, reason: 'nick_required' };
     const m = ((await $global.getGlobalState([MIRROR(id)])) || {})[MIRROR(id)] as RoomMirror | undefined;
     const users = await $global.countRoomUsers(id);
     if (!m || users <= 0 || m.n <= 0) return { ok: false, reason: 'not_found', count: 0 };
@@ -642,7 +662,8 @@ export class Server {
   }
 
   /** 빠른 매칭: 자리가 남은 대기실(또는 자유 테스트) 룸이 있으면 그 룸, 없으면 새 룸 */
-  async quickMatch(): Promise<{ ok: true; roomId: string; waiting: boolean }> {
+  async quickMatch(): Promise<{ ok: true; roomId: string; waiting: boolean } | { ok: false; reason: string }> {
+    if (await myNickNeedsChange()) return { ok: false, reason: 'nick_required' };
     const all = (await $global.getGlobalState()) || {};
     for (const [k, v] of Object.entries(all)) {
       const m = v as RoomMirror;
@@ -830,7 +851,8 @@ export class Server {
       // 키가 계정마다 달라 같은 순위 없음 (같은 경험치는 ID 고정 순서)
       const rows: RankRow[] = items.map((it, i) => ({
         rank: i + 1,
-        nick: typeof it.nick === 'string' ? it.nick : '플레이어',
+        // 저장 당시 이름이 지금 규칙에 걸리면 '닉네임 변경 필요'로 (계정·전적은 그대로)
+        nick: safeDisplayNick(it.nick) ?? '플레이어',
         lv: levelInfo(Number(it.xp) || 0).level,
         me: it.acc === me,
         s: readStats(it.s),
@@ -1008,7 +1030,14 @@ export class Server {
     return { ok: true, xp: p.xp, lv: p.lv };
   }
 
-  async nickGet(): Promise<{ ok: true; nick: string | null }> {
+  async nickGet(): Promise<{ ok: true; nick: string | null; mustChange?: boolean }> {
+    const st0 = ((await $global.getMyState()) || {}) as Record<string, unknown>;
+    if (nickNeedsChange(st0)) {
+      // 변경 필요 상태 저장 (새로고침·다른 기기에서도 같은 안내). 예전 이름은 지우지 않음
+      if (st0.nickBad !== true) await $global.updateMyState({ nickBad: true });
+      slog('nick_policy_change_required', '-', { account: $sender.account });
+      return { ok: true, nick: null, mustChange: true };
+    }
     const nick = await storedNick();
     // 기존 닉네임(중복 방지 전에 정한 이름)은 그대로 두고, 등록부에 비어 있으면 이 계정 것으로 등록
     if (nick) {
@@ -1037,9 +1066,11 @@ export class Server {
     const st = ((await $global.getMyState()) || {}) as { nick?: unknown; nickAt?: unknown };
     if (st.nick !== r.value) {
       const last = typeof st.nickAt === 'number' ? st.nickAt : 0;
-      if (typeof st.nick === 'string' && st.nick && now - last < NICK_CHANGE_MS) return { ok: false, reason: 'rate', retryMs: NICK_CHANGE_MS - (now - last) };
+      // 변경 간격 제한 — 지금 이름이 규칙에 걸려 바꿔야 하는 경우는 예외 (바로 바꿀 수 있게)
+      const forced = nickNeedsChange(st as Record<string, unknown>);
+      if (!forced && typeof st.nick === 'string' && st.nick && now - last < NICK_CHANGE_MS) return { ok: false, reason: 'rate', retryMs: NICK_CHANGE_MS - (now - last) };
       if (!(await claimNick($sender.account, r.value))) return { ok: false, reason: 'taken' };
-      await $global.updateMyState({ nick: r.value, nickAt: now, nickReg: nickKey(r.value) });
+      await $global.updateMyState({ nick: r.value, nickAt: now, nickReg: nickKey(r.value), nickBad: false });
       // 예전 이름은 놓음 (대소문자만 바꾼 경우는 같은 등록이라 그대로)
       if (typeof st.nick === 'string' && st.nick && nickKey(st.nick) !== nickKey(r.value)) await releaseNick($sender.account, st.nick).catch(() => undefined);
       const rid = (st as { rid?: unknown }).rid;
@@ -1059,9 +1090,17 @@ export class Server {
   async onRoomJoin(roomId: string, account: string): Promise<void> {
     // 로비 룸: 매치 기록·자리 배정 없음 (등록은 hubHello)
     if (isHubRoom(roomId)) return;
+    // 닉네임이 운영 정책에 걸린 계정은 자리 배정 안 함 (hello에서 nick_required로 안내 → 클라이언트가 나감)
+    let blocked = false;
+    try {
+      blocked = nickNeedsChange(((await $global.getUserState(account)) || {}) as Record<string, unknown>);
+    } catch {
+      blocked = false;
+    }
     const slot = await $lock(`room:${roomId}`, async () => {
       const r = await readRoom();
       if (r.players[account]) return r.players[account]!.slot;
+      if (blocked) return -1;
       const s = this.admit(r, account).slot;
       if (s < 0) return -1;
       await saveRoom(roomId, r);
@@ -1213,6 +1252,7 @@ export class Server {
       let p = r.players[me];
       if (!p) {
         // 나가기(bye) 뒤 30초 유예 안에 다시 들어오면 SDK가 onRoomJoin을 다시 부르지 않음(세션 이어짐) → 여기서 자리 배정
+        if (nickNeedsChange(((await $global.getMyState()) || {}) as Record<string, unknown>)) return { ...r, slot: -1, reason: 'nick_required', now: Date.now() };
         const { slot, reason } = this.admit(r, me);
         if (slot < 0) return { ...r, slot: -1, reason: reason ?? 'full', now: Date.now() };
         p = r.players[me]!;

@@ -6,9 +6,25 @@
 // - 한 글자 한국어 금칙어(씹·좆)는 자모 단위로 비교하지 않음 (조지 → ㅈㅗㅈㅣ 오탐 방지)
 // - 초성 줄임말은 입력에 자모 그대로 쓴 경우만 (곳바 → ㄱㅗㅅㅂㅏ의 'ㅅㅂ' 오탐 방지)
 // - 금칙어를 품은 정상 단어(ALLOW)는 먼저 지움
+// 자모 우회 추가 (2026-10-23): 홀로 쓴 자음 뒤의 영문 l·I·i·숫자 1은 모음 'ㅣ'로 봄 (보ㅈl킹), 자모 열에서 같은 자모 연속은 하나로 (보ㅗ지).
+// 원본 닉네임은 그대로 저장·표시하고, 이 정규화 문자열은 검사에만 씀
+// 사칭(운영자·관리자·GM 등)도 금칙어 목록으로 차단. 화면 표시용 safeDisplayNick: 지금 규칙에 걸리는 예전 닉네임은 '닉네임 변경 필요'
 import { ALLOW, EN_CONTAINS, EN_WORD, KO_CONTAINS, KO_JAMO } from './nickBlocklist';
 
 export const NICK_RULE = { min: 2, max: 12 } as const;
+
+/** 지금 규칙에 맞지 않는 예전 닉네임 대신 화면에 쓰는 이름 (계정·전적은 그대로) */
+export const NICK_PLACEHOLDER = '닉네임 변경 필요';
+
+/**
+ * 화면 표시용 닉네임: 규칙을 통과하면 정리된 값, 값은 있는데 규칙에 걸리면(정책 강화 전에 정한 이름 등) NICK_PLACEHOLDER, 없으면 null.
+ * 랭킹·대기실·결과·로비 이름표 등 다른 사람에게 보이는 곳에서 표시 직전에 씀
+ */
+export function safeDisplayNick(raw: unknown): string | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const r = checkNickname(raw);
+  return r.ok ? r.value : NICK_PLACEHOLDER;
+}
 
 /** 실패 이유: empty = 비어 있음, length = 글자 수, chars = 허용하지 않는 문자, blocked = 금칙어 (어떤 말에 걸렸는지는 알려 주지 않음) */
 export type NickFailReason = 'empty' | 'length' | 'chars' | 'blocked';
@@ -67,7 +83,12 @@ function koForm(s: string): string {
   return out.join('');
 }
 
-/** 자모 열로 분해 (자모 분리 입력과 비교). 홀로 쓴 자음 뒤의 소리 없는 'ㅇ'은 지움 (시ㅂ알 → ㅅㅣㅂㅏㄹ) */
+/** 홀로 쓴 자음 뒤의 영문 l·I·i·숫자 1 → 모음 'ㅣ' (모양이 같아 자모 우회에 쓰임: 보ㅈl킹 → 보ㅈㅣ킹) */
+function hangulLookalikes(s: string): string {
+  return s.replace(/([ㄱ-ㅎ])[lIi1]/g, '$1ㅣ');
+}
+
+/** 자모 열로 분해 (자모 분리 입력과 비교). 홀로 쓴 자음 뒤의 소리 없는 'ㅇ'은 지움 (시ㅂ알 → ㅅㅣㅂㅏㄹ), 같은 자모 연속은 하나로 (보ㅗ지 → ㅂㅗㅈㅣ) */
 function jamoForm(s: string): string {
   let out = '';
   let prevLoose = false;
@@ -81,7 +102,7 @@ function jamoForm(s: string): string {
     out += (sy.cho === 11 && prevLoose ? '' : CHO[sy.cho]) + JUNG[sy.jung] + JONG[sy.jong];
     prevLoose = false;
   }
-  return out;
+  return out.replace(/([ㄱ-ㅎㅏ-ㅣ])\1+/g, '$1');
 }
 
 /** 초성 뼈대(음절 → 초성, 홀로 쓴 자음 그대로, 모음·그 밖은 버림)에 KO_JAMO가 있고 그 구간에 홀로 쓴 자음이 있으면 true */
@@ -116,7 +137,7 @@ const ALLOW_N = ALLOW.map((w) => w.toLowerCase());
 
 /** 금칙어 포함 여부 (형식 검사를 통과한 문자열 기준) */
 export function isBlockedNick(s: string): boolean {
-  let compact = s.toLowerCase().replace(/\s+/g, '');
+  let compact = hangulLookalikes(s).toLowerCase().replace(/\s+/g, '');
   for (const a of ALLOW_N) compact = compact.split(a).join('');
   // 초성 줄임말: 입력에 자모 그대로
   const looseJamo = compact.replace(/[^ㄱ-ㅎㅏ-ㅣ]/g, '');

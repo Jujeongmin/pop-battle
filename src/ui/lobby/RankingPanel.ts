@@ -3,6 +3,7 @@
 // 표시: 순위 · 팝건 계급 아이콘 · 닉네임 · 레벨 · 팀전 승/패 · 개인전 1등 횟수 (킬·데스·승률·캐릭터 그림 없음).
 // 1~3위 금·은·동, 내 줄 강조, 아래 '내 랭킹' 고정. 열 때마다 새로 조회, 불러오는 중 / 빈 목록 / 실패(다시 시도) 상태 (aria-live).
 // 빈 목록: 큰 빈 표 대신 내 캐릭터 그림 + "첫 공식 기록을 만들어 보세요" + 빠른 시작 · 로비로 (내 랭킹 칸은 그대로).
+import { safeDisplayNick } from '../../net/shared/nickFilter';
 import type { RankingResult, RankRow } from '../../net/shared/ranking';
 import { rankName } from '../../net/shared/progression';
 import { popgunImg } from '../popgun';
@@ -120,15 +121,17 @@ export class RankingPanel implements LobbyPanel {
     if (r.rank <= 0) pos.classList.add('lb-rank-none');
     const icon = el('span', 'lb-rank-icon-col');
     icon.append(popgunImg(r.lv, 'lb-rank-icon'));
-    const nick = el('span', 'lb-rank-nick', r.nick || '나');
-    nick.title = r.nick;
+    // 서버도 거르지만 예전 서버 배포 대비 표시 직전에 한 번 더
+    const shown = safeDisplayNick(r.nick) ?? '나';
+    const nick = el('span', 'lb-rank-nick', shown);
+    nick.title = shown;
     const lv = el('span', 'lb-rank-lv', `Lv.${r.lv}`);
     lv.title = rankName(r.lv);
     // 팀전: 승·패만 (무승부 제외), 개인전: 최종 1위 횟수
     const tdm = el('span', 'lb-rank-tdm', `${r.s.tw}승 ${r.s.tl}패`);
     const ffa = el('span', 'lb-rank-ffa', `${r.s.f1}회`);
     row.append(pos, icon, nick, lv, tdm, ffa);
-    row.setAttribute('aria-label', `${r.rank > 0 ? `${r.rank}위` : '순위 없음'} ${r.nick} 레벨 ${r.lv} 팀전 ${r.s.tw}승 ${r.s.tl}패 개인전 1등 ${r.s.f1}회`);
+    row.setAttribute('aria-label', `${r.rank > 0 ? `${r.rank}위` : '순위 없음'} ${shown} 레벨 ${r.lv} 팀전 ${r.s.tw}승 ${r.s.tl}패 개인전 1등 ${r.s.f1}회`);
     return row;
   }
 

@@ -400,6 +400,8 @@ export class Game {
   private nickChangedAt = -Infinity;
   /** 서버 닉네임 확인 끝남 (그 전에는 첫 설정 창을 열지 않음) */
   private nickReady = false;
+  /** 서버가 알려 준 '닉네임 변경 필요' (운영 정책에 맞지 않는 예전 이름) */
+  private nickMustChange = false;
   /** 저장 중인 닉네임 요청 (중복 전송 방지) */
   private nickSaving: Promise<NicknameResult> | null = null;
   /** 서버 연결 (온라인 로비·매치 공용: 같은 계정은 SDK 연결이 하나) */
@@ -2026,6 +2028,7 @@ export class Game {
       progress: () => levelInfo(this.myXp),
       ranking: () => this.ranking(),
       nickname: () => this.nick,
+      nicknameMustChange: () => this.nickMustChange,
       nicknameReady: () => this.nickReady,
       setNickname: (raw) => this.setNickname(raw),
       presence: () => this.lobbyPresence(),
@@ -2121,6 +2124,7 @@ export class Game {
 
   private applyNickname(nick: string, sendHub: boolean): void {
     this.nick = nick;
+    this.nickMustChange = false;
     saveNickname(nick);
     this.hub?.setInfo({ nick }, sendHub);
     if (this.net) this.net.session.nick = nick;
@@ -2135,7 +2139,7 @@ export class Game {
     try {
       if (this.netClient.status === 'no-verse') return;
       if (!(await withTimeout(this.netClient.connect(), 10000))) return;
-      const g = await withTimeout(this.netClient.call<{ ok: boolean; nick: string | null }>('nickGet'), 8000);
+      const g = await withTimeout(this.netClient.call<{ ok: boolean; nick: string | null; mustChange?: boolean }>('nickGet'), 8000);
       // 리텐션 접속 기록 (계정당 UTC 하루 1번, 응답을 기다리지 않음 — 게임 시작을 늦추지 않음)
       void this.netClient.call('actPing').catch(() => undefined);
       // 레벨·경험치: 서버 저장값 (이전 서버 배포에 함수가 없으면 사본 그대로)
@@ -2143,7 +2147,13 @@ export class Game {
         .call<{ ok: boolean; xp: number }>('progressGet')
         .then((p) => this.setMyXp(p.xp))
         .catch(() => undefined);
-      if (g.nick) {
+      if (g.mustChange) {
+        // 저장된 이름이 운영 정책에 맞지 않음: 이 기기 사본도 지우고 '변경 필요' 창 (서버에 상태가 남아 새로고침해도 다시 뜸)
+        this.nickMustChange = true;
+        this.nick = null;
+        clearNickname();
+        this.lobby?.refresh();
+      } else if (g.nick) {
         if (g.nick !== this.nick) this.applyNickname(g.nick, false);
       } else if (this.nick) {
         const s = await withTimeout(this.netClient.call<{ ok: boolean; reason?: string }>('nickSet', [this.nick]), 8000);

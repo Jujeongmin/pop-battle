@@ -15,7 +15,7 @@ export function nicknameMessage(reason: NickFailReason | 'rate' | 'taken' | 'ser
     case 'chars':
       return '한글, 영문, 숫자만 사용할 수 있어요.';
     case 'blocked':
-      return '사용할 수 없는 닉네임입니다. 다른 이름을 입력해 주세요.';
+      return '사용할 수 없는 닉네임입니다. 다른 닉네임을 입력해 주세요.';
     case 'taken':
       return '이미 다른 플레이어가 쓰는 닉네임이에요. 다른 이름을 입력해 주세요.';
     case 'rate':

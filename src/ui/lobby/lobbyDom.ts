@@ -125,6 +125,8 @@ export interface LobbyHost {
   progress(): { level: number; into: number; need: number; max: boolean };
   /** 저장된 닉네임 (null = 아직 정하지 않음 → 처음 접속 닉네임 입력 창) */
   nickname(): string | null;
+  /** 저장된 닉네임이 운영 정책에 맞지 않아 바꿔야 함 (서버 판단, 새로고침해도 유지) */
+  nicknameMustChange(): boolean;
   /**
    * 서버에 저장된 닉네임 확인이 끝남 (true가 된 뒤에도 nickname()이 null이면 처음 접속 입력 창).
    * 확인 중에는 입력 창을 열지 않음 (다른 기기에서 정한 이름이 있으면 건너뜀)

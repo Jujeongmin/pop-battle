@@ -2,6 +2,7 @@
 // 매치용 RemotePlayer와 달리 이동 캡슐·피격 판정이 없음 → 서로 밀거나 막지 않고, 공격·피해도 없다.
 // 손에는 그 사람이 장착한 주무기 (서버 사용자 상태 w, 매치와 같은 장착값 — 보이기만 하고 쏘지 않음).
 // 머리 위에는 닉네임만 (textContent, HTML 해석 없음). 계정·캐릭터 id는 화면에 내지 않음.
+import { safeDisplayNick } from './shared/nickFilter';
 import * as THREE from 'three';
 import type { CharacterId } from '../config/characters';
 import { WEAPONS } from '../config/weapons';
@@ -69,7 +70,7 @@ export class LobbyPeers {
     if (this.items.has(peer.account)) return;
     const tag = document.createElement('div');
     tag.className = 'lobby-nametag';
-    tag.textContent = peer.nick || '플레이어';
+    tag.textContent = safeDisplayNick(peer.nick) ?? '플레이어';
     tag.style.display = 'none';
     this.layer.appendChild(tag);
     const item: Item = { peer, avatar: null, char: '', loading: null, weapon: '', tag, lastQ: -1, skip: 0, pendingDt: 0 };
@@ -81,7 +82,7 @@ export class LobbyPeers {
   change(peer: HubPeer): void {
     const item = this.items.get(peer.account);
     if (!item) return;
-    item.tag.textContent = peer.nick || '플레이어';
+    item.tag.textContent = safeDisplayNick(peer.nick) ?? '플레이어';
     this.ensureAvatar(item);
     this.equip(item);
   }
