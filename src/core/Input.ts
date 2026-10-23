@@ -78,6 +78,8 @@ export class KeyboardMouseInput {
   lockErrors = 0;
   /** 브라우저가 잠금 요청을 거부함 (pointerlockerror) */
   onLockError: (() => void) | null = null;
+  /** 지금 포인터 잠금을 요청해도 되는지 (게임이 설정: 결과 화면 등 커서가 필요한 화면에서는 false) */
+  lockAllowed: (() => boolean) | null = null;
   /** releaseLock으로 게임이 직접 푸는 중 */
   private releasing = false;
   /** 마지막 창 포커스 잃음 시각 (ms) */
@@ -129,7 +131,7 @@ export class KeyboardMouseInput {
   }
 
   requestLock(): void {
-    if (this.locked) return;
+    if (this.locked || this.lockAllowed?.() === false) return;
     // 사용자 제스처가 아니거나 문서가 포커스를 잃은 경우 거부될 수 있다 (다음 클릭에서 재시도)
     this.tryLock();
     // ESC로 잠금을 푼 직후(약 1초)는 브라우저가 다시 잡기를 거부함 (일시정지 메뉴 '계속하기'를 바로 누르면 반응 없음)
@@ -137,7 +139,7 @@ export class KeyboardMouseInput {
     if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
     this.retryTimer = window.setTimeout(() => {
       this.retryTimer = null;
-      if (!this.locked && document.hasFocus()) this.tryLock();
+      if (!this.locked && document.hasFocus() && this.lockAllowed?.() !== false) this.tryLock();
     }, 1100);
   }
 
