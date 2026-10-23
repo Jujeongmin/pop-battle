@@ -63,6 +63,11 @@ export class LobbySpace {
   };
   private disposed = false;
 
+  /** 화면을 가릴 수 있는 로비 모습 (기둥 제외, 충돌체 없는 장식 포함) — 쇼케이스 카메라 각도 고르기 */
+  get viewBlocker(): THREE.Object3D {
+    return this.mesh;
+  }
+
   constructor(
     scene: THREE.Scene,
     private readonly physics: Physics,

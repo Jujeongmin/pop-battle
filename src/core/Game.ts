@@ -161,6 +161,8 @@ const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
+/** 쇼케이스 카메라 가림 검사용 (보이는 로비 모습에 레이) */
+const _showcaseRay = new THREE.Raycaster();
 
 function dampAngle(current: number, target: number, sharpness: number, dt: number): number {
   const diff = Math.atan2(Math.sin(target - current), Math.cos(target - current));
@@ -353,6 +355,12 @@ export class Game {
   private lobbyLiftX = 0;
   private lobbyLift = 0;
   private lobbyShift = 0;
+  /**
+   * 쇼케이스: 카메라를 둘 수 있는 트인 방향으로 미리보기 캐릭터를 돌리는 각도 (캐릭터 방향 기준, 0 = 그대로).
+   * 카메라는 늘 캐릭터 정면 3/4(28°)에서 봄 → 무대 턱 등이 앞을 막아도 몸이 잘리지 않고 뒷모습도 안 나옴
+   */
+  private showcaseFace = 0;
+  private showcaseYawFor = '';
   /** 사용자 설정 (소리·마우스 감도, 이 기기 저장) */
   private readonly userSettings = loadUserSettings();
   /**
@@ -2184,7 +2192,7 @@ export class Game {
     const t = this.previewPop;
     const pop = t < 1 ? 1 - 0.14 * Math.cos(t * Math.PI * 1.5) * (1 - t) : 1;
     p.avatar.root.scale.setScalar(pop);
-    const yaw = this.bodyYaw + this.previewSpin;
+    const yaw = this.bodyYaw + this.showcaseFace + this.previewSpin;
     p.avatar.update({
       dt,
       feet: this.renderFeet,
@@ -2426,9 +2434,15 @@ export class Game {
     const distV = (h * 0.5 * 1.9) / tanV;
     const distH = (h * 0.42 * 1.6) / (tanV * cam.aspect * (freeW / fullW));
     const dist = Math.max(distV, distH);
-    const yaw = this.bodyYaw + d(28) + Math.sin(this.lobbyTime * 0.35) * d(5);
     // 살짝 내려다봄 → 캐릭터 뒤가 복잡한 배경(기둥·풍선)보다 깨끗한 바닥
     const pitch = d(13);
+    // 로비 구조물(무대 턱·상자 등) 옆에 서 있으면 정면 3/4 각도에서 몸이 가려 잘려 보임 → 가리는 것이 없는 각도로 (서 있는 곳이 바뀔 때만 다시 고름)
+    const key = `${feet.x.toFixed(1)},${feet.z.toFixed(1)},${this.bodyYaw.toFixed(2)},${dist.toFixed(1)}`;
+    if (key !== this.showcaseYawFor) {
+      this.showcaseYawFor = key;
+      this.showcaseFace = this.clearShowcaseYaw(target, dist, pitch) - d(28);
+    }
+    const yaw = this.bodyYaw + this.showcaseFace + d(28) + Math.sin(this.lobbyTime * 0.35) * d(5);
     // TPS 카메라 위치를 같은 중심 기준 각도·거리·높이로 보고 그 사이를 보간
     const off = _v2.subVectors(cam.position, target);
     const tpsDist = Math.max(0.5, Math.hypot(off.x, off.z));
@@ -2450,6 +2464,44 @@ export class Game {
     } else {
       cam.setViewOffset(w, hpx, this.lobbyShift, 0, w, hpx);
     }
+  }
+
+  /**
+   * 쇼케이스 카메라 방향 고르기 (캐릭터 방향 기준 각도): 28°부터 좌우로 넓혀 가며 발·다리·허리·머리에서 카메라까지
+   * 막힌 곳이 없는 첫 방향 (모두 막히면 가장 멀리까지 트인 방향). 캐릭터는 이 방향을 보도록 돌림 (showcaseFace).
+   * 실제 보이는 로비 모습으로 검사 (충돌체 없는 장식도 가리므로 물리 레이 대신), 기둥은 로비 카메라처럼 반투명이라 제외
+   */
+  private clearShowcaseYaw(target: THREE.Vector3, dist: number, pitch: number): number {
+    const d = THREE.MathUtils.degToRad;
+    const blocker = this.lobbySpace?.viewBlocker;
+    if (!blocker) return d(28);
+    let best = d(28);
+    let bestFree = -1;
+    for (const deg of [28, -28, 60, -10, 95, -45, 130, -80, 165, -115, 200, -150]) {
+      const yaw = this.bodyYaw + d(deg);
+      const cam = _v2.set(target.x + Math.sin(yaw) * Math.cos(pitch) * dist, target.y + Math.sin(pitch) * dist, target.z + Math.cos(yaw) * Math.cos(pitch) * dist);
+      let free = Infinity;
+      // 발바닥(+3cm)·무릎·허리·머리 높이, 발 높이는 좌우 0.28m도 (가운데 한 줄만 보면 무대 턱이 발·다리를 가리는 걸 놓침)
+      const feetY = target.y - LOBBY_FRAME_HEIGHT * 0.56;
+      const sx = Math.cos(yaw) * 0.28;
+      const sz = -Math.sin(yaw) * 0.28;
+      for (const [dy, side] of [[0.03, 0], [0.03, 1], [0.03, -1], [0.3, 0], [0.75, 0], [1.15, 0]] as const) {
+        const from = _v3.set(target.x + sx * side, feetY + dy, target.z + sz * side);
+        const dir = _v4.subVectors(cam, from);
+        const len = dir.length();
+        dir.divideScalar(len);
+        _showcaseRay.set(from, dir);
+        _showcaseRay.far = len;
+        const hit = _showcaseRay.intersectObject(blocker, false)[0];
+        free = Math.min(free, hit ? hit.distance / len : 1);
+      }
+      if (free >= 0.999) return d(deg);
+      if (free > bestFree) {
+        bestFree = free;
+        best = d(deg);
+      }
+    }
+    return best;
   }
 
   /** 로비 단계 끝 (첫 매치·멀티 입장): 로비 공간을 치우고 경기장 첫 스폰으로 (실제 스폰은 이후 매치 규칙이 정함) */
