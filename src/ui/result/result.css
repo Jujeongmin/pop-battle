@@ -380,3 +380,7 @@
   .pb-res-xp-text { font-size: 9px; }
   .pb-res-xp-up b { font-size: 13px; }
 }
+
+/* 창이 좁을 때: 결과판은 머리 칸(grid) 폭 안에서 줄어듦 (grid 항목 기본 최소 폭 = 내용 폭이라 판이 화면 밖으로 밀리던 문제) */
+.pb-res-board { min-width: 0; }
+.pb-res-cell-bottom { min-width: 0; flex-wrap: wrap; row-gap: 2px; }

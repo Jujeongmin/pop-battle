@@ -1,4 +1,5 @@
 // SETTINGS: 실제로 적용되는 항목만 슬라이더 (사운드 크기·마우스 감도·모바일 터치), 그래픽은 준비 중. 값은 이 기기에 저장
+import { fullscreenAvailable, fullscreenPreferred, setFullscreenPreferred } from '../FullscreenPrompt';
 import { button, el, slider, type LobbyHost, type LobbyPanel } from './lobbyDom';
 import { nicknameEditor } from './nicknameUi';
 
@@ -120,6 +121,21 @@ export class SettingsPanel implements LobbyPanel {
     right.appendChild(keys);
     touchCol.appendChild(el('div', 'lb-section', '모바일 터치'));
     for (const x of s.touch) touchCol.appendChild(slider(x));
+    // 확장 화면: 처음 매치 때 물어본 선택을 여기서 바꿈 (켜면 바로 확장, 끄면 원래 화면)
+    left.appendChild(el('div', 'lb-section', '화면'));
+    left.appendChild(
+      slider({
+        label: '확장 화면으로 플레이',
+        min: 0,
+        max: 1,
+        step: 1,
+        toggle: true,
+        get: () => (fullscreenPreferred() ? 1 : 0),
+        set: (v) => setFullscreenPreferred(v >= 0.5),
+        format: (v) => (v >= 0.5 ? '켬' : '끔'),
+        ...(fullscreenAvailable() ? {} : { disabled: '지원 안 됨' }),
+      }),
+    );
     // 그래픽 설정은 아직 없음 → 큰 비활성 카드 대신 짧은 보조 문구
     left.appendChild(el('p', 'lb-settings-note', '그래픽 품질 설정은 준비 중이에요.'));
     select(this.tab);
