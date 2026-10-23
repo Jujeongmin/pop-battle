@@ -522,6 +522,8 @@ export class Lobby {
     this.open = next;
     this.characterSuspended = false;
     this.root.classList.toggle('lb-character-open', next === 'character');
+    // 방 만들기 모달: 밝은 단색 헤더·심플한 닫기 (screens.css 'lb-panel-modal')
+    this.panelBox.classList.toggle('lb-panel-modal', next === 'create');
     // 캐릭터·장비·상점·설정 = 전체 화면 (로비를 가리고 '로비로' 버튼·ESC로 복귀)
     const full = FULLSCREEN.has(next);
     this.root.classList.toggle('lb-fullscreen', full);

@@ -52,7 +52,8 @@ export interface MultiplayerMenuHost {
 
 type View = 'home' | 'busy' | 'lobby' | 'paused' | 'result' | 'left' | 'reconnecting';
 
-const MODES: NetMode[] = ['tdm', 'ffa', 'test'];
+/** 방 만들 때 고르는 모드 — 자유 테스트(TEST)는 개발용이라 개발 빌드에서만 보임 (서버 처리는 그대로) */
+const MODES: NetMode[] = import.meta.env.DEV ? ['tdm', 'ffa', 'test'] : ['tdm', 'ffa'];
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);

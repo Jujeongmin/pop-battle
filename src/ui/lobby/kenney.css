@@ -37,7 +37,6 @@
 }
 /* 색 버튼 */
 .lb-lobby .lb-btn.lb-char-equip,
-.lb-lobby .lb-btn.lb-create-submit,
 .lb-lobby .lb-btn.lb-code-submit,
 .lb-lobby .lb-btn.lb-nickname-submit,
 .lb-lobby .lb-btn.lb-nick-change,
@@ -276,15 +275,6 @@
 .lb-lobby .lb-btn,
 .lb-pause .lb-btn,
 .lb-mp-overlay .lb-mp-btn { box-shadow: none !important; }
-.lb-lobby .lb-create-rule {
-  border-style: solid;
-  border-color: transparent;
-  border-width: 5px 5px 7px;
-  border-image: var(--k-white) var(--k-slice) / var(--k-width) stretch;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-}
 
 /* ================= 상단 고정 메뉴 (2026-10-22): 로고 · 아이콘 메뉴 / 큰 메인 버튼 3개 ================= */
 .lb-lobby .lb-nav.lb-topbar {

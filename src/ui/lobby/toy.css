@@ -231,7 +231,6 @@
   scrollbar-color: var(--lb-blue) transparent;
   scrollbar-width: thin;
 }
-.lb-lobby .lb-panel-lead { margin: 0; font-size: 12px; font-weight: 800; line-height: 1.45; }
 
 /* 캐릭터 정비소: 왼쪽은 기존 3D 무대, 오른쪽은 선택 카드 */
 .lb-lobby .lb-char-stage { position: absolute; display: none; pointer-events: auto; cursor: grab; }
@@ -404,19 +403,6 @@
 .lb-lobby .lb-code-submit { min-width: 86px; background: var(--lb-mint); }
 
 /* 방 만들기 */
-.lb-lobby .lb-create-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; }
-.lb-lobby .lb-create-card { display: grid; min-height: 118px; grid-template-columns: 48px 1fr; align-items: center; gap: 9px; padding: 10px; border-width: 3px; background: #fff; text-align: left; }
-.lb-lobby .lb-create-card.lb-selected { background: var(--lb-yellow); box-shadow: 0 7px 0 var(--lb-ink); transform: translateY(-2px); }
-.lb-lobby .lb-create-icon { display: grid; width: 47px; height: 47px; place-items: center; border: 2px solid var(--lb-ink); border-radius: 13px; background: var(--lb-blue); color: #fff; }
-.lb-lobby .lb-create-ffa .lb-create-icon { background: var(--lb-pink); }
-.lb-lobby .lb-create-test .lb-create-icon { background: var(--lb-lavender); }
-.lb-lobby .lb-create-icon svg { width: 28px; height: 28px; }
-.lb-lobby .lb-create-card > span:last-child { display: grid; gap: 3px; }
-.lb-lobby .lb-create-card small { font-size: 8px; font-weight: 900; opacity: .65; }
-.lb-lobby .lb-create-card b { font-size: 14px; }
-.lb-lobby .lb-create-card em { font-size: 8px; font-style: normal; font-weight: 800; line-height: 1.3; opacity: .7; }
-.lb-lobby .lb-create-rule { min-height: 34px; margin: 0; padding: 9px; border: 2px solid var(--lb-ink); border-radius: 10px; background: #fff; font-size: 9px; font-weight: 800; text-align: center; }
-.lb-lobby .lb-create-submit { min-height: 52px; background: var(--lb-blue); color: #fff; font-size: 16px; }
 
 /* 장비 및 상점 */
 .lb-lobby .lb-section { margin-top: 2px; padding: 6px 9px; border: 0; border-left: 8px solid var(--lb-blue); border-radius: 0; background: #e5ebfb; font-size: 10px; font-weight: 900; letter-spacing: .4px; }
@@ -537,7 +523,6 @@
   .lb-lobby .lb-panel-title { font-size: 18px; }
   .lb-lobby .lb-panel-close { min-width: 55px; min-height: 36px; }
   .lb-lobby .lb-panel-body { gap: 8px; padding: 8px; }
-  .lb-lobby .lb-panel-lead { display: none; }
   .lb-lobby .lb-stage-hint { display: none; }
   .lb-lobby .lb-stage-reset { min-height: 34px; }
   .lb-lobby .lb-stage-plate { right: 3%; bottom: 4px; left: 3%; padding: 6px 8px; border-width: 2px; box-shadow: 0 3px 0 var(--lb-ink); }
@@ -581,12 +566,6 @@
   .lb-lobby .lb-room-status { display: none; }
   .lb-lobby .lb-room-mode { min-height: 32px; }
   .lb-lobby .lb-code-join { padding: 5px; }
-  .lb-lobby .lb-create-grid { gap: 6px; }
-  .lb-lobby .lb-create-card { min-height: 78px; grid-template-columns: 35px 1fr; padding: 6px; border-width: 2px; }
-  .lb-lobby .lb-create-icon { width: 34px; height: 34px; }
-  .lb-lobby .lb-create-card em { display: none; }
-  .lb-lobby .lb-create-rule { padding: 5px; }
-  .lb-lobby .lb-create-submit { min-height: 44px; }
   .lb-lobby .lb-weapon-preview { grid-template-columns: minmax(0,1fr); padding: 5px; border-width: 2px; }
   .lb-lobby .lb-weapon-preview-stage { height: 180px; }
   .lb-lobby .lb-weapon-grid { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 5px; scrollbar-width: thin; }
@@ -656,7 +635,6 @@
 .lb-lobby .lb-nick-popup-title,
 .lb-lobby .lb-weapon-preview-hint { font-size: 11px; }
 
-.lb-lobby .lb-panel-lead,
 .lb-lobby .lb-stage-role,
 .lb-lobby .lb-char-role,
 .lb-lobby .lb-char-card-copy small,
@@ -664,8 +642,6 @@
 .lb-lobby .lb-mode-copy span,
 .lb-lobby .lb-room-state p,
 .lb-lobby .lb-room-name small,
-.lb-lobby .lb-create-card em,
-.lb-lobby .lb-create-rule,
 .lb-lobby .lb-section,
 .lb-lobby .lb-weapon b,
 .lb-lobby .lb-soon-copy b,
@@ -693,8 +669,7 @@
 .lb-lobby .lb-nickname-counter,
 .lb-lobby .lb-nickname-eyebrow { font-size: 10px; }
 
-.lb-lobby .lb-mode-copy small,
-.lb-lobby .lb-create-card small { font-size: 11px; }
+.lb-lobby .lb-mode-copy small { font-size: 11px; }
 .lb-lobby .lb-char-card-copy b,
 .lb-lobby .lb-room-name b,
 .lb-lobby .lb-weapon b,
@@ -750,9 +725,6 @@
   .lb-lobby .lb-room-name small,
   .lb-lobby .lb-room-slots b,
   .lb-lobby .lb-code-join label > span,
-  .lb-lobby .lb-create-card small,
-  .lb-lobby .lb-create-card em,
-  .lb-lobby .lb-create-rule,
   .lb-lobby .lb-section,
   .lb-lobby .lb-weapon-slot,
   .lb-lobby .lb-weapon b,

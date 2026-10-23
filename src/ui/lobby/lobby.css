@@ -1178,7 +1178,6 @@
 }
 .lb-panel-close svg { width: 19px; height: 19px; }
 .lb-panel-body { max-width: 980px; }
-.lb-panel-lead { margin: 0; color: rgba(39,50,92,.62); font-size: 11px; font-weight: 800; }
 
 .lb-control-hint {
   display: block;
@@ -1280,32 +1279,8 @@
 .lb-code-join input:focus { border-color: var(--lb-blue); box-shadow: 0 0 0 3px rgba(91,140,255,.16); }
 
 /* 방 만들기 */
-.lb-create-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
-.lb-create-card {
-  display: flex;
-  min-height: 125px;
-  align-items: center;
-  gap: 13px;
-  padding: 15px;
-  border: 3px solid #fff;
-  border-radius: 21px;
-  background: linear-gradient(145deg, #e4edff, #fff);
-  box-shadow: 0 5px 0 rgba(39,50,92,.15);
-  text-align: left;
-}
-.lb-create-card > span:last-child { display: grid; gap: 4px; }
-.lb-create-card small { color: #5374bd; font-size: 9px; font-weight: 900; letter-spacing: .8px; }
-.lb-create-card b { font-size: 20px; font-weight: 900; }
-.lb-create-card em { font-size: 10px; font-style: normal; font-weight: 750; opacity: .62; }
-.lb-create-icon { display: grid; width: 55px; height: 55px; flex: 0 0 auto; place-items: center; border-radius: 17px; background: #6c94eb; color: #fff; }
-.lb-create-icon svg { width: 31px; height: 31px; }
 .lb-create-ffa { background: linear-gradient(145deg, #ffe4ee, #fff5d9); }
-.lb-create-ffa .lb-create-icon { background: #ec7da6; }
 .lb-create-test { background: linear-gradient(145deg, #e9e6f8, #fff); }
-.lb-create-test .lb-create-icon { background: #8176bc; }
-.lb-create-card.lb-selected { border-color: #6995f1; box-shadow: 0 5px 0 #5276c8, inset 0 0 0 2px #fff; transform: translateY(-2px); }
-.lb-create-rule { margin: 0; padding: 11px 13px; border-radius: 14px; background: rgba(39,50,92,.065); font-size: 10px; font-weight: 800; line-height: 1.45; }
-.lb-create-submit { min-height: 53px; border: 3px solid #fff; border-radius: 17px; background: linear-gradient(180deg, #79d7b8, #38aa83); box-shadow: 0 5px 0 #247b60; color: #fff; font-size: 16px; font-weight: 900; }
 
 /* CHARACTER는 기존 오른쪽 시트와 3D 드래그 영역을 유지한다. */
 .lb-character-open .lb-panel {
@@ -1350,7 +1325,6 @@
   .lb-panel-close { min-width: 44px; min-height: 40px; padding: 0 8px; border-radius: 11px; }
   .lb-panel-close span { display: none; }
   .lb-panel-body { gap: 7px; padding: 8px 10px 13px; }
-  .lb-panel-lead { font-size: 8px; }
   .lb-play-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 7px; }
   .lb-play-grid .lb-mode,
   .lb-play-grid .lb-soon { min-height: 105px; }
@@ -1362,10 +1336,6 @@
   .lb-room-state { min-height: 95px; padding: 9px; }
   .lb-code-join { padding: 6px; }
   .lb-code-join label > span { display: none; }
-  .lb-create-card { min-height: 85px; padding: 9px; }
-  .lb-create-icon { width: 42px; height: 42px; border-radius: 13px; }
-  .lb-create-card b { font-size: 15px; }
-  .lb-create-submit { min-height: 46px; }
   .lb-character-open .lb-panel { right: 7px; width: 55vw; }
 }
 

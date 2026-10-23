@@ -1152,8 +1152,6 @@
 
 /* ================= 패널 통일 (방 만들기 · 일시정지 · 랭킹 빈 상태) =================
    모서리 14px · 안쪽 카드 10px · 네이비 외곽선 + 아래 입체 그림자 유지 · 제목 앞 작은 물방울 모티프 (움직임 없음) */
-.lb-lobby .lb-create-card { border-radius: 10px; }
-.lb-lobby .lb-create-rule { border-radius: 10px; }
 .lb-pause-title::before,
 .lb-lobby .lb-panel-title::before,
 .lb-rank-empty-title::before {
@@ -1162,24 +1160,6 @@
   border-radius: 50%;
 }
 .lb-pause-lock-title::before { display: none; }
-/* 방 모드 카드: 팀 데스매치 = BLUE·RED, 개인전 = 노랑·핑크 중립색 (선택하면 진하게) */
-.lb-lobby .lb-create-card.lb-create-tdm { background: linear-gradient(90deg, #e3ecff 0 50%, #ffe3e8 50% 100%); }
-.lb-lobby .lb-create-card.lb-create-tdm.lb-selected { background: linear-gradient(90deg, #b9cfff 0 50%, #ffc2cc 50% 100%); }
-.lb-lobby .lb-create-card.lb-create-ffa { background: linear-gradient(135deg, #fff4c4, #ffe0ee); }
-.lb-lobby .lb-create-card.lb-create-ffa.lb-selected { background: linear-gradient(135deg, #ffe48a, #ffc0dc); }
-.lb-lobby .lb-create-tdm .lb-create-icon { background: linear-gradient(90deg, #5b8cff 0 50%, #ec4a5a 50% 100%); color: #fff; }
-.lb-lobby .lb-create-ffa .lb-create-icon { background: linear-gradient(135deg, #ffc531, #f2649a); color: #fff; }
-/* 만들기 버튼 = 고른 모드 색 */
-.lb-lobby .lb-create-submit[data-mode="tdm"] { border-image: none; border: 3px solid var(--lb-ink); border-radius: 12px; background: linear-gradient(90deg, #4f84f5, #e9506a); color: #fff; box-shadow: 0 4px 0 var(--lb-ink); }
-.lb-lobby .lb-create-submit[data-mode="ffa"] { border-image: none; border: 3px solid var(--lb-ink); border-radius: 12px; background: linear-gradient(90deg, #ffc531, #f2649a); color: #3d2600; box-shadow: 0 4px 0 var(--lb-ink); }
-/* 멀티 메뉴 모드 고르기도 같은 색 */
-.lb-mp-overlay .lb-mp-mode-tdm.lb-mp-on { background: linear-gradient(90deg, #6f9bff 0 50%, #ff8a95 50% 100%); color: #fff; }
-.lb-mp-overlay .lb-mp-mode-ffa.lb-mp-on { background: linear-gradient(135deg, #ffc531, #f2649a); color: #3d2600; }
-/* 모드 카드는 Kenney 판(가운데 채움) 대신 네이비 외곽선 → 팀·중립 색이 보이게. 선택 = 노랑 테두리 링 */
-.lb-lobby .lb-create-card.lb-create-tdm,
-.lb-lobby .lb-create-card.lb-create-ffa { border: 3px solid var(--lb-ink); border-image: none; border-radius: 10px; box-shadow: 0 3px 0 var(--lb-ink); }
-.lb-lobby .lb-create-card.lb-create-tdm.lb-selected,
-.lb-lobby .lb-create-card.lb-create-ffa.lb-selected { box-shadow: 0 0 0 3px #ffd45e, 0 4px 0 var(--lb-ink); }
 
 /* ================= 상점: 유료 캐릭터 (VXShop) ================= */
 .lb-lobby .lb-shop-chars { display: grid; gap: 8px; margin-bottom: 12px; }
@@ -1230,3 +1210,93 @@
 }
 /* 캐릭터 화면: 유료 잠김 카드 가격 · 구매 버튼 */
 .lb-lobby .lb-char-equip.lb-equip-buy:not(:disabled) { background: linear-gradient(180deg, #ffd45e, #ffb52e); color: var(--lb-ink); }
+
+
+/* ================= 모달 공통 (2026-10-23, 방 만들기부터) =================
+   밝은 단색 판 · 얇은 테두리 · 절제된 그림자 · 왼쪽 제목 + 오른쪽 X · 내용에 맞는 크기(넘치면 안에서 스크롤).
+   다른 모달도 .lb-panel-modal + 아래 카드·버튼 클래스를 쓰면 같은 모양 */
+.lb-lobby { --modal-ink: #1f2747; --modal-sub: #5f6886; --modal-line: #e1e5ee; --modal-soft: #f6f7fb; --modal-brand: #3f7cf5; --modal-brand-dark: #2f66d8; --modal-brand-soft: #edf3ff; }
+.lb-lobby .lb-panel.lb-panel-modal {
+  inset: 0; display: flex; width: min(460px, calc(100% - 24px)); height: fit-content; max-height: calc(100% - 24px); margin: auto;
+  flex-direction: column; overflow: hidden; padding: 0; border: 1px solid var(--modal-line); border-image: none; border-radius: 14px;
+  background: #fff; box-shadow: 0 12px 32px rgba(20, 28, 60, .18); transform: none;
+}
+.lb-lobby .lb-panel.lb-panel-modal.lb-panel-in { animation: lb-modal-in .18s ease-out both; }
+@keyframes lb-modal-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.lb-lobby .lb-panel-modal .lb-panel-head { min-height: 0; gap: 12px; padding: 18px 16px 6px 22px; border: 0; background: transparent; }
+.lb-lobby .lb-panel-modal .lb-panel-title { flex: 1 1 auto; margin: 0; color: var(--modal-ink); font-family: var(--font); font-size: 20px; font-weight: 800; letter-spacing: -.2px; -webkit-text-stroke: 0; text-shadow: none; }
+.lb-lobby .lb-panel-modal .lb-panel-title::before { display: none; }
+.lb-lobby .lb-panel-modal .lb-panel-close {
+  display: grid; width: 36px; min-width: 36px; height: 36px; min-height: 36px; flex: none; place-items: center; padding: 0;
+  border: 0; border-image: none; border-radius: 10px; background: transparent; color: var(--modal-sub); box-shadow: none; cursor: pointer;
+}
+.lb-lobby .lb-panel-modal .lb-panel-close span { display: none; }
+.lb-lobby .lb-panel-modal .lb-panel-close svg { width: 18px; height: 18px; }
+.lb-lobby .lb-panel-modal .lb-panel-close:hover { background: var(--modal-soft); color: var(--modal-ink); }
+.lb-lobby .lb-panel-modal .lb-panel-close:focus-visible { outline: 2px solid var(--modal-brand); outline-offset: 2px; }
+.lb-lobby .lb-panel-modal .lb-panel-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 14px 22px 22px; }
+
+/* 방 만들기: 모드 카드(같은 크기) → 짧은 규칙 → 방 만들기 버튼 */
+.lb-lobby .lb-create { display: grid; gap: 16px; font-family: var(--font); }
+.lb-lobby .lb-create-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.lb-lobby .lb-panel-modal .lb-create-mode {
+  position: relative; display: grid; width: auto; min-width: 0; min-height: 0; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 12px;
+  padding: 14px 40px 14px 14px; border: 1.5px solid var(--modal-line); border-image: none; border-radius: 12px; background: var(--modal-soft);
+  color: var(--modal-ink); box-shadow: none; text-align: left; cursor: pointer; transform: none; transition: border-color .12s, background-color .12s;
+}
+.lb-lobby .lb-panel-modal .lb-create-mode:hover { border-color: #c9d0e2; background: #fff; }
+.lb-lobby .lb-panel-modal .lb-create-mode:active { background: #eef1f8; }
+.lb-lobby .lb-panel-modal .lb-create-mode.lb-on { border-color: var(--modal-brand); background: var(--modal-brand-soft); }
+.lb-lobby .lb-panel-modal .lb-create-mode:focus-visible { outline: 2px solid var(--modal-brand); outline-offset: 2px; }
+.lb-lobby .lb-create-mode-icon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 10px; background: #fff; color: var(--modal-sub); box-shadow: inset 0 0 0 1px var(--modal-line); }
+.lb-lobby .lb-create-mode-icon svg { width: 22px; height: 22px; }
+.lb-lobby .lb-create-mode.lb-on .lb-create-mode-icon { color: var(--modal-brand); box-shadow: inset 0 0 0 1px #c9dafd; }
+.lb-lobby .lb-create-mode-copy { display: grid; min-width: 0; gap: 2px; }
+.lb-lobby .lb-create-mode-copy b { overflow: hidden; color: var(--modal-ink); font-family: var(--font); font-size: 16px; font-weight: 800; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.lb-lobby .lb-create-mode-copy small { color: var(--modal-sub); font-size: 13px; font-weight: 600; letter-spacing: .2px; }
+/* 선택 표시: 색만이 아니라 체크 (비선택 = 빈 원) */
+.lb-lobby .lb-create-mode-check { position: absolute; top: 50%; right: 12px; display: grid; width: 20px; height: 20px; place-items: center; border: 1.5px solid #c3c9d8; border-radius: 50%; color: transparent; transform: translateY(-50%); }
+.lb-lobby .lb-create-mode-check svg { width: 13px; height: 13px; }
+.lb-lobby .lb-create-mode.lb-on .lb-create-mode-check { border-color: var(--modal-brand); background: var(--modal-brand); color: #fff; }
+.lb-lobby .lb-create-info { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.lb-lobby .lb-create-summary { margin: 0; color: var(--modal-ink); font-size: 15px; font-weight: 700; }
+.lb-lobby .lb-panel-modal .lb-create-more {
+  width: auto; min-width: 0; min-height: 32px; padding: 0 4px; border: 0; border-image: none; background: none; color: var(--modal-brand);
+  box-shadow: none; font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.lb-lobby .lb-panel-modal .lb-create-more:hover { text-decoration: underline; }
+.lb-lobby .lb-create-detail { margin: -6px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--modal-soft); color: var(--modal-sub); font-size: 13px; font-weight: 600; line-height: 1.5; }
+/* 주요 버튼: 단색 · 넉넉한 높이 · 누름/비활성 상태 */
+.lb-lobby .lb-panel-modal .lb-create-go {
+  width: 100%; min-height: 50px; padding: 0 16px; border: 0; border-image: none; border-radius: 12px; background: var(--modal-brand); color: #fff;
+  box-shadow: 0 2px 0 var(--modal-brand-dark); font-family: var(--font); font-size: 16px; font-weight: 800; text-shadow: none; cursor: pointer;
+  transition: background-color .12s, transform .06s;
+}
+.lb-lobby .lb-panel-modal .lb-create-go:hover { background: #3572ec; }
+.lb-lobby .lb-panel-modal .lb-create-go:active { background: var(--modal-brand-dark); transform: translateY(1px); box-shadow: none; }
+.lb-lobby .lb-panel-modal .lb-create-go:disabled { background: #c6d2ea; box-shadow: none; color: #fff; cursor: default; transform: none; }
+.lb-lobby .lb-panel-modal .lb-create-go:focus-visible { outline: 2px solid var(--modal-brand); outline-offset: 3px; }
+/* 낮은 화면(모바일 가로): 간격·카드만 줄임 (글자는 최소 크기 유지) */
+@media (max-height: 520px) {
+  .lb-lobby .lb-panel.lb-panel-modal { width: min(440px, calc(100% - 16px)); max-height: calc(100% - 16px); }
+  .lb-lobby .lb-panel-modal .lb-panel-head { padding: 12px 12px 2px 18px; }
+  .lb-lobby .lb-panel-modal .lb-panel-title { font-size: 18px; }
+  .lb-lobby .lb-panel-modal .lb-panel-body { padding: 10px 18px 16px; }
+  .lb-lobby .lb-create { gap: 12px; }
+  .lb-lobby .lb-panel-modal .lb-create-mode { grid-template-columns: 34px minmax(0, 1fr); gap: 10px; padding: 10px 36px 10px 10px; }
+  .lb-lobby .lb-create-mode-icon { width: 34px; height: 34px; }
+  .lb-lobby .lb-create-mode-icon svg { width: 19px; height: 19px; }
+  .lb-lobby .lb-create-mode-copy b { font-size: 15px; }
+  .lb-lobby .lb-create-mode-copy small { font-size: 12px; }
+  .lb-lobby .lb-create-summary { font-size: 14px; }
+  .lb-lobby .lb-panel-modal .lb-create-go { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-lobby .lb-panel.lb-panel-modal.lb-panel-in { animation: none; }
+  .lb-lobby .lb-panel-modal .lb-create-mode, .lb-lobby .lb-panel-modal .lb-create-go { transition: none; }
+}
+/* 모달은 위쪽 메뉴 줄 아래 남은 공간의 가운데 (낮은 화면에서 메뉴 아이콘과 겹치지 않게) */
+.lb-lobby .lb-panel.lb-panel-modal { inset: calc(var(--lb-nav-bottom, 52px) + 8px) 0 12px 0; max-height: none; }
+@media (max-height: 520px) {
+  .lb-lobby .lb-panel.lb-panel-modal { inset: calc(var(--lb-nav-bottom, 52px) + 4px) 0 8px 0; }
+}
