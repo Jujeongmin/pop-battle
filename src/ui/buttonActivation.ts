@@ -5,7 +5,8 @@
  */
 export function bindButtonActivation(button: HTMLButtonElement, activate: () => void): void {
   let activePointer: number | null = null;
-  let pointerActivatedAt = -Infinity;
+  let suppressNextClick = false;
+  let suppressionTimer: number | null = null;
 
   const release = (pointerId: number) => {
     if (button.hasPointerCapture?.(pointerId)) {
@@ -41,23 +42,24 @@ export function bindButtonActivation(button: HTMLButtonElement, activate: () => 
     activePointer = null;
     release(event.pointerId);
     if (button.disabled) return;
-    pointerActivatedAt = performance.now();
-    const suppressCompatibilityClick = (click: MouseEvent) => {
-      // 일부 모바일 WebView의 터치 합성 click은 detail=0이라 키보드 click처럼 보인다.
-      // 실제 브라우저 이벤트(isTrusted)만 막고 element.click() 같은 프로그램 동작은 유지한다.
-      if (!click.isTrusted || performance.now() - pointerActivatedAt >= 800) return;
-      click.preventDefault();
-      click.stopImmediatePropagation();
-      window.removeEventListener('click', suppressCompatibilityClick, true);
-    };
-    window.addEventListener('click', suppressCompatibilityClick, true);
-    window.setTimeout(() => window.removeEventListener('click', suppressCompatibilityClick, true), 800);
+    suppressNextClick = true;
+    if (suppressionTimer !== null) window.clearTimeout(suppressionTimer);
+    suppressionTimer = window.setTimeout(() => {
+      suppressNextClick = false;
+      suppressionTimer = null;
+    }, 0);
     activate();
   });
 
   button.addEventListener('click', (event) => {
     event.stopPropagation();
-    if (event.isTrusted && performance.now() - pointerActivatedAt < 800) return;
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      if (suppressionTimer !== null) window.clearTimeout(suppressionTimer);
+      suppressionTimer = null;
+      event.preventDefault();
+      return;
+    }
     activate();
   });
 }
