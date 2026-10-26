@@ -144,7 +144,7 @@ export class TouchInput {
     for (const t of ['pointerup', 'pointercancel'] as const) window.addEventListener(t, this.onAreaUp, { ...opts, capture: true });
     // iOS 사파리 핀치 확대·길게 눌러 메뉴 차단 (게임 영역에서만)
     for (const t of ['gesturestart', 'gesturechange', 'contextmenu'] as const) this.root.addEventListener(t, (e) => e.preventDefault(), opts);
-    this.root.addEventListener('touchstart', (e) => e.preventDefault(), { signal: this.abort.signal, passive: false });
+    this.root.addEventListener('touchstart', this.onNativeTouchStart, { signal: this.abort.signal, passive: false });
     window.addEventListener('blur', () => this.releaseAll(), opts);
     // 화면 크기·회전·브라우저 주소창 크기 변화 → 버튼 배율 다시 계산 (진행 중 손가락은 놓은 것으로)
     const onResize = () => this.root.style.setProperty('--tu', this.unit.toFixed(3));
@@ -377,6 +377,22 @@ export class TouchInput {
       this.lastLook.y = p.y;
     } else {
       return;
+    }
+  };
+
+  /**
+   * Android Chrome는 첫 손가락을 뗀 뒤 다른 손가락이 남아 있으면 재사용 pointerId의 pointerdown을
+   * 누락하는 경우가 있다. 정확히 두 손가락(기존 이동 + 새 우측 터치)인 순간에만 시점 기준점을 갱신한다.
+   */
+  private readonly onNativeTouchStart = (e: TouchEvent): void => {
+    e.preventDefault();
+    if (!this.active || this.movePointer < 0 || this.lookPointer < 0 || e.touches.length !== 2) return;
+    for (const touch of e.changedTouches) {
+      const p = toGame(touch.clientX, touch.clientY);
+      if (p.x < viewW() * MOVE_ZONE) continue;
+      this.lastLook.x = p.x;
+      this.lastLook.y = p.y;
+      break;
     }
   };
 
