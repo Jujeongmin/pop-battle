@@ -138,10 +138,9 @@ export class TouchInput {
     this.root.appendChild(pause);
     // 빈 영역: 왼쪽 = 조이스틱, 오른쪽 = 시점
     this.root.addEventListener('pointerdown', this.onAreaDown, opts);
-    this.root.addEventListener('pointermove', this.onAreaMove, opts);
-    for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) this.root.addEventListener(t, this.onAreaUp, opts);
-    // Android에서 포인터 캡처가 풀리거나 실패하면 종료 이벤트가 레이어 밖을 대상으로 할 수 있다.
-    // 캡처 단계에서 먼저 역할을 비워 pointerId 재사용 시 이전 좌표가 이어지지 않게 한다.
+    // Galaxy 계열에서 같은 요소에 두 터치 포인터를 캡처하면 두 번째 캡처가 첫 번째 시점 포인터의
+    // 좌표 수명주기를 흐트러뜨릴 수 있다. 전체 창에서 pointerId별로 추적해 두 손가락을 독립시킨다.
+    window.addEventListener('pointermove', this.onAreaMove, { ...opts, capture: true });
     for (const t of ['pointerup', 'pointercancel'] as const) window.addEventListener(t, this.onAreaUp, { ...opts, capture: true });
     // iOS 사파리 핀치 확대·길게 눌러 메뉴 차단 (게임 영역에서만)
     for (const t of ['gesturestart', 'gesturechange', 'contextmenu'] as const) this.root.addEventListener(t, (e) => e.preventDefault(), opts);
@@ -379,10 +378,10 @@ export class TouchInput {
     } else {
       return;
     }
-    capture(this.root, e.pointerId);
   };
 
   private readonly onAreaMove = (e: PointerEvent): void => {
+    if (e.pointerType === 'mouse' || !this.active) return;
     const p = toGame(e.clientX, e.clientY);
     if (e.pointerId === this.movePointer) {
       this.updateStick(p.x, p.y);
