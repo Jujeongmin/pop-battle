@@ -2,6 +2,7 @@
 // 대기실(팀·방장 시작) · 진행 중 일시정지 · 결과 화면 · 연결 끊김. 서버에는 준비 상태가 없다.
 // 표시는 전부 서버가 확인한 상태(NetSession)만 읽는다 — 클라이언트가 임의로 성공·결과를 만들지 않음.
 import { levelBadge } from '../ui/popgun';
+import { bindButtonActivation } from '../ui/buttonActivation';
 import { markRadios, radioGroup } from '../ui/lobby/lobbyDom';
 import { displayCode, type NetSession } from './NetSession';
 import { NET_MAX_PLAYERS, NET_MODE_RULES, NET_TEST_TIME_LIMIT_SEC, teamSeats, type NetMode, type NetPlayerRecord, type NetTeam } from './shared/protocol';
@@ -445,7 +446,7 @@ export class MultiplayerMenu {
   private button(label: string, cls: string, fn: () => unknown): HTMLButtonElement {
     const b = el('button', `lb-mp-btn ${cls}`.trim(), label);
     b.type = 'button';
-    b.onclick = () => void fn();
+    bindButtonActivation(b, () => void fn());
     return b;
   }
 

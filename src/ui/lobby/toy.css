@@ -58,10 +58,13 @@
   background: none;
   box-shadow: none;
   opacity: 1;
-  pointer-events: auto;
+  /* 빈 상단 바가 아래의 전체 화면 '로비로' 버튼을 가로막지 않게 한다. */
+  pointer-events: none;
   transform: none;
 }
-.lb-lobby .lb-nav-status { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.lb-lobby .lb-nav-status { display: flex; min-width: 0; align-items: center; gap: 8px; pointer-events: none; }
+/* 상단 바에서는 실제 조작 버튼과 연결 재시도만 입력을 받는다. */
+.lb-lobby .lb-nav .lb-btn { pointer-events: auto; }
 .lb-lobby .lb-nav-brand {
   display: grid;
   min-width: 106px;

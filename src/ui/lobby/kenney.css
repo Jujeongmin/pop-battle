@@ -294,7 +294,8 @@
   background: none;
   box-shadow: none;
   opacity: 1;
-  pointer-events: auto;
+  /* 장식용 상단 바의 빈 면은 아래 UI를 가리지 않고, 실제 .lb-btn만 입력을 받는다. */
+  pointer-events: none;
   transform: none;
 }
 .lb-lobby .lb-topbar .lb-top-row { display: flex; min-height: 58px; align-items: center; gap: 10px; }

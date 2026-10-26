@@ -5,6 +5,7 @@
 // 손가락마다 pointerId로 역할을 나눠 서로 취소하지 않음 (이동하며 회전·사격·점프 동시에).
 import { createInputState } from './Input';
 import { toGame, viewH, viewW } from './screenRotation';
+import { bindButtonActivation } from '../ui/buttonActivation';
 
 export interface TouchSettings {
   /** 시점 회전 감도 배율 (PC 마우스 감도 기준) */
@@ -123,7 +124,7 @@ export class TouchInput {
       pause.classList.add('down');
     }, opts);
     for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) pause.addEventListener(t, () => pause.classList.remove('down'), opts);
-    pause.addEventListener('click', () => this.onPause?.(), opts);
+    bindButtonActivation(pause, () => this.onPause?.());
     this.root.appendChild(pause);
     // 빈 영역: 왼쪽 = 조이스틱, 오른쪽 = 시점
     this.root.addEventListener('pointerdown', this.onAreaDown, opts);
