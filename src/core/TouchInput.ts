@@ -95,7 +95,7 @@ export class TouchInput {
   private readonly stick = el('div', 'tc-stick');
   private readonly knob = el('div', 'tc-knob');
   private readonly buttons = new Map<ButtonKind, HTMLButtonElement>();
-  private movePointer = -1;
+  private moveTouchId: number | null = null;
   private lookPointer = -1;
   private lookNeedsBaseline = false;
   private firePointer = -1;
@@ -147,6 +147,8 @@ export class TouchInput {
     // iOS 사파리 핀치 확대·길게 눌러 메뉴 차단 (게임 영역에서만)
     for (const t of ['gesturestart', 'gesturechange', 'contextmenu'] as const) this.root.addEventListener(t, (e) => e.preventDefault(), opts);
     this.root.addEventListener('touchstart', this.onNativeTouchStart, { signal: this.abort.signal, passive: false });
+    this.root.addEventListener('touchmove', this.onNativeTouchMove, { signal: this.abort.signal, passive: false });
+    for (const t of ['touchend', 'touchcancel'] as const) this.root.addEventListener(t, this.onNativeTouchEnd, { signal: this.abort.signal, passive: false });
     window.addEventListener('blur', () => this.releaseAll(), opts);
     // 화면 크기·회전·브라우저 주소창 크기 변화 → 버튼 배율 다시 계산 (진행 중 손가락은 놓은 것으로)
     const onResize = () => this.root.style.setProperty('--tu', this.unit.toFixed(3));
@@ -312,7 +314,8 @@ export class TouchInput {
   }
 
   private releaseAll(): void {
-    this.movePointer = this.lookPointer = -1;
+    this.lookPointer = -1;
+    this.moveTouchId = null;
     this.lookNeedsBaseline = false;
     this.cancelFire();
     this.resetStick();
@@ -358,25 +361,27 @@ export class TouchInput {
     this.knob.style.transform = '';
   }
 
+  private beginStick(x: number, y: number): void {
+    const r = this.radius;
+    const originX = Math.max(r + 8, Math.min(viewW() * MOVE_ZONE - r, x));
+    const originY = Math.max(r + 8, Math.min(viewH() - r - 8, y));
+    this.moveOrigin.x = originX;
+    this.moveOrigin.y = originY;
+    this.stick.classList.add('live');
+    this.stick.style.left = `${originX}px`;
+    this.stick.style.top = `${originY}px`;
+    this.updateStick(x, y);
+  }
+
   private readonly onAreaDown = (e: PointerEvent): void => {
     if (e.pointerType === 'mouse' || !this.active) return;
     e.preventDefault();
     // 게임 화면 좌표 (세로로 든 기기에서 돌려 그릴 때도 같은 기준)
     const p = toGame(e.clientX, e.clientY);
     const leftZone = p.x < viewW() * MOVE_ZONE;
-    if (leftZone && this.movePointer < 0) {
-      this.movePointer = e.pointerId;
-      // 떠다니는 조이스틱: 엄지를 댄 곳이 중심 (화면 밖으로 나가지 않게)
-      const r = this.radius;
-      const x = Math.max(r + 8, Math.min(viewW() * MOVE_ZONE - r, p.x));
-      const y = Math.max(r + 8, Math.min(viewH() - r - 8, p.y));
-      this.moveOrigin.x = x;
-      this.moveOrigin.y = y;
-      this.stick.classList.add('live');
-      this.stick.style.left = `${x}px`;
-      this.stick.style.top = `${y}px`;
-      this.updateStick(p.x, p.y);
-    } else if (!leftZone && this.lookPointer < 0 && !this.lobby) {
+    // 이동 손가락은 native Touch.identifier만 사용한다.
+    if (leftZone) return;
+    if (this.lookPointer < 0 && !this.lobby) {
       this.lookPointer = e.pointerId;
       this.lastLook.x = p.x;
       this.lastLook.y = p.y;
@@ -392,23 +397,49 @@ export class TouchInput {
    */
   private readonly onNativeTouchStart = (e: TouchEvent): void => {
     e.preventDefault();
-    if (!this.active || this.movePointer < 0 || this.lookPointer < 0 || e.touches.length !== 2) return;
+    if (!this.active) return;
     for (const touch of e.changedTouches) {
       const p = toGame(touch.clientX, touch.clientY);
-      if (p.x < viewW() * MOVE_ZONE) continue;
-      this.lastLook.x = p.x;
-      this.lastLook.y = p.y;
-      this.lookNeedsBaseline = true;
-      break;
+      if (p.x < viewW() * MOVE_ZONE) {
+        if (this.moveTouchId === null) {
+          this.moveTouchId = touch.identifier;
+          this.beginStick(p.x, p.y);
+        }
+      } else if (this.moveTouchId !== null && this.lookPointer >= 0 && e.touches.length === 2) {
+        this.lastLook.x = p.x;
+        this.lastLook.y = p.y;
+        this.lookNeedsBaseline = true;
+      }
+    }
+  };
+
+  private readonly onNativeTouchMove = (e: TouchEvent): void => {
+    if (!this.active || this.moveTouchId === null) return;
+    e.preventDefault();
+    for (const touch of e.touches) {
+      if (touch.identifier !== this.moveTouchId) continue;
+      const p = toGame(touch.clientX, touch.clientY);
+      this.updateStick(p.x, p.y);
+      return;
+    }
+  };
+
+  private readonly onNativeTouchEnd = (e: TouchEvent): void => {
+    if (this.moveTouchId === null) return;
+    for (const touch of e.changedTouches) {
+      if (touch.identifier !== this.moveTouchId) continue;
+      e.preventDefault();
+      this.moveTouchId = null;
+      this.resetStick();
+      return;
     }
   };
 
   private readonly onAreaMove = (e: PointerEvent): void => {
     if (e.pointerType === 'mouse' || !this.active) return;
     const p = toGame(e.clientX, e.clientY);
-    if (e.pointerId === this.movePointer) {
-      this.updateStick(p.x, p.y);
-    } else if (e.pointerId === this.lookPointer) {
+    // PointerEvent는 시점에만 사용하며 이동 벡터는 절대 갱신하지 않는다.
+    if (e.pointerId === this.lookPointer) {
       if (this.lookNeedsBaseline) {
         this.lastLook.x = p.x;
         this.lastLook.y = p.y;
@@ -422,10 +453,7 @@ export class TouchInput {
   };
 
   private readonly onAreaUp = (e: PointerEvent): void => {
-    if (e.pointerId === this.movePointer) {
-      this.movePointer = -1;
-      this.resetStick();
-    } else if (e.pointerId === this.lookPointer) {
+    if (e.pointerId === this.lookPointer) {
       this.lookPointer = -1;
       this.lookNeedsBaseline = false;
     }
