@@ -18,6 +18,8 @@ export interface CharacterOffer {
   busy: boolean;
   /** 결제는 끝났는데 서버 반영이 늦음 → '다시 확인' */
   delayed: boolean;
+  /** 결제창 종료 뒤 브라우저가 자동 전체화면 복귀를 거부함 */
+  returnFullscreen: boolean;
   /** 안내 한 줄 (구매 불가 이유·결과) */
   note: string;
 }
@@ -32,6 +34,10 @@ export class CharacterShop {
   /** 서버 보유 목록을 한 번이라도 받았는지 (못 받으면 구매 버튼 끔: 이미 가진 걸 또 사지 않게) */
   private ownedKnown = false;
   private busy: string | null = null;
+  /** 결제 전에 게임 전체화면이었으면 닫힘 뒤 복귀할 캐릭터 */
+  private restoreFullscreenFor: string | null = null;
+  /** 자동 requestFullscreen이 거부되어 사용자 클릭이 필요한 캐릭터 */
+  private fullscreenReturnFor: string | null = null;
   private readonly notes = new Map<string, string>();
   private readonly delayed = new Set<string>();
   private readonly listeners = new Set<() => void>();
@@ -106,24 +112,54 @@ export class CharacterShop {
     // SDK의 원문 사유(예: "User not found")를 그대로 노출하지 않는다. 로그인/상품 상태가
     // 바뀌면 subscribe/refresh가 다시 그리므로, 화면에는 일관된 사용자 안내만 보여 준다.
     else if (!item.purchasable) note = note || '지금은 구매할 수 없어요 · 잠시 후 다시 확인해 주세요';
-    else canBuy = !this.busy;
-    return { charId, productId, price: item ? item.price : null, owned, canBuy, busy, delayed: this.delayed.has(charId) && !owned, note };
+    else canBuy = !this.busy && this.fullscreenReturnFor !== charId;
+    return {
+      charId,
+      productId,
+      price: item ? item.price : null,
+      owned,
+      canBuy,
+      busy,
+      delayed: this.delayed.has(charId) && !owned,
+      returnFullscreen: this.fullscreenReturnFor === charId,
+      note,
+    };
   }
 
   /** 구매 버튼: 공식 결제창 열기 (지급은 서버만). 중복 클릭·이미 보유·조회 실패는 열지 않음 */
-  buy(charId: string): void {
+  async buy(charId: string): Promise<void> {
     const o = this.offer(charId);
     if (!o || !o.canBuy) return;
     this.busy = o.productId;
+    this.fullscreenReturnFor = null;
+    this.restoreFullscreenFor = document.fullscreenElement ? charId : null;
     this.notes.delete(charId);
     this.emit();
+    if (this.restoreFullscreenFor) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        this.busy = null;
+        this.restoreFullscreenFor = null;
+        this.notes.set(charId, '전체화면을 닫지 못해 결제창을 열 수 없어요 · 다시 시도해 주세요');
+        return this.emit();
+      }
+    }
     try {
       VXShop.buyItem(o.productId);
     } catch {
       this.busy = null;
       this.notes.set(charId, '결제창을 열지 못했어요 · 잠시 후 다시 시도해 주세요');
+      await this.restoreFullscreen(charId);
       this.emit();
     }
+  }
+
+  /** 자동 복귀가 거부됐을 때 사용자 클릭 안에서 다시 요청 */
+  async returnToFullscreen(charId: string): Promise<void> {
+    if (this.fullscreenReturnFor !== charId) return;
+    await this.restoreFullscreen(charId);
+    this.emit();
   }
 
   /** 결제 뒤 반영이 늦을 때 '다시 확인' */
@@ -138,10 +174,12 @@ export class CharacterShop {
 
   /** 결제창 닫힘: 상품 다시 받기 → 결제했다면 서버 보유 목록에 들어올 때까지 재확인 */
   private async afterClose(p: VXShopDialogClosedPayload): Promise<void> {
+    if (this.busy !== p.productId) return;
     const charId = characterOfProduct(p.productId);
     this.busy = null;
     void VXShop.refresh().catch(() => undefined);
     if (!charId) return this.emit();
+    await this.restoreFullscreen(charId);
     if (!p.purchased) {
       this.notes.set(charId, '결제를 취소했어요 · 캐릭터는 지급되지 않았어요');
       return this.emit();
@@ -159,6 +197,18 @@ export class CharacterShop {
     this.delayed.add(charId);
     this.notes.set(charId, '결제는 끝났지만 아직 반영되지 않았어요 · 잠시 후 다시 확인해 주세요');
     this.emit();
+  }
+
+  /** 결제 전 전체화면이었던 경우 복귀. 사용자 제스처가 필요하면 버튼 상태를 남긴다. */
+  private async restoreFullscreen(charId: string): Promise<void> {
+    if (this.restoreFullscreenFor !== charId && this.fullscreenReturnFor !== charId) return;
+    this.restoreFullscreenFor = null;
+    try {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      this.fullscreenReturnFor = null;
+    } catch {
+      this.fullscreenReturnFor = charId;
+    }
   }
 
   private emit(): void {

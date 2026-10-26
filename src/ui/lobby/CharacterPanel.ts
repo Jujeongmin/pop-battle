@@ -69,8 +69,12 @@ export class CharacterPanel implements LobbyPanel {
     this.equipButton = button('', 'lb-char-equip', () => {
       // 유료 잠김: 구매(또는 반영 재확인), 그 외: 장착
       const c = this.characters.find((item) => item.id === this.preview);
-      const offer = c && !c.selectable ? this.host.characterOffer(c.id) : null;
-      if (offer) {
+      const offer = c ? this.host.characterOffer(c.id) : null;
+      if (offer?.returnFullscreen) {
+        this.host.returnPurchaseFullscreen(offer.charId);
+        return;
+      }
+      if (offer && c && !c.selectable) {
         if (offer.delayed) this.host.recheckPurchase(offer.charId);
         else if (offer.canBuy) this.host.buyCharacter(offer.charId);
         return;
@@ -230,6 +234,16 @@ export class CharacterPanel implements LobbyPanel {
     equip.classList.toggle('lb-success', result === 'success');
     equip.classList.toggle('lb-equip-locked', !character.selectable);
     equip.disabled = this.loading || equipped || !character.selectable;
+    const offer = this.host.characterOffer(character.id);
+
+    if (offer?.returnFullscreen) {
+      equip.classList.add('lb-equip-buy');
+      equip.disabled = false;
+      equip.textContent = '전체화면으로 돌아가기';
+      equip.setAttribute('aria-label', '전체화면으로 돌아가기');
+      this.note!.textContent = offer.note;
+      return;
+    }
 
     if (result === 'loading') {
       equip.textContent = '불러오는 중';
@@ -241,7 +255,6 @@ export class CharacterPanel implements LobbyPanel {
       equip.textContent = '장착 중';
       this.note!.textContent = result === 'failure' ? '지금은 캐릭터를 바꿀 수 없어요.' : '';
     } else if (!character.selectable) {
-      const offer = this.host.characterOffer(character.id);
       if (offer) {
         // 유료: 가격(VXShop 조회값 우선) 구매 버튼, 결제 중·확인 중엔 막음, 반영이 늦으면 다시 확인
         equip.classList.add('lb-equip-buy');

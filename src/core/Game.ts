@@ -1972,8 +1972,9 @@ export class Game {
       characterOffer: (id) => this.shop.offer(id),
       buyCharacter: (id) => {
         this.sounds.ui('uiSelect');
-        this.shop.buy(id);
+        void this.shop.buy(id);
       },
+      returnPurchaseFullscreen: (id) => void this.shop.returnToFullscreen(id),
       recheckPurchase: (id) => void this.shop.recheck(id),
       shopStatus: () => this.shop.status(),
       onShopChange: (cb) => this.shop.onChange(cb),

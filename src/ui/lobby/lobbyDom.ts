@@ -51,6 +51,7 @@ export interface LobbyCharacterOffer {
   canBuy: boolean;
   busy: boolean;
   delayed: boolean;
+  returnFullscreen: boolean;
   note: string;
 }
 
@@ -60,6 +61,8 @@ export interface LobbyHost {
   characterOffer(id: string): LobbyCharacterOffer | null;
   /** VXShop 공식 결제창 열기 (지급은 서버) */
   buyCharacter(id: string): void;
+  /** 결제 종료 뒤 자동 복귀가 거부됐을 때 사용자 클릭으로 전체화면 재요청 */
+  returnPurchaseFullscreen(id: string): void;
   /** 결제 뒤 반영이 늦을 때 서버 보유 정보 다시 확인 */
   recheckPurchase(id: string): void;
   /** 상점 전체 상태 (상품을 못 받은 이유) */

@@ -71,7 +71,8 @@ export class ShopPanel implements LobbyPanel {
     const action = button('', 'lb-shop-char-buy', () => {
       const o = this.host.characterOffer(c.id);
       if (!o) return;
-      if (o.owned) this.openCharacter();
+      if (o.returnFullscreen) this.host.returnPurchaseFullscreen(c.id);
+      else if (o.owned) this.openCharacter();
       else if (o.delayed) this.host.recheckPurchase(c.id);
       else if (o.canBuy) this.host.buyCharacter(c.id);
     });
@@ -83,7 +84,10 @@ export class ShopPanel implements LobbyPanel {
       price.innerHTML = o.owned ? '<span class="lb-shop-owned">✓ 보유 중</span>' : `<span class="lb-vx">VX</span><b>${vx}</b>`;
       card.classList.toggle('lb-shop-char-owned', o.owned);
       action.classList.toggle('lb-shop-char-owned-btn', o.owned);
-      if (o.owned) {
+      if (o.returnFullscreen) {
+        action.disabled = false;
+        action.textContent = '전체화면으로 돌아가기';
+      } else if (o.owned) {
         action.disabled = false;
         action.textContent = '장착하러 가기';
       } else if (o.delayed) {
@@ -96,7 +100,7 @@ export class ShopPanel implements LobbyPanel {
         action.disabled = !o.canBuy;
         action.innerHTML = `${ICON.lock}<span>${vx} VX 구매</span>`;
       }
-      action.setAttribute('aria-label', o.owned ? `${c.name} 보유 중 · 캐릭터 화면으로` : `${c.name} ${vx} VX에 구매`);
+      action.setAttribute('aria-label', o.returnFullscreen ? '전체화면으로 돌아가기' : o.owned ? `${c.name} 보유 중 · 캐릭터 화면으로` : `${c.name} ${vx} VX에 구매`);
       // 상점 전체 이유(머리 줄)와 같은 문구는 카드마다 반복하지 않음
       note.textContent = o.note === this.host.shopStatus().error ? '' : o.note;
     };
