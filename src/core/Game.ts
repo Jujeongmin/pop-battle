@@ -163,6 +163,8 @@ const _v1 = new THREE.Vector3();
 const _v2 = new THREE.Vector3();
 const _v3 = new THREE.Vector3();
 const _v4 = new THREE.Vector3();
+const _q1 = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
 /** 쇼케이스 카메라 가림 검사용 (보이는 로비 모습에 레이) */
 const _showcaseRay = new THREE.Raycaster();
 
@@ -411,8 +413,8 @@ export class Game {
   private peers: LobbyPeers | null = null;
   /** 매치 룸 입장 처리 중 (로비 재접속 보류) */
   private hubHold = false;
-  /** 룸 전환 중 (방 입장·로비 복귀): 버튼을 다시 눌러도 무시 */
-  private roomBusy = false;
+  /** 현재 룸 전환. 로비 복귀 요청은 진행 중 전환 뒤에 이어서 처리해 탭을 버리지 않는다. */
+  private roomTransition: Promise<void> | null = null;
   /** 멀티 입장 때 봇을 지움 → 이후 연습전은 새로고침으로 */
   private botsRemoved = false;
   /** 개발 진단 로그 타이머 (로비 전송량·FPS) */
@@ -421,7 +423,8 @@ export class Game {
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDER.maxPixelRatio));
+    const coarsePointer = matchMedia('(hover: none) and (pointer: coarse)').matches;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarsePointer ? RENDER.mobileMaxPixelRatio : RENDER.maxPixelRatio));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -432,7 +435,11 @@ export class Game {
     this.hud = new Hud(container);
     // 모바일 터치 조작: HUD 배치(버튼 자리 비움)·슬롯 터치·터치 설정
     this.hud.setTouchMode(this.input.touchMode);
-    this.input.onTouchModeChange = (on) => this.hud.setTouchMode(on);
+    this.input.onTouchModeChange = (on) => {
+      this.hud.setTouchMode(on);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, on ? RENDER.mobileMaxPixelRatio : RENDER.maxPixelRatio));
+      this.resize();
+    };
     this.hud.onSlotTap = (i) => this.input.touch.pressSlot(i + 1);
     this.hud.onTouchSettings = () => this.input.touch.openSettings();
     this.hud.onTouchStart = () => this.input.requestLock();
@@ -1007,7 +1014,7 @@ export class Game {
       this.aimDir.lerp(desiredDir, 1 - Math.exp(-22 * dt)).normalize();
       if (adsBlend > 0) {
         // ADS: 총구가 화면 중앙 조준점을 정확히 향하도록 (지연 없이)
-        const muzzleDir = aimPoint.clone().sub(this.lastMuzzle);
+        const muzzleDir = _v3.copy(aimPoint).sub(this.lastMuzzle);
         if (muzzleDir.lengthSq() > 1e-6) this.aimDir.lerp(muzzleDir.normalize(), adsBlend).normalize();
       }
     } else {
@@ -1081,9 +1088,9 @@ export class Game {
       reloadPressed: input.reloadPressed,
       canAct,
       camera: cam,
-      pivot: chest.clone(),
+      pivot: _v3.copy(chest),
       muzzle,
-      chest: chest.clone(),
+      chest: _v4.copy(chest),
       moving: speed > 0.5,
       airborne: !this.player.grounded,
       sliding: this.player.isSliding,
@@ -1189,8 +1196,9 @@ export class Game {
    * 총 방향 계산용이라 너무 가까운 점은 최소 거리로 밀어 총이 과하게 꺾이지 않게 한다.
    */
   private computeAimPoint(cam: THREE.PerspectiveCamera, chest: THREE.Vector3): THREE.Vector3 {
-    const dir = cam.getWorldDirection(new THREE.Vector3());
-    const origin = cam.position.clone().addScaledVector(dir, Math.max(0, chest.clone().sub(cam.position).dot(dir)));
+    const dir = cam.getWorldDirection(_v3);
+    const alongView = Math.max(0, _v4.subVectors(chest, cam.position).dot(dir));
+    const origin = _v4.copy(cam.position).addScaledVector(dir, alongView);
     const hit = this.physics.raycast(origin, dir, 200, undefined, this.player.body);
     const dist = hit ? Math.max(hit.distance, 2.0) : 200;
     return origin.addScaledVector(dir, dist);
@@ -2469,10 +2477,10 @@ export class Game {
     const yawK = tpsYaw + Math.atan2(Math.sin(yaw - tpsYaw), Math.cos(yaw - tpsYaw)) * k;
     const distK = THREE.MathUtils.lerp(tpsDist, dist * Math.cos(pitch), k);
     const heightK = THREE.MathUtils.lerp(off.y, Math.sin(pitch) * dist, k);
-    const tpsQuat = cam.quaternion.clone();
+    const tpsQuat = _q1.copy(cam.quaternion);
     cam.position.set(target.x + Math.sin(yawK) * distK, target.y + heightK, target.z + Math.cos(yawK) * distK);
     cam.lookAt(target);
-    if (k < 1) cam.quaternion.slerpQuaternions(tpsQuat, cam.quaternion.clone(), k);
+    if (k < 1) cam.quaternion.slerpQuaternions(tpsQuat, _q2.copy(cam.quaternion), k);
     cam.updateMatrixWorld();
     const w = this.container.clientWidth;
     const hpx = this.container.clientHeight;
@@ -3019,17 +3027,26 @@ export class Game {
    * 들어가지 못하고 로비에 남으면 다음 프레임에 로비 서버에 다시 연결
    */
   private async withHubPaused(fn: () => Promise<void>): Promise<void> {
-    // 룸 전환 중 다시 누르면 무시 (방 입장 두 번·입장 중 로비 복귀 방지)
-    if (this.roomBusy) return;
-    this.roomBusy = true;
-    this.hubHold = true;
-    try {
-      await this.hub?.stop();
-      await fn();
-    } finally {
-      this.hubHold = false;
-      this.roomBusy = false;
-    }
+    return this.runRoomTransition(async () => {
+      this.hubHold = true;
+      try {
+        await this.hub?.stop();
+        await fn();
+      } finally {
+        this.hubHold = false;
+      }
+    });
+  }
+
+  /** 방 입장·퇴장 작업 하나만 실행하고, 호출자는 같은 진행 중 Promise를 기다린다. */
+  private runRoomTransition(fn: () => Promise<void>): Promise<void> {
+    if (this.roomTransition) return this.roomTransition;
+    // 이 finally가 끝나기 전에는 새 전환이 시작될 수 없으므로 현재 항목을 안전하게 비울 수 있다.
+    const task = fn().finally(() => {
+      this.roomTransition = null;
+    });
+    this.roomTransition = task;
+    return task;
   }
 
   /**
@@ -3038,13 +3055,17 @@ export class Game {
    * 멀티 입장 때 봇을 지웠으면 여기서 다시 만듦 (연습전은 새로고침 없이)
    */
   private async returnToLobby(): Promise<void> {
-    if (this.inLobby || this.roomBusy) return;
-    this.roomBusy = true;
-    try {
-      await this.leaveMatchToLobby();
-    } finally {
-      this.roomBusy = false;
+    if (this.inLobby) return;
+    // 입장/재접속 처리가 끝나기 전에 누른 로비 요청도 버리지 않고 바로 이어서 수행한다.
+    if (this.roomTransition) {
+      try {
+        await this.roomTransition;
+      } catch {
+        // 실패한 입장/재접속 뒤에도 로비 복귀 요청 자체는 계속 처리한다.
+      }
     }
+    if (this.inLobby) return;
+    await this.runRoomTransition(() => this.leaveMatchToLobby());
   }
 
   /** returnToLobby 본체 (매치 룸 퇴장 → 매치 정리 → 로비 공간·로비 서버) */

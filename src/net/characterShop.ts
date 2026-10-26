@@ -103,7 +103,9 @@ export class CharacterShop {
     else if (!item) note = note || '아직 판매 중인 상품이 아니에요';
     else if (!this.ownedKnown) note = note || '보유 정보를 확인하는 중…';
     else if (item.purchaseLimitReached) note = note || '이미 구매한 상품이에요 · 반영을 다시 확인해 주세요';
-    else if (!item.purchasable) note = note || item.purchaseBlockReason || '지금은 구매할 수 없어요';
+    // SDK의 원문 사유(예: "User not found")를 그대로 노출하지 않는다. 로그인/상품 상태가
+    // 바뀌면 subscribe/refresh가 다시 그리므로, 화면에는 일관된 사용자 안내만 보여 준다.
+    else if (!item.purchasable) note = note || '지금은 구매할 수 없어요 · 잠시 후 다시 확인해 주세요';
     else canBuy = !this.busy;
     return { charId, productId, price: item ? item.price : null, owned, canBuy, busy, delayed: this.delayed.has(charId) && !owned, note };
   }

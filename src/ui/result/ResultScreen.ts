@@ -340,17 +340,36 @@ export class ResultScreen {
     const btn = (label: string, cls: string, fn: () => Promise<void> | void) => {
       const b = el('button', `pb-res-btn ${cls}`, label);
       b.type = 'button';
-      b.onclick = async () => {
+      const activate = async () => {
         if (this.busy) return;
         this.busy = true;
         this.bar.classList.add('pb-res-busy');
+        this.bar.setAttribute('aria-busy', 'true');
+        this.bar.querySelectorAll('button').forEach((button) => (button.disabled = true));
         try {
           await fn();
         } finally {
           this.busy = false;
           this.bar.classList.remove('pb-res-busy');
+          this.bar.removeAttribute('aria-busy');
+          this.bar.querySelectorAll('button').forEach((button) => (button.disabled = false));
         }
       };
+      // 실제 터치에서는 pointerup을 단일 활성화 지점으로 사용한다. 화면 전환으로 합성 click이
+      // 취소되어도 한 번의 탭으로 동작하며, 정상 생성된 click은 아래에서 중복 실행하지 않는다.
+      let pointerActivatedAt = -Infinity;
+      b.addEventListener('pointerup', (event) => {
+        if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+        event.preventDefault();
+        event.stopPropagation();
+        pointerActivatedAt = performance.now();
+        void activate();
+      });
+      b.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (event.detail > 0 && performance.now() - pointerActivatedAt < 800) return;
+        void activate();
+      });
       return b;
     };
     if (d.practice) {

@@ -742,7 +742,7 @@
   .lb-lobby .lb-char-compare .lb-card-equipped { left: 30px; }
   .lb-lobby .lb-char-compare .lb-lock { top: auto; right: auto; bottom: 5px; left: 4px; padding: 1px 4px; }
   .lb-lobby.lb-fullscreen .lb-panel-title { padding: 1px 14px 0; font-size: 19px; }
-  .lb-lobby.lb-fullscreen .lb-panel-close { min-height: 36px; font-size: 14px; }
+  .lb-lobby.lb-fullscreen .lb-panel-close { min-height: 44px; font-size: 14px; }
   .lb-lobby.lb-fullscreen .lb-panel-body { gap: 6px; }
   .lb-lobby .lb-section { font-size: 14px; }
   /* 상단 아이콘 6개(랭킹 포함) + 로비로 버튼이 667px 폭에 겹치지 않게 */

@@ -253,6 +253,8 @@ export const CAMERA_MOBILE = {
 
 export const RENDER = {
   maxPixelRatio: 2,
+  /** 고밀도 모바일은 2배 버퍼 대신 1.5배까지만: 픽셀 수를 최대 44% 줄이되 HUD·3D 선명도는 유지 */
+  mobileMaxPixelRatio: 1.5,
   shadowMapSize: 2048,
   shadowExtent: 18,
   fixedStep: 1 / 60,

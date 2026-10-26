@@ -222,8 +222,19 @@ export function button(label: string, cls: string, onClick: () => void, html?: s
   for (const type of ['pointerdown', 'mousedown', 'touchstart', 'wheel'] as const) {
     b.addEventListener(type, (event) => event.stopPropagation());
   }
+  // 모바일 브라우저는 손가락을 놓는 사이 DOM/포인터 캡처가 바뀌면 호환 click을 만들지 않을 수 있다.
+  // touch/pen은 pointerup에서 바로 한 번 실행하고, 뒤이어 오는 합성 click만 삼킨다.
+  let pointerActivatedAt = -Infinity;
+  b.addEventListener('pointerup', (event) => {
+    if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+    event.preventDefault();
+    event.stopPropagation();
+    pointerActivatedAt = performance.now();
+    onClick();
+  });
   b.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (e.detail > 0 && performance.now() - pointerActivatedAt < 800) return;
     onClick();
   });
   return b;
