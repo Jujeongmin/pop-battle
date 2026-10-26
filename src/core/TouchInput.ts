@@ -130,6 +130,9 @@ export class TouchInput {
     this.root.addEventListener('pointerdown', this.onAreaDown, opts);
     this.root.addEventListener('pointermove', this.onAreaMove, opts);
     for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) this.root.addEventListener(t, this.onAreaUp, opts);
+    // Android에서 포인터 캡처가 풀리거나 실패하면 종료 이벤트가 레이어 밖을 대상으로 할 수 있다.
+    // 캡처 단계에서 먼저 역할을 비워 pointerId 재사용 시 이전 좌표가 이어지지 않게 한다.
+    for (const t of ['pointerup', 'pointercancel'] as const) window.addEventListener(t, this.onAreaUp, { ...opts, capture: true });
     // iOS 사파리 핀치 확대·길게 눌러 메뉴 차단 (게임 영역에서만)
     for (const t of ['gesturestart', 'gesturechange', 'contextmenu'] as const) this.root.addEventListener(t, (e) => e.preventDefault(), opts);
     this.root.addEventListener('touchstart', (e) => e.preventDefault(), { signal: this.abort.signal, passive: false });
