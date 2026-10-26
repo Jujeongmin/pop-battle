@@ -43,7 +43,9 @@ export function bindButtonActivation(button: HTMLButtonElement, activate: () => 
     if (button.disabled) return;
     pointerActivatedAt = performance.now();
     const suppressCompatibilityClick = (click: MouseEvent) => {
-      if (click.detail === 0 || performance.now() - pointerActivatedAt >= 800) return;
+      // 일부 모바일 WebView의 터치 합성 click은 detail=0이라 키보드 click처럼 보인다.
+      // 실제 브라우저 이벤트(isTrusted)만 막고 element.click() 같은 프로그램 동작은 유지한다.
+      if (!click.isTrusted || performance.now() - pointerActivatedAt >= 800) return;
       click.preventDefault();
       click.stopImmediatePropagation();
       window.removeEventListener('click', suppressCompatibilityClick, true);
@@ -55,8 +57,7 @@ export function bindButtonActivation(button: HTMLButtonElement, activate: () => 
 
   button.addEventListener('click', (event) => {
     event.stopPropagation();
-    // Keyboard/programmatic clicks have detail 0 and must remain available.
-    if (event.detail > 0 && performance.now() - pointerActivatedAt < 800) return;
+    if (event.isTrusted && performance.now() - pointerActivatedAt < 800) return;
     activate();
   });
 }
