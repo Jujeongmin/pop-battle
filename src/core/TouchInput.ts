@@ -97,7 +97,9 @@ export class TouchInput {
   private readonly buttons = new Map<ButtonKind, HTMLButtonElement>();
   private movePointer = -1;
   private lookPointer = -1;
+  private lookNeedsBaseline = false;
   private firePointer = -1;
+  private fireNeedsBaseline = false;
   private fireMode: FireMode = 'rifle';
   private fireLong = false;
   private firePulse = false;
@@ -260,6 +262,7 @@ export class TouchInput {
   setLobbyMode(on: boolean): void {
     this.lobby = on;
     this.lookPointer = -1;
+    this.lookNeedsBaseline = false;
     this.root.classList.toggle('lobby', on);
     if (on) {
       this.cancelFire();
@@ -310,6 +313,7 @@ export class TouchInput {
 
   private releaseAll(): void {
     this.movePointer = this.lookPointer = -1;
+    this.lookNeedsBaseline = false;
     this.cancelFire();
     this.resetStick();
     for (const b of this.buttons.values()) b.classList.remove('down');
@@ -319,6 +323,7 @@ export class TouchInput {
     if (this.fireHoldTimer !== null) window.clearTimeout(this.fireHoldTimer);
     this.fireHoldTimer = null;
     this.firePointer = -1;
+    this.fireNeedsBaseline = false;
     this.fireLong = false;
     this.firePulse = false;
     this.automaticFire = false;
@@ -375,6 +380,7 @@ export class TouchInput {
       this.lookPointer = e.pointerId;
       this.lastLook.x = p.x;
       this.lastLook.y = p.y;
+      this.lookNeedsBaseline = true;
     } else {
       return;
     }
@@ -392,6 +398,7 @@ export class TouchInput {
       if (p.x < viewW() * MOVE_ZONE) continue;
       this.lastLook.x = p.x;
       this.lastLook.y = p.y;
+      this.lookNeedsBaseline = true;
       break;
     }
   };
@@ -402,6 +409,12 @@ export class TouchInput {
     if (e.pointerId === this.movePointer) {
       this.updateStick(p.x, p.y);
     } else if (e.pointerId === this.lookPointer) {
+      if (this.lookNeedsBaseline) {
+        this.lastLook.x = p.x;
+        this.lastLook.y = p.y;
+        this.lookNeedsBaseline = false;
+        return;
+      }
       this.addLook(p.x - this.lastLook.x, p.y - this.lastLook.y);
       this.lastLook.x = p.x;
       this.lastLook.y = p.y;
@@ -414,6 +427,7 @@ export class TouchInput {
       this.resetStick();
     } else if (e.pointerId === this.lookPointer) {
       this.lookPointer = -1;
+      this.lookNeedsBaseline = false;
     }
   };
 
@@ -451,6 +465,7 @@ export class TouchInput {
     switch (kind) {
       case 'fire':
         this.firePointer = e.pointerId;
+        this.fireNeedsBaseline = true;
         {
           const p = toGame(e.clientX, e.clientY);
           this.lastFire.x = p.x;
@@ -475,6 +490,12 @@ export class TouchInput {
     if (kind !== 'fire' || e.pointerId !== this.firePointer) return;
     e.stopPropagation();
     const p = toGame(e.clientX, e.clientY);
+    if (this.fireNeedsBaseline) {
+      this.lastFire.x = p.x;
+      this.lastFire.y = p.y;
+      this.fireNeedsBaseline = false;
+      return;
+    }
     this.addLook(p.x - this.lastFire.x, p.y - this.lastFire.y);
     this.lastFire.x = p.x;
     this.lastFire.y = p.y;
@@ -490,6 +511,7 @@ export class TouchInput {
       if (this.fireHoldTimer !== null) window.clearTimeout(this.fireHoldTimer);
       this.fireHoldTimer = null;
       this.firePointer = -1;
+      this.fireNeedsBaseline = false;
       this.state.fireHeld = false;
       this.automaticFire = false;
       if (
