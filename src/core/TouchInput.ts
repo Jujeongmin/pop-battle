@@ -30,8 +30,10 @@ const STICK_RADIUS = 58;
 const STICK_DEADZONE = 0.12;
 /** 화면 왼쪽 이 비율까지 = 조이스틱 영역 */
 const MOVE_ZONE = 0.42;
+const FIRE_HOLD_MS = 200;
 
 type ButtonKind = 'fire' | 'ads' | 'jump' | 'slide' | 'reload';
+type FireMode = 'rifle' | 'shotgun' | 'sniper' | 'pistol' | 'direct';
 
 function loadSettings(): TouchSettings {
   try {
@@ -85,6 +87,10 @@ export class TouchInput {
   active = false;
   /** 일시정지 버튼 */
   onPause: (() => void) | null = null;
+  /** 사격 버튼 홀드가 요청한 ADS 상태. Game이 적용한 뒤 endFrame에서 비운다. */
+  aimRequest: boolean | null = null;
+  /** 권총 길게 누르기만 반자동 무기를 기존 RPM으로 반복 발사한다. */
+  automaticFire = false;
 
   private readonly stick = el('div', 'tc-stick');
   private readonly knob = el('div', 'tc-knob');
@@ -92,6 +98,10 @@ export class TouchInput {
   private movePointer = -1;
   private lookPointer = -1;
   private firePointer = -1;
+  private fireMode: FireMode = 'rifle';
+  private fireLong = false;
+  private firePulse = false;
+  private fireHoldTimer: number | null = null;
   private readonly moveOrigin = { x: 0, y: 0 };
   private readonly lastLook = { x: 0, y: 0 };
   private readonly lastFire = { x: 0, y: 0 };
@@ -231,6 +241,12 @@ export class TouchInput {
     if (this.active) this.state.slotPressed = slot;
   }
 
+  /** 무기 교체 시 진행 중인 모바일 사격을 발사 없이 취소한다. */
+  setWeapon(id: string): void {
+    this.cancelFire();
+    this.fireMode = id === 'rifle' ? 'rifle' : id === 'shotgun' ? 'shotgun' : id === 'sniper' ? 'sniper' : id === 'pistol' ? 'pistol' : 'direct';
+  }
+
   /** 재장전 중 표시 (버튼 회전) */
   setReloading(on: boolean): void {
     this.buttons.get('reload')?.classList.toggle('busy', on);
@@ -247,8 +263,7 @@ export class TouchInput {
     this.lookPointer = -1;
     this.root.classList.toggle('lobby', on);
     if (on) {
-      this.firePointer = -1;
-      this.state.fireHeld = false;
+      this.cancelFire();
     }
   }
 
@@ -266,6 +281,11 @@ export class TouchInput {
     s.aimTogglePressed = false;
     s.reloadPressed = false;
     s.slotPressed = 0;
+    this.aimRequest = null;
+    if (this.firePulse) {
+      this.firePulse = false;
+      s.fireHeld = this.firePointer >= 0 && (this.fireMode === 'rifle' || this.fireMode === 'direct');
+    }
   }
 
   dispose(): void {
@@ -290,10 +310,39 @@ export class TouchInput {
   }
 
   private releaseAll(): void {
-    this.movePointer = this.lookPointer = this.firePointer = -1;
+    this.movePointer = this.lookPointer = -1;
+    this.cancelFire();
     this.resetStick();
-    this.state.fireHeld = false;
     for (const b of this.buttons.values()) b.classList.remove('down');
+  }
+
+  private cancelFire(): void {
+    if (this.fireHoldTimer !== null) window.clearTimeout(this.fireHoldTimer);
+    this.fireHoldTimer = null;
+    this.firePointer = -1;
+    this.fireLong = false;
+    this.firePulse = false;
+    this.automaticFire = false;
+    this.state.fireHeld = false;
+    this.aimRequest = false;
+  }
+
+  private startFireHold(pointerId: number): void {
+    this.fireHoldTimer = window.setTimeout(() => {
+      this.fireHoldTimer = null;
+      if (this.firePointer !== pointerId) return;
+      this.fireLong = true;
+      this.aimRequest = true;
+      if (this.fireMode === 'pistol') {
+        this.automaticFire = true;
+        this.state.fireHeld = true;
+      }
+    }, FIRE_HOLD_MS);
+  }
+
+  private pulseFire(): void {
+    this.firePulse = true;
+    this.state.fireHeld = true;
   }
 
   private resetStick(): void {
@@ -392,7 +441,12 @@ export class TouchInput {
           this.lastFire.x = p.x;
           this.lastFire.y = p.y;
         }
-        this.state.fireHeld = true;
+        this.fireLong = false;
+        this.firePulse = this.fireMode === 'rifle' || this.fireMode === 'direct';
+        this.automaticFire = false;
+        this.state.fireHeld = this.fireMode === 'rifle' || this.fireMode === 'direct';
+        if (this.fireMode === 'sniper') this.aimRequest = true;
+        else if (this.fireMode !== 'direct') this.startFireHold(e.pointerId);
         break;
       case 'ads': this.state.aimTogglePressed = true; break;
       case 'jump': this.state.jumpPressed = true; break;
@@ -417,8 +471,19 @@ export class TouchInput {
     if (kind === 'fire' && e.pointerId !== this.firePointer) return;
     b.classList.remove('down');
     if (kind === 'fire' && e.pointerId === this.firePointer) {
+      const cancelled = e.type !== 'pointerup';
+      if (this.fireHoldTimer !== null) window.clearTimeout(this.fireHoldTimer);
+      this.fireHoldTimer = null;
       this.firePointer = -1;
       this.state.fireHeld = false;
+      this.automaticFire = false;
+      if (
+        !cancelled &&
+        (this.fireMode === 'shotgun' || this.fireMode === 'sniper' || (this.fireMode === 'pistol' && !this.fireLong) ||
+          ((this.fireMode === 'rifle' || this.fireMode === 'direct') && this.firePulse))
+      ) this.pulseFire();
+      if (this.fireMode !== 'direct') this.aimRequest = false;
+      this.fireLong = false;
     }
   }
 }

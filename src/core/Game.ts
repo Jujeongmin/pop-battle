@@ -643,6 +643,7 @@ export class Game {
       onDryFire: () => this.audio.play('dryFire'),
       onRecoil: (p, y, ratio, sharp) => this.tpsCamera.addRecoil(p, y, ratio, sharp),
     });
+    this.input.touch.setWeapon(this.weapons.def.id);
 
     const targetSpecs = [
       { name: '표적 분홍', position: new THREE.Vector3(-3, 0, 14), color: 0xff9ec7 },
@@ -956,7 +957,11 @@ export class Game {
       sliding: p.isSliding,
       reloading: this.weapons.weapon.reloading,
     });
-    if (canAct && input.aimTogglePressed && this.weapons.ready) {
+    const touchAim = this.input.touchMode ? this.input.touch.aimRequest : null;
+    if (touchAim !== null && (!touchAim || (canAct && this.weapons.ready))) {
+      if (this.weapons.reaimPending) this.weapons.cancelReaim();
+      this.aim.set(touchAim);
+    } else if (canAct && input.aimTogglePressed && this.weapons.ready) {
       // 볼트액션 중 자동 재조준이 예약돼 있으면 우클릭 = 예약 취소 (조준하지 않음). 아니면 기존 토글
       if (this.weapons.reaimPending) this.weapons.cancelReaim();
       else this.aim.toggle();
@@ -1085,6 +1090,7 @@ export class Game {
     const weaponFrame = {
       dt,
       triggerHeld: input.fireHeld,
+      automaticTrigger: this.input.touchMode && this.input.touch.automaticFire,
       reloadPressed: input.reloadPressed,
       canAct,
       camera: cam,
@@ -1364,6 +1370,9 @@ export class Game {
     if (!def || (index === this.slotIndex && !force)) return;
     if (!force) this.audio.play('weaponSwitch');
     this.slotIndex = index;
+    this.input.touch.setWeapon(def.id);
+    // beginFrame에서 이미 복사된 터치 방아쇠도 같은 프레임에 비워 새 무기가 발사되지 않게 한다. PC 입력은 유지한다.
+    if (this.input.touchMode) this.input.state.fireHeld = false;
     this.weapons.equip(def);
     this.avatar.setWeapon(this.weaponModels.get(def), def.mount);
   }

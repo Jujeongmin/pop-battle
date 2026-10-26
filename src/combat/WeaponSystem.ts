@@ -27,6 +27,8 @@ export interface ShotPrediction {
 export interface WeaponFrame {
   dt: number;
   triggerHeld: boolean;
+  /** 모바일 권총 길게 누르기: 무기 자체 RPM을 유지하며 반자동 트리거를 반복한다. */
+  automaticTrigger?: boolean;
   reloadPressed: boolean;
   canAct: boolean;
   camera: THREE.PerspectiveCamera;
@@ -245,7 +247,7 @@ export class WeaponSystem {
     if (f.canAct && f.reloadPressed) this.requestReload();
     // 교체 중에는 발사 불가. 방아쇠 상태는 계속 넘겨 반자동 무기는 교체 후 다시 눌러야 발사
     const triggerHeld = f.canAct && f.triggerHeld;
-    const result = w.update(f.dt, triggerHeld, { now: this.clock, canFire: this.ready });
+    const result = w.update(f.dt, triggerHeld, { now: this.clock, canFire: this.ready, automatic: f.automaticTrigger });
     if (result.reloadFinished) this.cb.onReload?.('end');
     // 빈 탄창으로 방아쇠 → 자동 재장전 (예비 탄약이 없으면 Weapon.canReload가 막는다)
     if (result.dryFire) {

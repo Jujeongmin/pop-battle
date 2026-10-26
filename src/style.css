@@ -578,6 +578,8 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 .tc-fire.down { background-color: #ff3d63; box-shadow: 0 1px 0 rgba(170, 30, 66, .5), 0 0 0 6px rgba(255, 84, 116, .38), inset 0 3px 6px rgba(120, 10, 40, .3); }
 .tc-jump { right: calc(var(--safe-r) + 20px * var(--tu)); bottom: calc(var(--safe-b) + (30px + 92px * var(--btn) + 16px) * var(--tu)); }
 .tc-ads { --s: 64px; right: calc(var(--safe-r) + (26px + 92px * var(--btn) + 12px) * var(--tu)); bottom: calc(var(--safe-b) + (30px + 66px * var(--btn)) * var(--tu)); }
+/* 모바일 ADS는 사격 버튼 홀드에 통합한다. */
+.touch-layer .tc-ads { display: none; }
 /* 켜짐(ADS 조준 중): 불투명 노랑 + 노란 고리 */
 .tc-ads.on { background-color: var(--yellow); box-shadow: 0 4px 0 rgba(176, 120, 0, .45), 0 0 0 3px rgba(255, 212, 94, .5), inset 0 -3px 0 rgba(176, 120, 0, .15); }
 .tc-ads.on.down { box-shadow: 0 1px 0 rgba(176, 120, 0, .45), 0 0 0 3px rgba(255, 212, 94, .5), inset 0 2px 5px rgba(176, 120, 0, .25); }
