@@ -4,6 +4,7 @@ import { RIFLE, RIFLE_MOUNT } from './config/weapons';
 import { Game } from './core/Game';
 import { installUiDebug } from './ui/UiDebug';
 import { installScreenRotation } from './core/screenRotation';
+import { installTranslator } from './i18n/translate';
 
 const app = document.getElementById('app')!;
 // 이미지·글자를 끌어 옮기지 못하게 (Firefox는 CSS user-drag가 없어 이벤트로). 입력칸은 그대로
@@ -12,6 +13,8 @@ document.addEventListener('dragstart', (e) => {
 });
 // 세로로 든 터치 기기에서도 가로형으로 (게임을 만들기 전에 #app 크기를 정해 둠)
 installScreenRotation(app);
+// 언어 (설정 > 일반 > 언어): 영어면 화면 글자를 표시 직전에 사전으로 바꿈. 게임 UI가 만들어지기 전에 감시 시작
+installTranslator(document.body);
 const loading = document.getElementById('loading');
 
 const game = new Game(app);

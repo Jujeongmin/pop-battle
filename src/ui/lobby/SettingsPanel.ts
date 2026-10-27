@@ -1,5 +1,6 @@
 // SETTINGS: 실제로 적용되는 항목만 슬라이더 (사운드 크기·마우스 감도·모바일 터치), 그래픽은 준비 중. 값은 이 기기에 저장
 import { fullscreenAvailable, isExpanded, onExpandChange, setExpanded } from '../FullscreenPrompt';
+import { getLang, setLang, type Lang } from '../../i18n/lang';
 import { button, el, slider, type LobbyHost, type LobbyPanel } from './lobbyDom';
 import { nicknameEditor } from './nicknameUi';
 
@@ -156,8 +157,37 @@ export class SettingsPanel implements LobbyPanel {
     gfx.setAttribute('aria-disabled', 'true');
     gfx.append(el('span', 'lb-slider-label', '그래픽 품질'), el('span', 'lb-set-soon-text', '다음 업데이트'), el('span', 'lb-slider-val', '준비 중'));
     left.appendChild(gfx);
+    left.append(el('div', 'lb-section', '언어'), this.languageRow());
     this.groupGeneral(left);
     select(this.tab);
+  }
+
+  /** 언어: 한국어 / English (누르면 화면 전체 즉시 번역, 이 기기에 기억 — i18n/lang.ts) */
+  private languageRow(): HTMLElement {
+    const row = el('div', 'lb-lang-row');
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', '언어');
+    const items: Array<[Lang, HTMLButtonElement]> = [];
+    const sync = (): void => {
+      for (const [lang, b] of items) {
+        const on = getLang() === lang;
+        b.classList.toggle('lb-active', on);
+        b.setAttribute('aria-checked', String(on));
+      }
+    };
+    for (const [lang, label] of [['ko', '한국어'], ['en', 'English']] as const) {
+      const b = button(label, 'lb-lang-btn', () => {
+        setLang(lang);
+        sync();
+      });
+      b.setAttribute('role', 'radio');
+      // 언어 이름은 어느 언어에서나 그대로
+      b.dataset.i18nSkip = '';
+      items.push([lang, b]);
+      row.append(b);
+    }
+    sync();
+    return row;
   }
 
   /** 일반 탭: 제목(lb-section)마다 카드로 묶고 넓은 화면에서 2열 (닉네임·화면 | 사운드) */
@@ -173,8 +203,8 @@ export class SettingsPanel implements LobbyPanel {
     }
     const a = el('div', 'lb-set-stack');
     const b = el('div', 'lb-set-stack');
-    for (const k of ['닉네임', '화면']) if (groups.has(k)) a.append(groups.get(k)!);
-    for (const [k, g] of groups) if (k !== '닉네임' && k !== '화면') b.append(g);
+    for (const k of ['닉네임', '화면', '언어']) if (groups.has(k)) a.append(groups.get(k)!);
+    for (const [k, g] of groups) if (k !== '닉네임' && k !== '화면' && k !== '언어') b.append(g);
     page.textContent = '';
     page.classList.add('lb-settings-general');
     page.append(a, b);

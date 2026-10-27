@@ -491,6 +491,9 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   box-shadow: var(--toy-shadow); color: #fff; font-weight: 900; font-size: calc(22px * var(--u)); opacity: 0; white-space: nowrap;
 }
 .death.show { opacity: 1; }
+/* 쓰러짐 패널은 머리 위 이름·체력(.labels, DOM에서 뒤)보다 위. 쓰러진 동안 이름·체력은 숨김 */
+.death { z-index: 5; }
+.hud.player-dead .labels { visibility: hidden; }
 .death span { font-size: max(10px, calc(13px * var(--u))); opacity: .9; }
 
 /* 좁은·낮은 화면: 슬롯 이름 숨기고 아이콘만 */

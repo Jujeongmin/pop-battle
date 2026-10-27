@@ -789,6 +789,8 @@ export class Hud {
     this.updateReload(f);
     this.adsTag.classList.toggle('show', f.aiming);
     this.death.classList.toggle('show', f.dead);
+    // 쓰러진 동안 적 이름·체력 표시(.labels)는 숨김 → 쓰러짐 패널을 가리지 않게
+    this.root.classList.toggle('player-dead', f.dead);
     if (f.dead) {
       this.death.querySelector('b')!.textContent = f.killedBy ? `${f.killedBy}에게 쓰러짐!` : '쓰러짐!';
       this.death.querySelector('span')!.textContent = `${f.respawnIn.toFixed(1)}초 후 부활`;

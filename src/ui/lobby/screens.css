@@ -1106,6 +1106,10 @@
 .lb-lobby .lb-set-group .lb-settings-note { margin: 0 2px; }
 .lb-lobby .lb-set-soon { opacity: .75; }
 .lb-lobby .lb-set-soon .lb-set-soon-text { color: var(--lb-ink2); font-size: 12px; font-weight: 800; }
+/* 언어: 한국어 / English 두 칸 (고른 쪽 노랑) */
+.lb-lobby .lb-lang-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lb-lobby .lb-lang-row .lb-lang-btn { min-height: 36px; padding: 4px 10px; font-size: 14px; }
+.lb-lobby .lb-lang-row .lb-lang-btn.lb-active { background: var(--lb-yellow); }
 @media (min-width: 900px) {
   .lb-lobby .lb-settings-general:not([hidden]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; }
 }
