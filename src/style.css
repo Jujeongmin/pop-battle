@@ -17,11 +17,7 @@ img, svg, canvas { -webkit-user-drag: none; user-drag: none; }
 input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * { -webkit-user-select: text; user-select: text; }
 #app canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-#loading {
-  position: fixed; inset: 0; display: grid; place-items: center;
-  font-size: 22px; font-weight: 800; background: #bfe3ff; z-index: 50;
-}
-#loading.error { color: #c0304a; padding: 24px; text-align: center; font-size: 16px; }
+/* 첫 로딩 화면: src/ui/loading/loading.css (index.html에서 바로) */
 
 .hud { position: absolute; inset: 0; pointer-events: none; user-select: none; }
 

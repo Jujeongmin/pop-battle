@@ -3,6 +3,7 @@ import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { BOT_CHARACTERS, CHARACTERS, PLAYER_CHARACTER, type CharacterId } from '../config/characters';
 import { ASSETS } from '../config/gameConfig';
 import { WEAPONS } from '../config/weapons';
+import type { TrackFile } from '../core/loadProgress';
 
 export interface LoadedModel {
   scene: THREE.Object3D;
@@ -19,9 +20,12 @@ export interface GameAssets {
 }
 
 /** GLB 로드. 파일이 없거나 손상되면 대체 모델을 만들지 않고 오류를 그대로 올린다. */
-async function loadGlb(loader: GLTFLoader, url: string, label: string): Promise<GLTF> {
+async function loadGlb(loader: GLTFLoader, url: string, label: string, track?: TrackFile): Promise<GLTF> {
+  const t = track?.(url);
   try {
-    return await loader.loadAsync(url);
+    const gltf = await loader.loadAsync(url, t ? (e) => t.progress(e) : undefined);
+    t?.done();
+    return gltf;
   } catch (err) {
     throw new Error(`${label} GLB 로드 실패 (${url}): ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -45,16 +49,17 @@ export async function loadCharacterModel(renderer: THREE.WebGLRenderer, id: Char
   return { scene: gltf.scene, clips: gltf.animations };
 }
 
-export async function loadGameAssets(renderer: THREE.WebGLRenderer): Promise<GameAssets> {
+/** 첫 로딩 GLB 전부 (track: 파일별 받은 바이트 → 로딩 화면 진행률) */
+export async function loadGameAssets(renderer: THREE.WebGLRenderer, track?: TrackFile): Promise<GameAssets> {
   const loader = new GLTFLoader();
   const extra = Object.values(WEAPONS).filter((w) => w.model.glb && w.model.glb !== ASSETS.rifle);
   // 봇 캐릭터 중 플레이어와 다른 것만 따로 로드 (같은 캐릭터는 복제)
   const otherIds = [...new Set(BOT_CHARACTERS)].filter((id) => id !== PLAYER_CHARACTER);
   const [character, rifle, ...rest] = await Promise.all([
-    loadGlb(loader, ASSETS.character, '캐릭터'),
-    loadGlb(loader, ASSETS.rifle, '라이플'),
-    ...otherIds.map((id) => loadGlb(loader, CHARACTERS[id].file, `캐릭터 ${CHARACTERS[id].name}`)),
-    ...extra.map((w) => loadGlb(loader, w.model.glb!, w.name)),
+    loadGlb(loader, ASSETS.character, '캐릭터', track),
+    loadGlb(loader, ASSETS.rifle, '라이플', track),
+    ...otherIds.map((id) => loadGlb(loader, CHARACTERS[id].file, `캐릭터 ${CHARACTERS[id].name}`, track)),
+    ...extra.map((w) => loadGlb(loader, w.model.glb!, w.name, track)),
   ]);
   const otherGltfs = rest.slice(0, otherIds.length);
   const weaponGltfs = rest.slice(otherIds.length);

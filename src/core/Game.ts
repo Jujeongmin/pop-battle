@@ -107,6 +107,7 @@ import { fromNetResult, fromPracticeResult } from '../result/resultData';
 import { ResultStage } from '../result/ResultStage';
 import { ResultScreen } from '../ui/result/ResultScreen';
 import { GameInput } from './GameInput';
+import type { LoadReporter } from './loadProgress';
 import { JoystickAutoSprint } from './JoystickAutoSprint';
 
 /** 새로고침 뒤 메뉴에 "이전 방 다시 입장"을 보이기 위한 마지막 룸 (NetSession과 같은 키, 탭 단위) */
@@ -123,6 +124,20 @@ function isNickReason(r: unknown): r is NickFailReason | 'rate' | 'taken' {
 }
 
 /** ms 안에 끝나지 않으면 실패 (서버 응답이 없을 때 화면이 멈춰 있지 않게) */
+/** 화면 프레임 n장 뒤 (탭이 숨겨져 RAF가 멈춰도 1초 안에는 넘어감) */
+function nextFrames(n: number): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, 1000);
+    const step = (left: number): void => {
+      if (left <= 0) {
+        clearTimeout(t);
+        resolve();
+      } else requestAnimationFrame(() => step(left - 1));
+    };
+    step(n);
+  });
+}
+
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout')), ms);
@@ -550,20 +565,21 @@ export class Game {
     sb.update({ teams: false, label: '연습전 · 개인전', timeLeft: m.timeLeft, blue: 0, red: 0, goal: m.rules.scoreToWin, rows });
   }
 
-  async init(onProgress: (text: string) => void): Promise<void> {
-    onProgress('물리 엔진 초기화…');
+  /** 첫 로딩: 단계·파일 바이트를 progress로 보고. 끝나면 첫 화면이 이미 그려진 상태 (로딩 화면을 걷기만 하면 됨) */
+  async init(progress: LoadReporter): Promise<void> {
+    progress.stage('engine');
     await initRapier();
     this.physics = new Physics(RENDER.fixedStep);
 
-    onProgress('3D 에셋 로딩…');
-    const assets = await loadGameAssets(this.renderer);
+    progress.stage('assets');
+    const assets = await loadGameAssets(this.renderer, progress.files());
 
-    onProgress('맵 불러오는 중…');
+    progress.stage('map');
     // 맵 선택: 기본 POP! ARENA, ?map=test 이면 기존 테스트 맵 (둘 중 하나만 생성)
     this.map =
       MAP_ID === 'test'
         ? new TestMap(this.scene, this.physics)
-        : await ArenaMap.create(this.scene, this.physics, new GLTFLoader(), Math.min(4, this.renderer.capabilities.getMaxAnisotropy()));
+        : await ArenaMap.create(this.scene, this.physics, new GLTFLoader(), Math.min(4, this.renderer.capabilities.getMaxAnisotropy()), progress.files());
     const firstSpawn = this.map.spawns.teamA[0]!;
     const spawn = new THREE.Vector3(firstSpawn.x, firstSpawn.y + 0.7, firstSpawn.z);
     this.player = new PlayerController(this.physics, spawn);
@@ -669,7 +685,7 @@ export class Game {
     const allSpawns = [...this.map.spawns.teamA, ...this.map.spawns.teamB];
     this.spawnPool = rules.spawns === 'all' ? allSpawns : this.map.spawns.teamA;
 
-    onProgress('봇 준비…');
+    progress.stage('setup');
     // 이동 격자는 Rapier 형상 검사로 굽는다 → 맵 콜라이더가 쿼리 구조에 들어간 뒤(물리 1스텝 후)에 만들어야 함
     this.physics.step();
     this.bots = new BotManager(this.physics, this.scene, botSources, RIFLE_MOUNT, RIFLE, this.combatant, {
@@ -708,7 +724,7 @@ export class Game {
     this.bots.hold = true;
 
     // 외형: 캐릭터별 팀 마스크(캐릭터당 1장) + 인스턴스별 머티리얼 패치. FFA는 원래 색
-    onProgress('캐릭터 외형…');
+    progress.part(0.4);
     {
       const [mask, deadEyes] = await Promise.all([loadTeamMask(CHARACTERS[PLAYER_CHARACTER]), this.loadDeadEyesSafe(PLAYER_CHARACTER)]);
       this.appearances.set(this.combatant.id, this.createAppearance(this.avatar.bodyMeshes, PLAYER_CHARACTER, mask, deadEyes));
@@ -717,6 +733,7 @@ export class Game {
     this.setTeamPreview(TEAM_PREVIEW);
     // 첫 스폰도 리스폰과 같은 규칙 (봇이 생긴 뒤 위치 확정)
     this.placeAtSpawn(this.pickPlayerSpawn());
+    progress.part(0.7);
 
     const pv = this.poseView;
     this.debugPanel = new DebugPanel(
@@ -821,8 +838,30 @@ export class Game {
     this.physics.step();
     this.resize();
     this.resizeObserver.observe(this.container);
+    progress.part(1);
+    await this.prepareFirstFrame(progress);
     this.timer.connect(document);
     this.loop();
+    // 로딩 화면 뒤에서 실제 프레임 두 장 (그림자 맵·남은 셰이더·텍스처 업로드) → 걷었을 때 바로 매끄럽게
+    await nextFrames(2);
+    progress.part(1);
+  }
+
+  /**
+   * 첫 화면 준비 (로딩 화면 마지막 단계): 셰이더를 미리 컴파일하고 로비 첫 화면에 바로 쓰는 글꼴·내 캐릭터 초상화를 준비.
+   * 어느 것이 실패·지연돼도 게임은 시작 (보이는 품질만 늦게 맞춰짐) — 각각 시간 제한
+   */
+  private async prepareFirstFrame(progress: LoadReporter): Promise<void> {
+    progress.stage('render');
+    const soft = (p: Promise<unknown> | undefined, ms: number): Promise<unknown> => (p ? withTimeout(p, ms).catch(() => undefined) : Promise.resolve());
+    // 제목·버튼 글꼴 (toy.css 'POP Jua') + 로비 프로필 초상화 (같은 렌더러로 한 번 그려 캐시)
+    const fonts = soft(document.fonts?.load("16px 'POP Jua'"), 5000);
+    const portrait = soft(this.characterArt.portrait(this.avatar.character.id), 5000);
+    // 장면 전체 셰이더 (병렬 컴파일 확장이 있으면 기다리는 동안 화면이 멈추지 않음)
+    await soft(this.renderer.compileAsync(this.scene, this.tpsCamera.camera), 10000);
+    progress.part(0.6);
+    await Promise.all([fonts, portrait]);
+    progress.part(0.8);
   }
 
   private readonly loop = (time?: number): void => {

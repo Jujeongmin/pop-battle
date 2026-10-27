@@ -3,6 +3,7 @@ import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RENDER } from '../../config/gameConfig';
 import type { GraphicsPreset } from '../../config/graphics';
 import { ARENA, ARENA_MODELS, plain, type ArenaModelKey } from '../../config/maps';
+import type { TrackFile } from '../../core/loadProgress';
 import type { Physics } from '../../physics/Physics';
 import type { GameMap, MapSpawns, NavBounds } from '../GameMap';
 import { ArenaBackdrop } from './ArenaBackdrop';
@@ -147,13 +148,15 @@ export class ArenaMap implements GameMap {
   }
 
   /** 키트 GLB를 불러온 뒤 맵 생성. 모델 파일이 없거나 손상되면 오류를 그대로 올린다 (대체 도형 없음) */
-  static async create(scene: THREE.Scene, physics: Physics, loader: GLTFLoader, anisotropy: number): Promise<ArenaMap> {
+  static async create(scene: THREE.Scene, physics: Physics, loader: GLTFLoader, anisotropy: number, track?: TrackFile): Promise<ArenaMap> {
     const entries = await Promise.all(
       (Object.keys(ARENA_MODELS) as ArenaModelKey[]).map(async (key) => {
         const url = ARENA_MODELS[key];
+        const t = track?.(url);
         let gltf;
         try {
-          gltf = await loader.loadAsync(url);
+          gltf = await loader.loadAsync(url, t ? (e) => t.progress(e) : undefined);
+          t?.done();
         } catch (err) {
           throw new Error(`맵 모델 로드 실패 (${url}): ${err instanceof Error ? err.message : String(err)}`);
         }

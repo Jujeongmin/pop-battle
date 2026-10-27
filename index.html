@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>POP! BATTLE — TPS Prototype</title>
+    <link rel="stylesheet" href="./src/ui/loading/loading.css" />
     <script>
       // Verse8 플랫폼(iframe)에 게임 크기 알림 (Agent8 기본 템플릿과 같은 방식)
       (function () {
@@ -21,8 +22,73 @@
     </script>
   </head>
   <body>
-    <div id="app"></div>
-    <div id="loading">로딩 중…</div>
+    <div id="app">
+      <!-- 첫 로딩 화면: 게임 코드가 오기 전부터 보임 (동작 src/ui/loading/LoadingScreen.ts, 그림 원본 art-src/loading/) -->
+      <div id="loading" class="ld" data-boot-share="0.2" data-i18n-skip role="progressbar" aria-label="POP! BATTLE" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <img class="ld-backdrop" src="./src/ui/loading/loading-bg-960.webp" alt="" aria-hidden="true" decoding="async" />
+        <img
+          class="ld-art"
+          src="./src/ui/loading/loading-bg.webp"
+          srcset="./src/ui/loading/loading-bg-960.webp 960w, ./src/ui/loading/loading-bg.webp 1672w"
+          sizes="100vw"
+          alt=""
+          fetchpriority="high"
+          decoding="async"
+        />
+        <img class="ld-logo" src="./src/ui/loading/logo.svg" alt="POP! BATTLE" />
+        <div class="ld-foot">
+          <div class="ld-status"><span class="ld-text">불러오는 중…</span><b class="ld-pct">0%</b></div>
+          <div class="ld-bar"><i class="ld-fill"></i></div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // 로딩 글 언어: 게임 코드가 오기 전이라 저장값·브라우저 언어로 직접 (i18n/lang.ts와 같은 규칙)
+      (function () {
+        var l = null;
+        try {
+          l = localStorage.getItem('popbattle.lang');
+        } catch (e) {}
+        if (l !== 'ko' && l !== 'en') {
+          var ls = (navigator.languages || []).concat([navigator.language]);
+          l = ls.some(function (x) { return typeof x === 'string' && x.toLowerCase().indexOf('ko') === 0; }) ? 'ko' : 'en';
+        }
+        document.documentElement.lang = l;
+        var root = document.getElementById('loading');
+        if (l === 'en') root.querySelector('.ld-text').textContent = 'Loading…';
+        // 게임 파일(JS 청크) 받기 진행: 빌드가 적어 둔 청크 크기(data-boot) 중 다 받은 것의 비율 → 바의 앞부분(data-boot-share)
+        // 게임 코드가 시작되면 LoadingScreen이 이어받음 (window.__popBoot)
+        var sizes = {};
+        try {
+          sizes = JSON.parse(root.getAttribute('data-boot') || '{}');
+        } catch (e) {}
+        var files = Object.keys(sizes);
+        var total = files.reduce(function (s, f) { return s + sizes[f]; }, 0);
+        if (!total || typeof PerformanceObserver === 'undefined') return;
+        var share = Number(root.getAttribute('data-boot-share')) || 0;
+        var done = {};
+        var boot = (window.__popBoot = { frac: 0 });
+        var fill = root.querySelector('.ld-fill');
+        var pct = root.querySelector('.ld-pct');
+        var seen = function (list) {
+          list.forEach(function (e) {
+            files.forEach(function (f) {
+              if (!done[f] && e.name.slice(-f.length) === f) {
+                done[f] = true;
+                boot.frac += sizes[f] / total;
+              }
+            });
+          });
+          if (boot.taken) return;
+          var v = Math.min(1, boot.frac) * share;
+          fill.style.width = (v * 100).toFixed(1) + '%';
+          pct.textContent = Math.floor(v * 100) + '%';
+        };
+        try {
+          new PerformanceObserver(function (l) { seen(l.getEntries()); }).observe({ type: 'resource', buffered: true });
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
