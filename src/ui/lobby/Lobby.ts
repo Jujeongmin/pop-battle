@@ -91,6 +91,9 @@ export class Lobby {
   private nickEyebrow: HTMLElement | null = null;
   private nickTitle: HTMLElement | null = null;
   private nickCopy: HTMLElement | null = null;
+  private nickCrew: HTMLElement | null = null;
+  private nickPick: HTMLElement | null = null;
+  private nickPicking = false;
   private readonly nicknameEditor: NicknameEditor;
   private open: string | null = null;
   private menu = false;
@@ -488,12 +491,18 @@ export class Lobby {
     const card = el('section', 'lb-nickname-card');
     // 첫 입장 창 머리: 하늘 띠 + 메인 로비와 같은 로고 + 무료 캐릭터 4명 얼굴 (그라데이션 id는 로비 로고와 겹치지 않게 따로)
     const hero = el('div', 'lb-nickname-hero');
-    hero.setAttribute('aria-hidden', 'true');
     const logo = el('div', 'lb-nickname-logo');
     logo.innerHTML = LOGO_SVG.replace(/lb-logo-/g, 'lb-nick-logo-');
+    // 얼굴 = 캐릭터 고르기 (바로 장착, 나중에 CHARACTER에서 바꿀 수 있음)
     const crew = el('div', 'lb-nickname-crew');
+    crew.setAttribute('role', 'radiogroup');
+    crew.setAttribute('aria-label', '캐릭터');
     for (const id of ['blue', 'yellow', 'red', 'pink']) {
-      const face = el('span', `lb-nickname-face lb-nickname-face-${id}`);
+      const face = el('button', `lb-nickname-face lb-nickname-face-${id}`);
+      face.type = 'button';
+      face.dataset.id = id;
+      face.setAttribute('role', 'radio');
+      face.addEventListener('click', () => void this.pickNickCharacter(id));
       crew.appendChild(face);
       void this.host.characterPortrait(id).then((src) => {
         const img = document.createElement('img');
@@ -502,7 +511,12 @@ export class Lobby {
         face.appendChild(img);
       }, () => undefined);
     }
+    this.nickCrew = crew;
+    logo.setAttribute('aria-hidden', 'true');
     hero.append(logo, crew);
+    const pick = el('span', 'lb-nickname-pick');
+    this.nickPick = pick;
+    this.syncNickCrew();
     const eyebrow = el('span', 'lb-nickname-eyebrow', 'WELCOME');
     const title = el('h2', 'lb-nickname-title', '닉네임을 정해 주세요');
     this.nickEyebrow = eyebrow;
@@ -517,7 +531,7 @@ export class Lobby {
         this.refresh();
       },
     });
-    card.append(hero, eyebrow, title, copy, editor.root);
+    card.append(hero, pick, eyebrow, title, copy, editor.root);
     this.nicknameModal.appendChild(card);
     return editor;
   }
@@ -541,6 +555,7 @@ export class Lobby {
     }
     if (this.nicknameOpen) return;
     if (this.menu) this.closeMenu();
+    this.syncNickCrew();
     this.nicknameOpen = true;
     this.root.classList.add('lb-nickname-open');
     this.nicknameModal.inert = false;
@@ -550,6 +565,31 @@ export class Lobby {
     requestAnimationFrame(() => {
       if (this.visible && this.nicknameOpen) this.nicknameEditor.input.focus();
     });
+  }
+
+  /** 닉네임 창 얼굴 줄: 지금 장착한 캐릭터 표시 + 이름·역할 */
+  private syncNickCrew(): void {
+    const current = this.host.currentCharacter();
+    for (const face of this.nickCrew?.querySelectorAll<HTMLButtonElement>('.lb-nickname-face') ?? []) {
+      const on = face.dataset.id === current;
+      face.classList.toggle('lb-on', on);
+      face.setAttribute('aria-checked', String(on));
+      face.disabled = this.nickPicking;
+    }
+    const c = this.host.characters().find((ch) => ch.id === current);
+    if (this.nickPick) this.nickPick.textContent = c ? `${c.name} · ${c.role}` : '';
+  }
+
+  private async pickNickCharacter(id: string): Promise<void> {
+    if (this.nickPicking || id === this.host.currentCharacter()) return;
+    this.nickPicking = true;
+    this.syncNickCrew();
+    try {
+      await this.host.selectCharacter(id);
+    } finally {
+      this.nickPicking = false;
+      this.syncNickCrew();
+    }
   }
 
   private closeRequiredNickname(): void {
