@@ -2,7 +2,8 @@
 // - 왼쪽 영역: 떠다니는 가상 조이스틱 (아날로그, moveSource = 'joystick' → Game의 JoystickAutoSprint가 달리기 판정)
 // - 오른쪽 빈 영역: 드래그로 시점 회전 (사격 버튼을 누른 채 끌어도 회전)
 // - 오른쪽 아래 버튼: 사격(누르는 동안) · ADS 토글 · 점프 · 슬라이딩 · 재장전 / 왼쪽 위: 일시정지
-// 손가락마다 pointerId로 역할을 나눠 서로 취소하지 않음 (이동하며 회전·사격·점프 동시에).
+// 버튼 누름(사격·점프 등)은 PointerEvent, 이동·시점 드래그는 TouchEvent의 Touch.identifier 하나로만 추적한다.
+// 손가락의 역할(이동·시점·사격 버튼 시점)은 touchstart에서 정하고 그 손가락의 touchend/touchcancel까지 유지 (이동하며 회전·사격·점프 동시에).
 import { createInputState } from './Input';
 import { toGame, viewH, viewW } from './screenRotation';
 import { bindButtonActivation } from '../ui/buttonActivation';
@@ -95,11 +96,11 @@ export class TouchInput {
   private readonly stick = el('div', 'tc-stick');
   private readonly knob = el('div', 'tc-knob');
   private readonly buttons = new Map<ButtonKind, HTMLButtonElement>();
+  /** 역할별 Touch.identifier: 이동(왼쪽 빈 영역) · 시점(오른쪽 빈 영역) · 사격 버튼을 누른 채 끄는 시점 */
   private moveTouchId: number | null = null;
-  private lookPointer = -1;
-  private lookNeedsBaseline = false;
+  private lookTouchId: number | null = null;
+  private fireTouchId: number | null = null;
   private firePointer = -1;
-  private fireNeedsBaseline = false;
   private fireMode: FireMode = 'rifle';
   private fireLong = false;
   private firePulse = false;
@@ -122,7 +123,6 @@ export class TouchInput {
       b.type = 'button';
       b.setAttribute('aria-label', kind);
       b.addEventListener('pointerdown', (e) => this.onButtonDown(kind, b, e), opts);
-      b.addEventListener('pointermove', (e) => this.onButtonMove(kind, e), opts);
       for (const t of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) b.addEventListener(t, (e) => this.onButtonUp(kind, b, e), opts);
       this.buttons.set(kind, b);
       this.root.appendChild(b);
@@ -138,17 +138,12 @@ export class TouchInput {
     for (const t of ['pointerup', 'pointercancel', 'pointerleave'] as const) pause.addEventListener(t, () => pause.classList.remove('down'), opts);
     bindButtonActivation(pause, () => this.onPause?.());
     this.root.appendChild(pause);
-    // 빈 영역: 왼쪽 = 조이스틱, 오른쪽 = 시점
-    this.root.addEventListener('pointerdown', this.onAreaDown, opts);
-    // Galaxy 계열에서 같은 요소에 두 터치 포인터를 캡처하면 두 번째 캡처가 첫 번째 시점 포인터의
-    // 좌표 수명주기를 흐트러뜨릴 수 있다. 전체 창에서 pointerId별로 추적해 두 손가락을 독립시킨다.
-    window.addEventListener('pointermove', this.onAreaMove, { ...opts, capture: true });
-    for (const t of ['pointerup', 'pointercancel'] as const) window.addEventListener(t, this.onAreaUp, { ...opts, capture: true });
+    // 빈 영역: 왼쪽 = 조이스틱, 오른쪽 = 시점, 사격 버튼 = 누른 채 끌면 시점 (모두 Touch.identifier 기준)
     // iOS 사파리 핀치 확대·길게 눌러 메뉴 차단 (게임 영역에서만)
     for (const t of ['gesturestart', 'gesturechange', 'contextmenu'] as const) this.root.addEventListener(t, (e) => e.preventDefault(), opts);
-    this.root.addEventListener('touchstart', this.onNativeTouchStart, { signal: this.abort.signal, passive: false });
-    this.root.addEventListener('touchmove', this.onNativeTouchMove, { signal: this.abort.signal, passive: false });
-    for (const t of ['touchend', 'touchcancel'] as const) this.root.addEventListener(t, this.onNativeTouchEnd, { signal: this.abort.signal, passive: false });
+    this.root.addEventListener('touchstart', this.onTouchStart, { signal: this.abort.signal, passive: false });
+    this.root.addEventListener('touchmove', this.onTouchMove, { signal: this.abort.signal, passive: false });
+    for (const t of ['touchend', 'touchcancel'] as const) this.root.addEventListener(t, this.onTouchEnd, { signal: this.abort.signal, passive: false });
     window.addEventListener('blur', () => this.releaseAll(), opts);
     // 화면 크기·회전·브라우저 주소창 크기 변화 → 버튼 배율 다시 계산 (진행 중 손가락은 놓은 것으로)
     const onResize = () => this.root.style.setProperty('--tu', this.unit.toFixed(3));
@@ -263,10 +258,10 @@ export class TouchInput {
   /** 메인 로비 자유 이동: 사격·ADS·재장전·일시정지 버튼 숨김, 드래그 시점 회전 없음 (이동·점프·슬라이딩만, 메뉴는 로비 버튼) */
   setLobbyMode(on: boolean): void {
     this.lobby = on;
-    this.lookPointer = -1;
-    this.lookNeedsBaseline = false;
+    this.lookTouchId = null;
     this.root.classList.toggle('lobby', on);
     if (on) {
+      this.fireTouchId = null;
       this.cancelFire();
     }
   }
@@ -314,9 +309,9 @@ export class TouchInput {
   }
 
   private releaseAll(): void {
-    this.lookPointer = -1;
     this.moveTouchId = null;
-    this.lookNeedsBaseline = false;
+    this.lookTouchId = null;
+    this.fireTouchId = null;
     this.cancelFire();
     this.resetStick();
     for (const b of this.buttons.values()) b.classList.remove('down');
@@ -326,7 +321,6 @@ export class TouchInput {
     if (this.fireHoldTimer !== null) window.clearTimeout(this.fireHoldTimer);
     this.fireHoldTimer = null;
     this.firePointer = -1;
-    this.fireNeedsBaseline = false;
     this.fireLong = false;
     this.firePulse = false;
     this.automaticFire = false;
@@ -373,91 +367,96 @@ export class TouchInput {
     this.updateStick(x, y);
   }
 
-  private readonly onAreaDown = (e: PointerEvent): void => {
-    if (e.pointerType === 'mouse' || !this.active) return;
-    e.preventDefault();
-    // 게임 화면 좌표 (세로로 든 기기에서 돌려 그릴 때도 같은 기준)
-    const p = toGame(e.clientX, e.clientY);
-    const leftZone = p.x < viewW() * MOVE_ZONE;
-    // 이동 손가락은 native Touch.identifier만 사용한다.
-    if (leftZone) return;
-    if (this.lookPointer < 0 && !this.lobby) {
-      this.lookPointer = e.pointerId;
-      this.lastLook.x = p.x;
-      this.lastLook.y = p.y;
-      this.lookNeedsBaseline = true;
-    } else {
-      return;
-    }
-  };
-
   /**
-   * Android Chrome는 첫 손가락을 뗀 뒤 다른 손가락이 남아 있으면 재사용 pointerId의 pointerdown을
-   * 누락하는 경우가 있다. 정확히 두 손가락(기존 이동 + 새 우측 터치)인 순간에만 시점 기준점을 갱신한다.
+   * 새 손가락의 역할을 정한다. 좌표·번호는 그 손가락 자신의 Touch에서만 읽고, 시점 기준점은 닿은 위치에서 시작한다
+   * (다른 손가락의 좌표나 예전 손가락의 마지막 위치와 비교하지 않음 → 다시 닿는 순간 회전 없음).
    */
-  private readonly onNativeTouchStart = (e: TouchEvent): void => {
+  private readonly onTouchStart = (e: TouchEvent): void => {
     e.preventDefault();
     if (!this.active) return;
+    this.dropLostTouches(e.touches);
     for (const touch of e.changedTouches) {
+      const id = touch.identifier;
+      // Android는 뗀 손가락 번호를 새 손가락에 다시 준다: 끝 이벤트를 놓쳐 그 번호가 아직 역할을 갖고 있으면 여기서 끝낸다
+      this.endTouch(id);
       const p = toGame(touch.clientX, touch.clientY);
-      if (p.x < viewW() * MOVE_ZONE) {
+      const button = touch.target instanceof Element ? touch.target.closest('button') : null;
+      if (button) {
+        // 버튼 누름은 PointerEvent가 처리. 사격 버튼만 누른 채 끌면 시점 (먼저 누른 손가락 하나만)
+        if (button === this.buttons.get('fire') && this.fireTouchId === null) {
+          this.fireTouchId = id;
+          this.lastFire.x = p.x;
+          this.lastFire.y = p.y;
+        }
+      } else if (p.x < viewW() * MOVE_ZONE) {
         if (this.moveTouchId === null) {
-          this.moveTouchId = touch.identifier;
+          this.moveTouchId = id;
           this.beginStick(p.x, p.y);
         }
-      } else if (this.moveTouchId !== null && this.lookPointer >= 0 && e.touches.length === 2) {
+      } else if (this.lookTouchId === null && !this.lobby) {
+        this.lookTouchId = id;
         this.lastLook.x = p.x;
         this.lastLook.y = p.y;
-        this.lookNeedsBaseline = true;
       }
     }
   };
 
-  private readonly onNativeTouchMove = (e: TouchEvent): void => {
-    if (!this.active || this.moveTouchId === null) return;
+  private readonly onTouchMove = (e: TouchEvent): void => {
     e.preventDefault();
-    for (const touch of e.touches) {
-      if (touch.identifier !== this.moveTouchId) continue;
-      const p = toGame(touch.clientX, touch.clientY);
-      this.updateStick(p.x, p.y);
-      return;
+    if (!this.active) return;
+    this.dropLostTouches(e.touches);
+    for (const touch of e.changedTouches) {
+      const id = touch.identifier;
+      if (id === this.moveTouchId) {
+        const p = toGame(touch.clientX, touch.clientY);
+        this.updateStick(p.x, p.y);
+      } else if (id === this.lookTouchId) {
+        this.dragLook(touch, this.lastLook);
+      } else if (id === this.fireTouchId) {
+        this.dragLook(touch, this.lastFire);
+      }
     }
   };
 
-  private readonly onNativeTouchEnd = (e: TouchEvent): void => {
-    if (this.moveTouchId === null) return;
-    for (const touch of e.changedTouches) {
-      if (touch.identifier !== this.moveTouchId) continue;
-      e.preventDefault();
+  private readonly onTouchEnd = (e: TouchEvent): void => {
+    for (const touch of e.changedTouches) if (this.endTouch(touch.identifier)) e.preventDefault();
+  };
+
+  /** 이 번호의 역할을 끝냄. 역할이 있었으면 true */
+  private endTouch(id: number): boolean {
+    if (id === this.moveTouchId) {
       this.moveTouchId = null;
       this.resetStick();
-      return;
+      return true;
     }
-  };
+    if (id === this.lookTouchId) {
+      this.lookTouchId = null;
+      return true;
+    }
+    if (id === this.fireTouchId) {
+      this.fireTouchId = null;
+      return true;
+    }
+    return false;
+  }
 
-  private readonly onAreaMove = (e: PointerEvent): void => {
-    if (e.pointerType === 'mouse' || !this.active) return;
-    const p = toGame(e.clientX, e.clientY);
-    // PointerEvent는 시점에만 사용하며 이동 벡터는 절대 갱신하지 않는다.
-    if (e.pointerId === this.lookPointer) {
-      if (this.lookNeedsBaseline) {
-        this.lastLook.x = p.x;
-        this.lastLook.y = p.y;
-        this.lookNeedsBaseline = false;
-        return;
-      }
-      this.addLook(p.x - this.lastLook.x, p.y - this.lastLook.y);
-      this.lastLook.x = p.x;
-      this.lastLook.y = p.y;
+  /** 화면에 더 이상 없는 손가락의 역할을 끝냄 (touchend/touchcancel을 못 받은 경우) */
+  private dropLostTouches(touches: TouchList): void {
+    for (const id of [this.moveTouchId, this.lookTouchId, this.fireTouchId]) {
+      if (id === null) continue;
+      let down = false;
+      for (const t of touches) if (t.identifier === id) down = true;
+      if (!down) this.endTouch(id);
     }
-  };
+  }
 
-  private readonly onAreaUp = (e: PointerEvent): void => {
-    if (e.pointerId === this.lookPointer) {
-      this.lookPointer = -1;
-      this.lookNeedsBaseline = false;
-    }
-  };
+  /** 같은 손가락의 직전 위치에서 움직인 만큼만 시점 회전 */
+  private dragLook(touch: Touch, last: { x: number; y: number }): void {
+    const p = toGame(touch.clientX, touch.clientY);
+    this.addLook(p.x - last.x, p.y - last.y);
+    last.x = p.x;
+    last.y = p.y;
+  }
 
   private updateStick(x: number, y: number): void {
     const r = this.radius;
@@ -493,12 +492,6 @@ export class TouchInput {
     switch (kind) {
       case 'fire':
         this.firePointer = e.pointerId;
-        this.fireNeedsBaseline = true;
-        {
-          const p = toGame(e.clientX, e.clientY);
-          this.lastFire.x = p.x;
-          this.lastFire.y = p.y;
-        }
         this.fireLong = false;
         this.firePulse = this.fireMode === 'rifle' || this.fireMode === 'direct';
         this.automaticFire = false;
@@ -513,22 +506,6 @@ export class TouchInput {
     }
   }
 
-  /** 사격 버튼을 누른 채 끌면 시점 회전 (쏘면서 조준) */
-  private onButtonMove(kind: ButtonKind, e: PointerEvent): void {
-    if (kind !== 'fire' || e.pointerId !== this.firePointer) return;
-    e.stopPropagation();
-    const p = toGame(e.clientX, e.clientY);
-    if (this.fireNeedsBaseline) {
-      this.lastFire.x = p.x;
-      this.lastFire.y = p.y;
-      this.fireNeedsBaseline = false;
-      return;
-    }
-    this.addLook(p.x - this.lastFire.x, p.y - this.lastFire.y);
-    this.lastFire.x = p.x;
-    this.lastFire.y = p.y;
-  }
-
   private onButtonUp(kind: ButtonKind, b: HTMLButtonElement, e: PointerEvent): void {
     e.stopPropagation();
     // 무시한 두 번째 사격 손가락이 떨어져도 누르고 있는 손가락의 표시·사격은 그대로
@@ -539,7 +516,6 @@ export class TouchInput {
       if (this.fireHoldTimer !== null) window.clearTimeout(this.fireHoldTimer);
       this.fireHoldTimer = null;
       this.firePointer = -1;
-      this.fireNeedsBaseline = false;
       this.state.fireHeld = false;
       this.automaticFire = false;
       if (
