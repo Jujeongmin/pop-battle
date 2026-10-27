@@ -568,3 +568,95 @@
 
 /* 설정 탭 줄(스크롤해도 위에 고정): 바탕이 투명해 아래 내용과 겹쳐 보이던 것 → 메뉴 바탕색 띠 */
 .lb-lobby .lb-settings-tabs { background: linear-gradient(180deg, #e2f1ff 82%, rgba(226, 241, 255, 0)); }
+
+/* ================= 첫 입장 닉네임 창: 하늘 띠 머리(메인 로고 + 무료 캐릭터 4명) + 흰 판 =================
+   Kenney 흰 타일 테두리·크림 바탕 대신 다른 파스텔 창과 같은 흰→연하늘 판, 입력칸은 둥근 흰 칸 */
+.lb-lobby .lb-nickname-modal {
+  background: radial-gradient(120% 90% at 50% 25%, rgba(120, 190, 255, .38) 0%, rgba(29, 50, 112, .58) 100%);
+  backdrop-filter: blur(8px) saturate(1.1);
+}
+.lb-lobby .lb-nickname-card {
+  position: relative; width: min(440px, 100%); gap: 8px; padding: 0 26px 20px; overflow: hidden;
+  border: 3px solid #fff; border-image: none; border-radius: 30px;
+  background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%);
+  box-shadow: 0 0 0 2px #a9d0f5, 0 8px 0 rgba(110, 155, 220, .45), 0 24px 54px rgba(20, 50, 120, .36);
+  animation: lb-nick-arrive .42s cubic-bezier(.2, 1.35, .4, 1) both;
+}
+@keyframes lb-nick-arrive { from { opacity: 0; transform: translateY(22px) scale(.92); } }
+
+/* 머리: 하늘 + 구름 + 아래 둥근 언덕(판 색) */
+.lb-lobby .lb-nickname-hero {
+  position: relative; display: grid; justify-items: center; align-content: start; height: 178px; margin: 0 -26px 2px; padding-top: 12px; overflow: hidden;
+  background:
+    radial-gradient(closest-side, #fff 62%, rgba(255, 255, 255, 0)) 7% 26% / 96px 34px no-repeat,
+    radial-gradient(closest-side, #fff 62%, rgba(255, 255, 255, 0)) 15% 18% / 56px 38px no-repeat,
+    radial-gradient(closest-side, #fff 62%, rgba(255, 255, 255, 0)) 95% 44% / 104px 36px no-repeat,
+    radial-gradient(closest-side, #fff 62%, rgba(255, 255, 255, 0)) 86% 36% / 62px 42px no-repeat,
+    radial-gradient(closest-side, rgba(255, 255, 255, .7) 62%, rgba(255, 255, 255, 0)) 30% 62% / 70px 22px no-repeat,
+    linear-gradient(180deg, #3b8fec 0%, #6fb5f8 58%, #b5dcff 100%);
+}
+.lb-lobby .lb-nickname-hero::after {
+  content: ''; position: absolute; left: -12%; right: -12%; bottom: -34px; height: 70px; border-radius: 50%;
+  background: #fff; box-shadow: 0 -3px 0 rgba(255, 255, 255, .55);
+}
+.lb-lobby .lb-nickname-logo { position: relative; z-index: 1; margin: 0; line-height: 0; animation: lb-nick-float 3.2s ease-in-out infinite; }
+.lb-lobby .lb-nickname-logo .lb-brand-logo { width: 184px; height: auto; overflow: visible; filter: drop-shadow(0 5px 7px rgba(23, 60, 140, .3)); }
+@keyframes lb-nick-float { 50% { transform: translateY(-4px) rotate(-1deg); } }
+
+/* 캐릭터 얼굴 4개: 언덕 위에 줄지어, 차례로 통통 */
+.lb-lobby .lb-nickname-crew { position: absolute; left: 50%; bottom: 2px; z-index: 2; display: flex; gap: 10px; translate: -50% 0; }
+.lb-lobby .lb-nickname-face {
+  --fc: #cfe4ff;
+  display: block; width: 50px; height: 50px; overflow: hidden; border: 3px solid #fff; border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #fff 0%, var(--fc) 75%);
+  box-shadow: 0 0 0 1.5px #c9e0f7, 0 4px 0 rgba(110, 155, 220, .35);
+  animation: lb-nick-bob 2.4s ease-in-out infinite;
+}
+.lb-lobby .lb-nickname-face img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.lb-lobby .lb-nickname-face-yellow { --fc: #ffeaa0; animation-delay: -.6s; }
+.lb-lobby .lb-nickname-face-red { --fc: #ffcfc6; animation-delay: -1.2s; }
+.lb-lobby .lb-nickname-face-pink { --fc: #ffd3ea; animation-delay: -1.8s; }
+@keyframes lb-nick-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+/* 글: 작은 알약 → 제목(Jua) → 설명 */
+.lb-lobby .lb-nickname-eyebrow {
+  justify-self: center; padding: 3px 12px; border-radius: 999px; background: #e3efff; color: #2f73e8;
+  font-size: 11px; font-weight: 900; letter-spacing: 2px; box-shadow: inset 0 0 0 1.5px #c9e0f7;
+}
+.lb-lobby .lb-nickname-must .lb-nickname-eyebrow { background: #fff0d6; color: #c86a00; box-shadow: inset 0 0 0 1.5px #ffd79a; }
+.lb-lobby .lb-nickname-title { margin: 0; color: #1d3270; font-family: var(--lb-display-font); font-size: 27px; font-weight: 400; line-height: 1.15; word-break: keep-all; text-wrap: balance; }
+.lb-lobby .lb-nickname-copy { margin: 0 0 4px; color: #5f7bb0; font-size: 12px; font-weight: 800; line-height: 1.45; word-break: keep-all; text-wrap: balance; }
+
+/* 입력칸: 둥근 흰 칸 + 파란 초점 고리, 확인 = 노란 버튼 같은 높이 */
+.lb-lobby .lb-nickname-row { gap: 8px; }
+.lb-lobby .lb-nickname-input {
+  height: 50px; padding: 0 14px; border: 2px solid #c9e0f7; border-image: none; border-radius: 16px;
+  background: #fff; color: #1d3270; font: 900 16px var(--font); box-shadow: inset 0 2px 0 rgba(29, 50, 112, .06);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.lb-lobby .lb-nickname-input::placeholder { color: #9fb4d8; font-weight: 800; }
+.lb-lobby .lb-nickname-input:focus { border-color: #2f73e8; box-shadow: 0 0 0 4px rgba(47, 115, 232, .16); }
+.lb-lobby .lb-nickname-input[aria-invalid='true'] { border-color: #f08aa0; background: #fff8fa; }
+.lb-lobby .lb-nickname-field .lb-nickname-input { padding-right: 54px; }
+.lb-lobby .lb-nickname-counter { right: 14px; color: #8aa2cc; font-size: 11px; }
+.lb-lobby .lb-btn.lb-nickname-submit { min-width: 96px; min-height: 50px; font-size: 16px; }
+.lb-lobby .lb-nickname-rule { color: #6f86b5; font-size: 11px; }
+.lb-lobby .lb-nickname-feedback { font-size: 11px; }
+
+/* 낮은 화면(가로 폰): 머리·글을 줄여 키보드가 올라와도 입력칸이 남게 */
+@media (max-height: 520px) {
+  .lb-lobby .lb-nickname-modal { padding: 8px; }
+  .lb-lobby .lb-nickname-card { width: min(430px, 100%); gap: 5px; padding: 0 18px 12px; border-radius: 22px; }
+  .lb-lobby .lb-nickname-hero { height: 104px; margin: 0 -18px 0; padding-top: 6px; }
+  .lb-lobby .lb-nickname-hero::after { bottom: -26px; height: 50px; }
+  .lb-lobby .lb-nickname-logo .lb-brand-logo { width: 104px; }
+  .lb-lobby .lb-nickname-crew { gap: 7px; }
+  .lb-lobby .lb-nickname-face { width: 34px; height: 34px; border-width: 2px; }
+  .lb-lobby .lb-nickname-title { font-size: 20px; }
+  .lb-lobby .lb-nickname-copy { margin: 0; font-size: 11px; }
+  .lb-lobby .lb-nickname-input { height: 42px; font-size: 15px; }
+  .lb-lobby .lb-btn.lb-nickname-submit { min-width: 80px; min-height: 42px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-lobby .lb-nickname-logo, .lb-lobby .lb-nickname-face { animation: none; }
+}

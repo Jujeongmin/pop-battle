@@ -486,9 +486,23 @@ export class Lobby {
     }
 
     const card = el('section', 'lb-nickname-card');
-    const logo = el('div', 'lb-logo lb-nickname-logo');
-    logo.setAttribute('aria-label', 'POP! BATTLE');
-    logo.innerHTML = '<b>POP!</b><span>BATTLE</span>';
+    // 첫 입장 창 머리: 하늘 띠 + 메인 로비와 같은 로고 + 무료 캐릭터 4명 얼굴 (그라데이션 id는 로비 로고와 겹치지 않게 따로)
+    const hero = el('div', 'lb-nickname-hero');
+    hero.setAttribute('aria-hidden', 'true');
+    const logo = el('div', 'lb-nickname-logo');
+    logo.innerHTML = LOGO_SVG.replace(/lb-logo-/g, 'lb-nick-logo-');
+    const crew = el('div', 'lb-nickname-crew');
+    for (const id of ['blue', 'yellow', 'red', 'pink']) {
+      const face = el('span', `lb-nickname-face lb-nickname-face-${id}`);
+      crew.appendChild(face);
+      void this.host.characterPortrait(id).then((src) => {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.src = src;
+        face.appendChild(img);
+      }, () => undefined);
+    }
+    hero.append(logo, crew);
     const eyebrow = el('span', 'lb-nickname-eyebrow', 'WELCOME');
     const title = el('h2', 'lb-nickname-title', '닉네임을 정해 주세요');
     this.nickEyebrow = eyebrow;
@@ -503,7 +517,7 @@ export class Lobby {
         this.refresh();
       },
     });
-    card.append(logo, eyebrow, title, copy, editor.root);
+    card.append(hero, eyebrow, title, copy, editor.root);
     this.nicknameModal.appendChild(card);
     return editor;
   }
