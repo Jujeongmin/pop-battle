@@ -118,10 +118,12 @@ export class ArenaMap implements GameMap {
       { halfX: shell.halfX + 1, halfZ: shell.halfZ + 1 },
       anisotropy,
       theme,
+      def.pit,
     );
     this.group.add(floor.mesh);
     this.disposables.push(...floor.disposables);
-    this.addBox(new THREE.Vector3(0, -0.5, 0), new THREE.Vector3(shell.halfX + 1, 0.5, shell.halfZ + 1), undefined, '바닥');
+    if (def.pit) this.buildPit(def.pit, shell.halfX, shell.halfZ, theme);
+    else this.addBox(new THREE.Vector3(0, -0.5, 0), new THREE.Vector3(shell.halfX + 1, 0.5, shell.halfZ + 1), undefined, '바닥');
 
     // 조각 + 바깥 담장 (같은 인스턴스 배치, 그림자 있음)
     const decor = new KitMerger();
@@ -148,7 +150,7 @@ export class ArenaMap implements GameMap {
     }
 
     // 바깥 환경 (하늘·구름·도시·간판·랜드마크): 그림자 없음, 충돌 없음
-    this.backdrop = new ArenaBackdrop(models, decorMat, anisotropy, shell, def.name, theme);
+    this.backdrop = new ArenaBackdrop(models, decorMat, anisotropy, shell, def.name, theme, def.pit);
     this.stats.cityTriangles = this.backdrop.stats.cityTriangles;
     this.stats.cloudTriangles = this.backdrop.stats.cloudTriangles;
     this.group.add(this.backdrop.group);
@@ -233,12 +235,13 @@ export class ArenaMap implements GameMap {
     const S = ARENA.brickScale;
     const levelH = ARENA.brickBodyHeight * S;
 
+    const lifts = this.topLifts(pieces);
     for (const p of pieces) {
       switch (p.kind) {
         case 'brick': {
           const [sx, sz] = BRICK_SIZE[p.model];
           const rot = THREE.MathUtils.degToRad(p.rotDeg);
-          const base = p.baseY ?? 0;
+          const base = (p.baseY ?? 0) + (lifts.get(p) ?? 0);
           let h: number;
           if (p.levels === 0) {
             // 턱: 플레이트 1장
@@ -304,7 +307,7 @@ export class ArenaMap implements GameMap {
           // 바닥 색 구역은 바닥 메시(arenaFloor)에서 칸 색으로 그림
           break;
         case 'prop':
-          this.buildProp(p, add);
+          this.buildProp(p, add, lifts.get(p) ?? 0);
           break;
       }
     }
@@ -331,10 +334,49 @@ export class ArenaMap implements GameMap {
     }
   }
 
-  /** 장난감 도형: 단색 인스턴스 + 늘린 모델 상자 충돌 (둥근 도형은 안쪽으로 8% 줄인 상자) */
-  private buildProp(p: PropPiece, add: AddInstance): void {
+  /**
+   * 겹친 조각의 윗면이 같은 높이면 두 면이 번갈아 그려져 일렁임(z-fighting) → 뒤에 오는 조각을 1.5cm씩 높임.
+   * 겹침은 바닥 사각형(회전 포함 외접 상자)으로 넉넉하게 판정 (괜히 높아져도 1.5cm라 눈에 띄지 않음)
+   */
+  private topLifts(pieces: readonly ArenaPiece[]): Map<ArenaPiece, number> {
+    const S = ARENA.brickScale;
+    const placed: Array<{ x0: number; x1: number; z0: number; z1: number; top: number }> = [];
+    const lifts = new Map<ArenaPiece, number>();
+    for (const p of pieces) {
+      let w: number;
+      let d: number;
+      let h: number;
+      if (p.kind === 'brick') {
+        [w, d] = BRICK_SIZE[p.model].map((v) => v * S) as [number, number];
+        const plate = ARENA.plateBodyHeight * S;
+        h = p.levels === 0 ? plate : p.levels === 1 ? plate * 2 : p.levels * ARENA.brickBodyHeight * S + plate;
+      } else if (p.kind === 'prop') {
+        const b = this.modelBounds(p.model);
+        w = (b.max.x - b.min.x) * p.sx;
+        d = (b.max.z - b.min.z) * p.sz;
+        h = (b.max.y - b.min.y) * p.sy;
+      } else continue;
+      const r = THREE.MathUtils.degToRad(p.rotDeg);
+      const hx = (Math.abs(Math.cos(r)) * w + Math.abs(Math.sin(r)) * d) / 2;
+      const hz = (Math.abs(Math.sin(r)) * w + Math.abs(Math.cos(r)) * d) / 2;
+      const box = { x0: p.x - hx, x1: p.x + hx, z0: p.z - hz, z1: p.z + hz, top: (p.baseY ?? 0) + h };
+      let lift = 0;
+      const clash = () => placed.some((q) => q.x0 < box.x1 && box.x0 < q.x1 && q.z0 < box.z1 && box.z0 < q.z1 && Math.abs(q.top - (box.top + lift)) < 0.01);
+      while (clash()) lift += 0.015;
+      if (lift > 0) lifts.set(p, lift);
+      placed.push({ ...box, top: box.top + lift });
+    }
+    return lifts;
+  }
+
+  /** 장난감 도형: 단색 인스턴스 + 늘린 모델 상자 충돌 (둥근 도형은 안쪽으로 8% 줄인 상자). lift = 겹침 일렁임 방지로 윗면만 올림 (바닥은 그대로, 높이를 늘림) */
+  private buildProp(p: PropPiece, add: AddInstance, lift = 0): void {
     const rot = THREE.MathUtils.degToRad(p.rotDeg);
     const base = p.baseY ?? 0;
+    if (lift > 0) {
+      const mh = this.modelBounds(p.model).max.y - this.modelBounds(p.model).min.y;
+      p = { ...p, sy: p.sy + lift / mh };
+    }
     add(p.model, p.color, false, new THREE.Matrix4().compose(_p.set(p.x, base, p.z), _q.setFromAxisAngle(UP, rot), _s.set(p.sx, p.sy, p.sz)));
     if (p.collide === false) return;
     const b = this.modelBounds(p.model);
@@ -342,6 +384,49 @@ export class ArenaMap implements GameMap {
     const half = new THREE.Vector3(((b.max.x - b.min.x) * p.sx * k) / 2, ((b.max.y - b.min.y) * p.sy) / 2, ((b.max.z - b.min.z) * p.sz * k) / 2);
     const local = new THREE.Vector3(((b.max.x + b.min.x) * p.sx) / 2, ((b.max.y + b.min.y) * p.sy) / 2, ((b.max.z + b.min.z) * p.sz) / 2).applyAxisAngle(UP, rot);
     this.addBox(new THREE.Vector3(p.x + local.x, base + local.y, p.z + local.z), half, _q.setFromAxisAngle(UP, rot), '도형');
+  }
+
+  /**
+   * 낙사 구역: 바닥 충돌은 양쪽 땅 두 판, 구역 가장자리에 아래로 내려가는 절벽 면(충돌 있음), 밑에는 장난감 바다.
+   * 떨어지면 MOVEMENT.killPlaneY(-20m)에서 낙사. 바깥 도시 바닥도 이 구역은 뚫림 (ArenaBackdrop)
+   */
+  private buildPit(pit: { z0: number; z1: number }, halfX: number, halfZ: number, theme: ArenaTheme): void {
+    const hx = halfX + 1;
+    const north = halfZ + 1 - pit.z1;
+    const south = pit.z0 + halfZ + 1;
+    this.addBox(new THREE.Vector3(0, -0.5, pit.z1 + north / 2), new THREE.Vector3(hx, 0.5, north / 2), undefined, '바닥 (북)');
+    this.addBox(new THREE.Vector3(0, -0.5, pit.z0 - south / 2), new THREE.Vector3(hx, 0.5, south / 2), undefined, '바닥 (남)');
+    const depth = 16;
+    const cliffMat = new THREE.MeshStandardMaterial({ color: lighten(theme.palette.orange, 0.15), roughness: 0.85, metalness: 0 });
+    const stripeMat = new THREE.MeshStandardMaterial({ color: theme.palette.yellow, roughness: 0.6, metalness: 0 });
+    const seaMat = new THREE.MeshStandardMaterial({ color: 0x5fb6ff, roughness: 0.3, metalness: 0, emissive: 0x2a6fd0, emissiveIntensity: 0.25 });
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    const sea = new THREE.PlaneGeometry(1, 1);
+    this.disposables.push(cliffMat, stripeMat, seaMat, box, sea);
+    for (const [z, s] of [[pit.z1, 1], [pit.z0, -1]] as const) {
+      // 절벽 면 (땅 쪽으로 0.5m 들어간 두께 1m 판) + 가장자리 노란 띠 (낭떠러지 표시)
+      const cliff = new THREE.Mesh(box, cliffMat);
+      cliff.scale.set(hx * 2, depth, 1);
+      cliff.position.set(0, -depth / 2 - 0.02, z + s * 0.5);
+      cliff.receiveShadow = true;
+      const stripe = new THREE.Mesh(box, stripeMat);
+      stripe.scale.set(hx * 2, 0.3, 1.04);
+      stripe.position.set(0, -0.17, z + s * 0.5);
+      this.group.add(cliff, stripe);
+      this.addBox(new THREE.Vector3(0, -depth / 2, z + s * 0.5), new THREE.Vector3(hx, depth / 2, 0.5), undefined, '절벽');
+    }
+    // 양옆 막음 (바깥 담장 아래)
+    for (const sx of [-1, 1]) {
+      const side = new THREE.Mesh(box, cliffMat);
+      side.scale.set(1, depth, pit.z1 - pit.z0);
+      side.position.set(sx * (hx - 0.5), -depth / 2 - 0.02, (pit.z0 + pit.z1) / 2);
+      this.group.add(side);
+    }
+    const water = new THREE.Mesh(sea, seaMat);
+    water.rotation.x = -Math.PI / 2;
+    water.scale.set(hx * 2, pit.z1 - pit.z0, 1);
+    water.position.set(0, -11, (pit.z0 + pit.z1) / 2);
+    this.group.add(water);
   }
 
   private readonly boundsCache = new Map<ArenaModelKey, THREE.Box3>();

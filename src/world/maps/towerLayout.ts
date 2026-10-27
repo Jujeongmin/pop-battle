@@ -1,11 +1,11 @@
-// CANDY TOWER 배치 (시험 중, 개발 서버 ?map=tower). 54 × 70m — POP! ARENA(40 × 52m)보다 큼. 분위기 = 노을 사탕 마을(CANDY_THEME).
-// 중앙 큰 탑을 차지하려는 싸움: 탑 위는 사방이 보이지만 가릴 곳이 적고, 탑 둘레는 마카롱(육각 도형) 낮은 엄폐물 고리, 양옆 넓은 차로는 우회로.
+// CANDY TOWER 배치 (시험 중, 개발 서버 ?map=tower). 54 × 70m — POP! ARENA(40 × 52m)보다 큼. 분위기 = 사탕 마을(CANDY_THEME: 블록·바닥·담장 색).
+// 중앙 큰 발판(가운데 높은 사탕 탑 건물)을 차지하려는 싸움: 발판 위는 사방이 보이지만 가릴 곳이 적고, 탑 둘레는 마카롱(육각 도형) 낮은 엄폐물 고리, 양옆 넓은 차로는 우회로.
 //
 //  z +35 ┌────────────────── 북쪽 스폰 (분홍) ──────────────────┐
 //        │ [가림]           [낮은 1x8] (스폰 출구 앞)       [가림] │
 //        │  차로  │  [높은]                     [높은]  │  차로  │  x ±16.5 차로 벽 (z 4~20, 가운데 틈 z ±4)
 //        │ 지그   │     [낮은]   경사로·계단   [낮은]     │ 낮은   │
-//        │ 재그   ┊ [낮은] 계단 ■ 탑 13.4m 1.6m ■ 계단 [낮은] ┊ 엄폐  │  탑 위 가운데 십자 높은 엄폐물
+//        │ 재그   ┊ [낮은] 계단 ■ 발판 13.4m 1.6m ■ 계단 [낮은] ┊ 엄폐  │  발판 가운데 사탕 탑 건물 (약 17m)
 //        │        │         (남쪽 = 거울상)              │        │
 //  z -35 └────────────────── 남쪽 스폰 (파랑) ──────────────────┘
 import { ARENA, CANDY_THEME } from '../../config/maps';
@@ -23,13 +23,41 @@ const TOWER_H = 1.6;
 const TOWER = 13.44;
 const EDGE = TOWER / 2;
 
+/**
+ * 가운데 사탕 탑 건물 (맵 어디서나 보이는 랜드마크, 꼭대기 약 17m): 받침 → 분홍·흰 줄무늬 원기둥 8토막(10m) + 가운데 민트 발코니 띠
+ * → 처마 → 육각 지붕 2단 → 막대 사탕. 받침·줄무늬 몸통은 충돌(사격·이동·카메라 모두 막음), 띠·지붕·사탕은 장식
+ */
+function candyTower(): ArenaPiece[] {
+  // 탑 건물은 게임 기본 색 (POP! ARENA 팔레트)
+  const C = ARENA.palette;
+  const piece = (model: 'pCylinder' | 'pHexagon', y: number, d: number, h: number, color: number, collide: boolean): ArenaPiece =>
+    ({ kind: 'prop', model, x: 0, z: 0, rotDeg: 0, sx: d, sy: h, sz: d, color, baseY: y, round: true, collide });
+  const out: ArenaPiece[] = [piece('pCylinder', TOWER_H, 5.2, 0.7, C.white, true)];
+  const STRIPE = 1.25;
+  let y = TOWER_H + 0.7;
+  for (let i = 0; i < 8; i++) {
+    out.push(piece('pCylinder', y, 3.6, STRIPE, i % 2 === 0 ? C.pink : C.white, true));
+    y += STRIPE;
+  }
+  out.push(piece('pCylinder', TOWER_H + 0.7 + 4 * STRIPE - 0.18, 4.8, 0.36, C.mint, false));
+  out.push(piece('pCylinder', y, 4.6, 0.5, C.lavender, false));
+  y += 0.5;
+  out.push(piece('pHexagon', y, 3.4, 1.4, C.pink, false));
+  y += 1.4;
+  out.push(piece('pHexagon', y, 2.1, 1.0, C.yellow, false));
+  y += 1.0;
+  out.push(piece('pCylinder', y, 0.35, 1.6, C.white, false));
+  y += 1.6;
+  out.push(piece('pCylinder', y, 1.9, 0.6, C.orange, false));
+  return out;
+}
+
 /** 가운데 줄 (거울 복제 안 함) */
 const MIDDLE: ArenaPiece[] = [
-  { kind: 'zone', x: 0, z: 0, w: 30, d: 30, color: 0xfff1d6 },
-  // 탑: 노란 몸체 + 흰 윗면. 위 가운데 십자 높은 엄폐물 = 탑 위에서도 한쪽 끝에서 반대쪽 끝까지 곧게 보이지 않게
+  { kind: 'zone', x: 0, z: 0, w: 30, d: 30, color: 0xffe6d6 },
+  // 발판: 노란 몸체 + 흰 윗면. 위 가운데 사탕 탑 건물 = 발판 위에서도 한쪽 끝에서 반대쪽 끝까지 곧게 보이지 않음 (둘레 4m를 돌며 싸움)
   { kind: 'platform', x: 0, z: 0, w: TOWER, d: TOWER, h: TOWER_H, color: C.yellow, topColor: C.white },
-  { kind: 'brick', model: 'brick2x4', x: 0, z: 0, rotDeg: 0, levels: 2, color: C.orange, baseY: TOWER_H },
-  { kind: 'brick', model: 'brick2x4', x: 0, z: 0, rotDeg: 90, levels: 2, color: C.pink, baseY: TOWER_H },
+  ...candyTower(),
   // 동·서 계단 (탑 옆에서 바로 오름)
   { kind: 'stairs', x: EDGE + 1.6, z: 0, width: 2.2, length: 3.2, h: TOWER_H, dirDeg: 270, color: C.white },
   { kind: 'stairs', x: -EDGE - 1.6, z: 0, width: 2.2, length: 3.2, h: TOWER_H, dirDeg: 90, color: C.white },
@@ -71,12 +99,12 @@ const NORTH: ArenaPiece[] = [
   { kind: 'wall', x1: -16.5, z1: 4, x2: -16.5, z2: 20, height: 3, thickness: 0.5, color: C.mint },
   { kind: 'wall', x1: 16.5, z1: 4, x2: 16.5, z2: 20, height: 3, thickness: 0.5, color: C.lavender },
   // 서쪽 차로: 높은 엄폐물 지그재그 (근거리)
-  { kind: 'zone', x: -21.5, z: 12, w: 9.5, d: 16, color: 0xdff6ec },
+  { kind: 'zone', x: -21.5, z: 12, w: 9.5, d: 16, color: 0xd4f5ea },
   { kind: 'brick', model: 'brick2x4', x: -23.5, z: 8.5, rotDeg: 0, levels: 2, color: C.mint },
   { kind: 'brick', model: 'brick2x4', x: -19.5, z: 14.5, rotDeg: 0, levels: 2, color: C.mint },
   macaron(-23, 20.5, C.orange),
   // 동쪽 차로: 낮은 엄폐물 (중거리)
-  { kind: 'zone', x: 21.5, z: 12, w: 9.5, d: 16, color: 0xebe4ff },
+  { kind: 'zone', x: 21.5, z: 12, w: 9.5, d: 16, color: 0xeadcff },
   { kind: 'brick', model: 'brick2x4', x: 19.5, z: 8.5, rotDeg: 0, levels: 1, color: C.lavender },
   { kind: 'brick', model: 'brick2x4', x: 23.5, z: 14.5, rotDeg: 0, levels: 1, color: C.lavender },
   candyPost(21, 20.5, C.yellow),

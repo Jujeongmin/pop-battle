@@ -1,10 +1,10 @@
 // 맵 선택. 기본 = 정식 맵 POP! ARENA, 테스트 맵은 ?map=test.
-// 시험 중인 경기장 맵(tower·maze)은 개발 서버에서만 ?map=tower / ?map=maze (멀티 서버·배포 목록에는 아직 없음 → 다른 사람과 맵이 어긋나지 않게)
-export type MapId = 'arena' | 'tower' | 'maze' | 'test';
+// 시험 중인 경기장 맵(tower·maze·range)은 개발 서버에서만 ?map=tower / maze / range (멀티 서버·배포 목록에는 아직 없음 → 다른 사람과 맵이 어긋나지 않게)
+export type MapId = 'arena' | 'tower' | 'maze' | 'range' | 'test';
 
 const param = new URLSearchParams(location.search).get('map');
 export const MAP_ID: MapId =
-  param === 'test' ? 'test' : import.meta.env.DEV && (param === 'tower' || param === 'maze') ? param : 'arena';
+  param === 'test' ? 'test' : import.meta.env.DEV && (param === 'tower' || param === 'maze' || param === 'range') ? param : 'arena';
 
 const base = import.meta.env.BASE_URL;
 
@@ -148,15 +148,15 @@ export const ARENA_THEME: ArenaTheme = {
   wallCream: 0xfff3e2,
 };
 
-/** 노을 사탕 마을: 복숭아·분홍·보라 노을 하늘, 낮게 깔린 주황 햇빛, 사탕·마카롱 색 블록 */
+/** 사탕 마을: 하늘·빛·바깥 바닥은 POP! ARENA와 같고, 블록·경기장 바닥·담장만 진한 사탕·마카롱 색 (딸기 분홍·민트·라일락·체리·크림) */
 export const CANDY_THEME: ArenaTheme = {
-  palette: { blue: 0x9fb4ff, yellow: 0xffd48f, orange: 0xff9a8a, pink: 0xff86c2, mint: 0x92ecd2, lavender: 0xc49cff, white: 0xfff4fa, floorA: 0xf8e6ef, floorB: 0xeedcf6 },
-  floorRing: 0xffc2dc,
-  sky: { zenith: 0x7f74d6, upper: 0xee9cc6, horizon: 0xffcfa6, cloud: [0xffd7ea, 0xffe4cc], cloudGlow: 0xffb99a },
-  light: { hemiSky: 0xffd8ea, hemiGround: 0xf2cfc0, hemi: 1.55, sun: 0xffb27e, sunIntensity: 2.5, sunOffset: [20, 11, 6] },
-  ground: { grass: 0xd8c6ee, plaza: 0xfae3ec, road: 0xe2cdea, roadLine: 0xfff4f8 },
+  palette: { blue: 0x8e8cf2, yellow: 0xffc96b, orange: 0xff7f72, pink: 0xff5fa8, mint: 0x52d6b5, lavender: 0xb07cf0, white: 0xfff0f6, floorA: 0xf9dfea, floorB: 0xeedcf7 },
+  floorRing: 0xff9fc8,
+  sky: ARENA_THEME.sky,
+  light: ARENA_THEME.light,
+  ground: ARENA_THEME.ground,
   wallStyle: 'brick',
-  wallCream: 0xffe9f2,
+  wallCream: 0xffe4ef,
 };
 
 /** 장난감 놀이터: 맑고 시원한 아침, 둥근 놀이 도형(Prototype Kit), 민트·하늘·노랑 */
@@ -168,4 +168,15 @@ export const PLAYGROUND_THEME: ArenaTheme = {
   ground: { grass: 0xa6e29b, plaza: 0xe6f3ec, road: 0xcdd9e6, roadLine: 0xffffff },
   wallStyle: 'soft',
   wallCream: 0xf4fbff,
+};
+
+/** 장난감 사막 협곡 (스나이퍼 맵): 하늘·빛은 POP! ARENA와 같고, 모래·테라코타·선인장 색 블록과 모래 바닥 */
+export const RANGE_THEME: ArenaTheme = {
+  palette: { blue: 0x6f9fd6, yellow: 0xf2c46b, orange: 0xe8875a, pink: 0xf0928f, mint: 0x8fc9a0, lavender: 0xb59ccf, white: 0xfdf3e3, floorA: 0xf3e2c2, floorB: 0xead6b2 },
+  floorRing: 0xf2c48a,
+  sky: ARENA_THEME.sky,
+  light: ARENA_THEME.light,
+  ground: { grass: 0xe2d29e, plaza: 0xf4e6cb, road: 0xd8c8aa, roadLine: 0xfff8ea },
+  wallStyle: 'brick',
+  wallCream: 0xfdf0dc,
 };

@@ -29,6 +29,8 @@ export class ArenaBackdrop {
     private readonly shell: MapShell,
     private readonly mapName: string,
     private readonly theme: ArenaTheme,
+    /** 낙사 구역 (경기장 폭만큼 도시 바닥을 뚫음) */
+    private readonly pit?: { z0: number; z1: number },
   ) {
     this.group.name = 'arena-backdrop';
     this.ground = groundHalves(shell);
@@ -270,11 +272,16 @@ export class ArenaBackdrop {
     ctx.stroke();
     ctx.setLineDash([]);
 
+    // 낙사 구역: 경기장 폭(담장 포함)만큼 투명 → 아래 절벽·바다가 보임
+    if (this.pit) {
+      const hx = this.shell.halfX + 1;
+      ctx.clearRect((-hx + SIZE / 2) * k, (this.pit.z0 + SIZE / 2) * k, hx * 2 * k, (this.pit.z1 - this.pit.z0) * k);
+    }
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = anisotropy;
     const geo = new THREE.PlaneGeometry(SIZE, SIZE);
-    const mat = new THREE.MeshLambertMaterial({ map: tex });
+    const mat = new THREE.MeshLambertMaterial({ map: tex, alphaTest: this.pit ? 0.5 : 0 });
     const ground = new THREE.Mesh(geo, mat);
     ground.rotation.x = -Math.PI / 2;
     // 경기장 바닥(y=0) 아래. 경기장 안은 경기장 바닥이 덮음

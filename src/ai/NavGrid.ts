@@ -111,6 +111,8 @@ export class NavGrid {
   /** 디버그: 마지막 탐색 노드 수, 주 영역에서 빠진 칸 수 */
   lastExpanded = 0;
   islandCells = 0;
+  /** 걸을 수 있는 칸의 덩어리 번호 (-1 = 못 걷는 칸). 낙사 구역으로 끊긴 맵은 덩어리가 여럿 */
+  readonly region: Int32Array;
 
   constructor(
     physics: Physics,
@@ -158,9 +160,10 @@ export class NavGrid {
         raw[i] = blocked ? 0 : 1;
       }
     }
-    // 주 영역(가장 큰 연결 덩어리)만 남김 → 엄폐물 윗면 같은 섬은 경로·순찰 목표에서 제외
+    // 큰 연결 덩어리(가장 큰 것의 25% 이상)만 남김 → 엄폐물 윗면 같은 섬은 경로·순찰 목표에서 제외,
+    // 낙사 구역으로 끊긴 맵(양쪽 땅이 비슷한 크기)은 양쪽 모두 남김
     const label = new Int32Array(n).fill(-1);
-    let best = -1;
+    const sizes: number[] = [];
     let bestSize = 0;
     let comp = 0;
     const stack: number[] = [];
@@ -186,15 +189,16 @@ export class NavGrid {
           stack.push(ni);
         }
       }
-      if (size > bestSize) {
-        bestSize = size;
-        best = comp;
-      }
+      sizes.push(size);
+      if (size > bestSize) bestSize = size;
       comp++;
     }
+    this.region = new Int32Array(n).fill(-1);
     for (let i = 0; i < n; i++) {
-      if (raw[i] && label[i] === best) this.walkable[i] = 1;
-      else if (raw[i]) this.islandCells++;
+      if (raw[i] && label[i] >= 0 && sizes[label[i]!]! >= bestSize * 0.25) {
+        this.walkable[i] = 1;
+        this.region[i] = label[i]!;
+      } else if (raw[i]) this.islandCells++;
     }
   }
 
@@ -390,12 +394,17 @@ export class NavGrid {
 
   /** 무작위 걸을 수 있는 지점 (center에서 minDist~maxDist, y = 걸을 면 높이) */
   randomPoint(center: THREE.Vector3, minDist: number, maxDist: number, out: THREE.Vector3, tries = 24): THREE.Vector3 | null {
+    // 같은 덩어리 안에서만 (낙사 구역 건너편은 갈 길이 없음)
+    const from = this.cellOf(center.x, center.z);
+    const home = from >= 0 ? this.region[from]! : -1;
     for (let k = 0; k < tries; k++) {
       const a = Math.random() * Math.PI * 2;
       const d = minDist + Math.random() * (maxDist - minDist);
       const x = center.x + Math.cos(a) * d;
       const z = center.z + Math.sin(a) * d;
-      if (this.isWalkableAt(x, z)) return out.set(x, this.heightAt(x, z), z);
+      if (!this.isWalkableAt(x, z)) continue;
+      if (home >= 0 && this.region[this.cellOf(x, z)] !== home) continue;
+      return out.set(x, this.heightAt(x, z), z);
     }
     return null;
   }

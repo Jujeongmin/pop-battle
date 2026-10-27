@@ -15,6 +15,7 @@ export function buildArenaFloor(
   extent: { halfX: number; halfZ: number },
   anisotropy: number,
   theme: ArenaTheme,
+  pit?: { z0: number; z1: number },
 ): { mesh: THREE.Mesh; disposables: Array<{ dispose(): void }> } {
   const minX = -Math.ceil(extent.halfX);
   const maxX = Math.ceil(extent.halfX);
@@ -48,6 +49,8 @@ export function buildArenaFloor(
       const z0 = minZ + iz;
       const cx = x0 + 0.5;
       const cz = z0 + 0.5;
+      // 낙사 구역: 바닥 칸 없음
+      if (pit && cz > pit.z0 && cz < pit.z1) continue;
       const zn = zoneAt(cx, cz);
       tmp.copy(zn ? tmp.setHex(zn.color) : base);
       if (zn) {
