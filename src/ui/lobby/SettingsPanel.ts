@@ -4,6 +4,7 @@ import { getLang, setLang, type Lang } from '../../i18n/lang';
 import { getGraphicsQuality, setGraphicsQuality, type GraphicsQuality } from '../../config/graphics';
 import { button, el, slider, type LobbyHost, type LobbyPanel } from './lobbyDom';
 import { nicknameEditor } from './nicknameUi';
+import { touchLogControls } from './touchLogUi';
 
 export class SettingsPanel implements LobbyPanel {
   readonly id = 'settings';
@@ -123,6 +124,8 @@ export class SettingsPanel implements LobbyPanel {
     right.appendChild(keys);
     touchCol.appendChild(el('div', 'lb-section', '모바일 터치'));
     for (const x of s.touch) touchCol.appendChild(slider(x));
+    // 임시: 갤럭시 터치 조사용 기록 (ui/lobby/touchLogUi.ts)
+    touchCol.appendChild(touchLogControls());
     // 확장 화면: 스위치 = 실제 상태 (Verse8 바깥 확장 포함), 누르면 바로 전환·선택 기억, 안 되면 이유 한 줄
     left.appendChild(el('div', 'lb-section', '화면'));
     const expandNote = el('p', 'lb-settings-note lb-expand-note');

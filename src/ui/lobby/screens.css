@@ -1113,6 +1113,14 @@
 /* 그래픽 품질: 낮음 / 보통 / 높음 세 칸 (언어 줄과 같은 모양) */
 .lb-lobby .lb-gfx-row { grid-template-columns: repeat(3, 1fr); }
 .lb-lobby .lb-gfx-label { display: block; margin: 4px 2px 0; }
+/* 임시: 터치 기록 (ui/lobby/touchLogUi.ts, 조사 끝나면 지움) */
+.lb-touchlog { display: grid; gap: 6px; margin-top: 8px; }
+.lb-touchlog-open { justify-self: start; }
+.lb-touchlog-view { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; gap: 6px; padding: 10px; background: rgba(20, 24, 40, .92); }
+.lb-touchlog-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lb-touchlog-btn { min-height: 36px; padding: 4px 14px; }
+.lb-touchlog-status { color: #fff; font-size: 13px; font-weight: 800; }
+.lb-touchlog-text { flex: 1; width: 100%; font: 11px/1.35 ui-monospace, monospace; white-space: pre; user-select: text; -webkit-user-select: text; }
 @media (min-width: 900px) {
   .lb-lobby .lb-settings-general:not([hidden]) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; }
 }

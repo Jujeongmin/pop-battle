@@ -7,6 +7,7 @@
 import { createInputState } from './Input';
 import { toGame, viewH, viewW } from './screenRotation';
 import { bindButtonActivation } from '../ui/buttonActivation';
+import { logNote, logPointer, logTouch } from './touchLog';
 
 export interface TouchSettings {
   /** 시점 회전 감도 배율 (PC 마우스 감도 기준) */
@@ -144,6 +145,8 @@ export class TouchInput {
     this.root.addEventListener('touchstart', this.onTouchStart, { signal: this.abort.signal, passive: false });
     this.root.addEventListener('touchmove', this.onTouchMove, { signal: this.abort.signal, passive: false });
     for (const t of ['touchend', 'touchcancel'] as const) this.root.addEventListener(t, this.onTouchEnd, { signal: this.abort.signal, passive: false });
+    // 임시 터치 기록 (core/touchLog.ts, 꺼져 있으면 아무것도 안 함)
+    for (const t of ['pointerdown', 'pointerup', 'pointercancel'] as const) window.addEventListener(t, logPointer, { ...opts, capture: true });
     window.addEventListener('blur', () => this.releaseAll(), opts);
     // 화면 크기·회전·브라우저 주소창 크기 변화 → 버튼 배율 다시 계산 (진행 중 손가락은 놓은 것으로)
     const onResize = () => this.root.style.setProperty('--tu', this.unit.toFixed(3));
@@ -309,6 +312,7 @@ export class TouchInput {
   }
 
   private releaseAll(): void {
+    logNote('releaseAll');
     this.moveTouchId = null;
     this.lookTouchId = null;
     this.fireTouchId = null;
@@ -374,6 +378,8 @@ export class TouchInput {
   private readonly onTouchStart = (e: TouchEvent): void => {
     e.preventDefault();
     if (!this.active) return;
+    const lx = this.state.lookDX;
+    const ly = this.state.lookDY;
     this.dropLostTouches(e.touches);
     for (const touch of e.changedTouches) {
       const id = touch.identifier;
@@ -399,11 +405,25 @@ export class TouchInput {
         this.lastLook.y = p.y;
       }
     }
+    this.log(e, lx, ly);
   };
+
+  /** 임시 터치 기록: 이번 이벤트 뒤 역할과 이 이벤트가 만든 시점 이동량(px, 감도 곱하기 전) */
+  private log(e: TouchEvent, lx: number, ly: number): void {
+    const s = this.settings.lookSensitivity;
+    logTouch(
+      e,
+      { move: this.moveTouchId, look: this.lookTouchId, fire: this.fireTouchId },
+      { dx: (this.state.lookDX - lx) / s, dy: (this.state.lookDY - ly) / s },
+      { x: this.state.moveX, y: this.state.moveY },
+    );
+  }
 
   private readonly onTouchMove = (e: TouchEvent): void => {
     e.preventDefault();
     if (!this.active) return;
+    const lx = this.state.lookDX;
+    const ly = this.state.lookDY;
     this.dropLostTouches(e.touches);
     for (const touch of e.changedTouches) {
       const id = touch.identifier;
@@ -416,10 +436,12 @@ export class TouchInput {
         this.dragLook(touch, this.lastFire);
       }
     }
+    this.log(e, lx, ly);
   };
 
   private readonly onTouchEnd = (e: TouchEvent): void => {
     for (const touch of e.changedTouches) if (this.endTouch(touch.identifier)) e.preventDefault();
+    this.log(e, this.state.lookDX, this.state.lookDY);
   };
 
   /** 이 번호의 역할을 끝냄. 역할이 있었으면 true */
