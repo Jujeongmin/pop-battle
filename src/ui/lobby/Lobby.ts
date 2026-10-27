@@ -25,6 +25,25 @@ const NAV: Array<{ id: string; label: string; korean: string; icon: string }> = 
   { id: 'settings', label: 'SETTINGS', korean: '설정', icon: ICON.settings },
 ];
 
+/**
+ * 좌측 상단 로고 (SVG, 화면 배율과 무관하게 선명): 노랑 POP! + 흰 BATTLE, 파란 외곽선 + 아래쪽 진한 파랑 두께로 입체감.
+ * 글자는 로비 제목 폰트(POP Jua). 그라데이션 id는 로고가 한 번만 그려지므로 고정
+ */
+const LOGO_SVG = `<svg class="lb-brand-logo" viewBox="0 0 210 116" role="img" aria-label="POP! BATTLE">
+  <defs>
+    <linearGradient id="lb-logo-pop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff27a"/><stop offset=".55" stop-color="#ffd23f"/><stop offset="1" stop-color="#ffb21c"/></linearGradient>
+    <linearGradient id="lb-logo-battle" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dbeeff"/></linearGradient>
+  </defs>
+  <g font-family="'POP Jua', sans-serif" text-anchor="middle" stroke-linejoin="round" paint-order="stroke">
+    <g transform="rotate(-4 105 50)">
+      <text x="105" y="68" font-size="66" letter-spacing="-1" fill="#1b4bb5" stroke="#1b4bb5" stroke-width="14" transform="translate(0 5)">POP!</text>
+      <text x="105" y="68" font-size="66" letter-spacing="-1" fill="url(#lb-logo-pop)" stroke="#2f73e8" stroke-width="10">POP!</text>
+    </g>
+    <text x="105" y="106" font-size="31" letter-spacing="1" fill="#1b4bb5" stroke="#1b4bb5" stroke-width="10" transform="translate(0 4)">BATTLE</text>
+    <text x="105" y="106" font-size="31" letter-spacing="1" fill="url(#lb-logo-battle)" stroke="#2f73e8" stroke-width="7">BATTLE</text>
+  </g>
+</svg>`;
+
 /** 전체 화면 메뉴 (로비를 가리고 독립 화면으로): 캐릭터·장비·상점·설정. 게임 시작·방 만들기는 로비 위 창 */
 const FULLSCREEN = new Set(['character', 'loadout', 'ranking', 'shop', 'settings']);
 
@@ -323,7 +342,7 @@ export class Lobby {
     const status = el('div', 'lb-nav-status');
     const brand = el('div', 'lb-nav-brand');
     brand.setAttribute('aria-label', 'POP! BATTLE');
-    brand.innerHTML = '<b>POP!</b><span>BATTLE</span>';
+    brand.innerHTML = LOGO_SVG;
     const identity = el('div', 'lb-identity');
     this.presence.append(this.presenceLabel, this.presenceRetry);
     this.presenceRetry.hidden = true;

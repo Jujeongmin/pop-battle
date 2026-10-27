@@ -1,0 +1,209 @@
+/* ================= 메인 로비 파스텔 스킨 (2026-10-27 시안): 로고 · 프로필 · 상단 메뉴 · 방 목록 =================
+   screens.css 다음 마지막 층 (PauseMenu.ts에서 불러옴). 배치·크기는 앞 층 그대로, 색·모양만 바꿈:
+   하늘색·흰 그라데이션, 둥근 모서리, 은은한 그림자, 진한 회색 테두리·Kenney 사각 면(border-image) 없음.
+   개별 메뉴(캐릭터·장비·상점·설정 화면) 안쪽은 건드리지 않음 */
+.lb-lobby {
+  --pa-navy: #1d3270;
+  --pa-sub: #5f7bb0;
+  --pa-line: #b9d8f6;
+  --pa-sky: #e6f4ff;
+  --pa-blue: #2f73e8;
+  --pa-card-shadow: 0 4px 0 rgba(110, 155, 220, .32), 0 8px 18px rgba(40, 90, 170, .14);
+}
+
+/* ---------- 로고: 사각 배경 없이 SVG만 ---------- */
+.lb-lobby .lb-topbar .lb-nav-brand {
+  display: block; width: 132px; min-width: 0; height: auto; padding: 0; border: 0; border-radius: 0;
+  background: none; box-shadow: none; line-height: 0; transform: none;
+}
+.lb-lobby .lb-topbar .lb-brand-logo { display: block; width: 100%; height: auto; overflow: visible; filter: drop-shadow(0 3px 4px rgba(27, 75, 181, .25)); }
+
+/* ---------- 프로필 카드 ---------- */
+.lb-lobby .lb-topbar .lb-level-card {
+  max-width: 300px; gap: 10px; padding: 6px 16px 6px 6px;
+  border: 2px solid #fff; border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f8ff 100%);
+  box-shadow: 0 0 0 1.5px var(--pa-line), var(--pa-card-shadow);
+}
+.lb-lobby .lb-topbar .lb-level-icon { width: 46px; height: 46px; padding: 3px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #ffffff, #dcefff); box-shadow: inset 0 0 0 2px #fff, 0 1px 3px rgba(40, 90, 170, .2); }
+.lb-lobby .lb-topbar .lb-level-name { color: var(--pa-navy); font-family: var(--lb-display-font); font-size: 18px; font-weight: 400; }
+.lb-lobby .lb-topbar .lb-level-lv { color: var(--pa-blue); font-family: var(--lb-display-font); font-size: 14px; font-weight: 400; }
+.lb-lobby .lb-topbar .lb-level-bar { min-width: 64px; height: 11px; background: #dbe9fb; box-shadow: inset 0 1px 2px rgba(29, 50, 112, .15); }
+.lb-lobby .lb-topbar .lb-level-bar i { background: linear-gradient(180deg, #7cc4ff 0%, #3b86f2 55%, #2a6be0 100%); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45); }
+.lb-lobby .lb-topbar .lb-level-xp { color: var(--pa-blue); font-family: var(--lb-display-font); font-size: 13px; font-weight: 400; }
+.lb-lobby .lb-topbar .lb-presence { border: 2px solid #fff; border-radius: 999px; background: linear-gradient(180deg, #fff, #eef7ff); box-shadow: 0 0 0 1.5px var(--pa-line), 0 3px 0 rgba(110, 155, 220, .3); color: var(--pa-navy); }
+
+/* ---------- 상단 메뉴: 둥근 흰 카드 + 색 아이콘 칸 ---------- */
+.lb-lobby .lb-topbar .lb-top-icons { gap: 10px; }
+.lb-lobby .lb-topbar .lb-top-icon-btn.lb-top-btn {
+  width: auto; min-width: 78px; min-height: 64px; gap: 3px; padding: 4px 8px 3px;
+  border: 2px solid #fff; border-image: none; border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+  box-shadow: 0 0 0 1.5px var(--pa-line), var(--pa-card-shadow);
+  color: var(--pa-navy);
+}
+.lb-lobby .lb-topbar .lb-top-icon-btn .lb-top-icon {
+  width: 34px; height: 34px; border-radius: 11px;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), inset 0 -3px 0 rgba(0, 0, 0, .12), 0 2px 3px rgba(29, 50, 112, .18);
+}
+.lb-lobby .lb-topbar .lb-top-icon-btn .lb-top-icon svg { width: 21px; height: 21px; }
+.lb-lobby .lb-topbar .lb-top-icon-btn b { color: var(--pa-navy); font-size: 15px; }
+.lb-lobby .lb-topbar .lb-top-character .lb-top-icon { background: linear-gradient(180deg, #ffb26e, #f2873f); }
+.lb-lobby .lb-topbar .lb-top-loadout .lb-top-icon { background: linear-gradient(180deg, #6fd6c9, #36ad9f); }
+.lb-lobby .lb-topbar .lb-top-ranking .lb-top-icon { background: linear-gradient(180deg, #ffd25a, #f0a51c); }
+.lb-lobby .lb-topbar .lb-top-shop .lb-top-icon { background: linear-gradient(180deg, #ff9cc0, #ec6593); }
+.lb-lobby .lb-topbar .lb-top-settings .lb-top-icon { background: linear-gradient(180deg, #a99bff, #7b69e0); }
+/* 열린 메뉴: 노란 고리 */
+.lb-lobby .lb-topbar .lb-top-icon-btn.lb-top-btn.lb-active { box-shadow: 0 0 0 3px #ffcf3a, var(--pa-card-shadow); }
+
+/* ---------- 방 목록 칸 ---------- */
+.lb-lobby .lb-room-dock.lb-room-dock {
+  padding: 12px 16px 14px; gap: 10px;
+  border: 3px solid rgba(255, 255, 255, .95); border-image: none; border-radius: 28px;
+  background: linear-gradient(180deg, #f3faff 0%, #e2f1ff 45%, #d6ecff 100%);
+  background-clip: border-box;
+  box-shadow: 0 0 0 2px #a9d0f5, 0 12px 28px rgba(40, 90, 170, .2), inset 0 2px 0 #fff;
+}
+.lb-lobby .lb-room-dock .lb-room-tools-copy b { color: var(--pa-navy); font-size: 26px; }
+.lb-lobby .lb-room-dock .lb-room-count-label { color: var(--pa-sub); font-family: var(--lb-display-font); font-size: 14px; font-weight: 400; }
+.lb-lobby .lb-room-dock .lb-room-collapse.lb-btn {
+  min-height: 32px; padding: 0 14px; border: 2px solid #fff; border-image: none; border-radius: 999px;
+  background: linear-gradient(180deg, #fff, #eef6ff); color: var(--pa-navy);
+  box-shadow: 0 0 0 1.5px var(--pa-line), 0 3px 0 rgba(110, 155, 220, .32); font-family: var(--lb-display-font); font-size: 14px; font-weight: 400;
+}
+.lb-lobby .lb-room-dock .lb-room-actions { gap: 10px; }
+
+/* 버튼 공통: 둥근 알약 + 아래 두께 + 위쪽 빛 */
+.lb-lobby .lb-room-dock .lb-btn.lb-room-refresh,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-create,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-practice,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-quick,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-join,
+.lb-lobby .lb-room-dock .lb-btn.lb-code-submit,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-retry,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-rejoin {
+  border: 2px solid rgba(255, 255, 255, .85); border-image: none; border-radius: 16px; text-shadow: none;
+}
+.lb-lobby .lb-room-dock .lb-room-actions .lb-btn { min-height: 46px; padding: 3px 18px 0; font-size: 18px; }
+.lb-lobby .lb-room-dock .lb-room-actions .lb-btn svg { width: 20px; height: 20px; }
+.lb-lobby .lb-room-dock .lb-btn.lb-room-refresh {
+  width: 52px; min-width: 52px; padding: 0; background: linear-gradient(180deg, #ffffff, #e9f3ff); color: var(--pa-blue);
+  box-shadow: 0 0 0 1.5px var(--pa-line), 0 4px 0 rgba(110, 155, 220, .4), 0 6px 12px rgba(40, 90, 170, .12);
+}
+.lb-lobby .lb-room-dock .lb-room-actions .lb-btn.lb-room-refresh svg { width: 24px; height: 24px; }
+.lb-lobby .lb-room-dock .lb-btn.lb-room-create {
+  background: linear-gradient(180deg, #7fe7c0 0%, #3fc795 60%, #2fb282 100%); color: #fff;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), 0 4px 0 #23966c, 0 6px 12px rgba(35, 150, 108, .25);
+  text-shadow: 0 1px 0 rgba(20, 100, 70, .35);
+}
+.lb-lobby .lb-room-dock .lb-btn.lb-room-practice {
+  background: linear-gradient(180deg, #ffffff, #eaf3ff); color: var(--pa-navy);
+  box-shadow: 0 0 0 1.5px var(--pa-line), 0 4px 0 rgba(110, 155, 220, .4), 0 6px 12px rgba(40, 90, 170, .12);
+}
+.lb-lobby .lb-room-dock .lb-btn.lb-room-practice svg { color: var(--pa-navy); }
+.lb-lobby .lb-room-dock .lb-room-actions .lb-btn.lb-room-quick {
+  min-width: 190px; min-height: 52px; font-size: 21px;
+  background: linear-gradient(180deg, #5db4ff 0%, #2f84f5 55%, #1f6be2 100%); color: #fff;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .45), 0 5px 0 #1650b8, 0 8px 16px rgba(31, 107, 226, .3);
+  text-shadow: 0 1px 0 rgba(15, 60, 150, .4);
+}
+.lb-lobby .lb-room-dock .lb-btn.lb-code-submit,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-join,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-rejoin,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-retry {
+  background: linear-gradient(180deg, #ffe680 0%, #ffd23f 55%, #ffbe1c 100%); color: #5a3a00;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .5), 0 4px 0 #d99a00, 0 6px 12px rgba(217, 154, 0, .22);
+  font-family: var(--lb-display-font); font-weight: 400;
+}
+.lb-lobby .lb-room-dock .lb-btn.lb-room-join:disabled {
+  background: linear-gradient(180deg, #f3f6fb, #e1e8f3); color: var(--pa-sub); box-shadow: 0 0 0 1.5px #d3deee, 0 3px 0 rgba(140, 160, 190, .3);
+}
+
+/* 방 없음·불러오는 중·오류: 점선 안내 칸 */
+.lb-lobby .lb-room-dock .lb-room-list > .lb-room-state {
+  border: 2px dashed #b3d4f4; border-radius: 18px; background: rgba(255, 255, 255, .55);
+}
+.lb-lobby .lb-room-dock .lb-room-state b { color: var(--pa-navy); }
+.lb-lobby .lb-room-dock .lb-room-state p { color: var(--pa-sub); }
+.lb-lobby .lb-room-dock .lb-room-state.lb-room-empty { align-items: center; gap: 4px 14px; padding: 12px 14px; }
+.lb-lobby .lb-room-dock .lb-room-state.lb-room-empty::before {
+  content: ''; flex: none; width: 44px; height: 40px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 40'%3E%3Cellipse cx='22' cy='38' rx='14' ry='2' fill='%23b6d4f2'/%3E%3Cpath d='M6 22c0-9 7-16 16-16s16 7 16 16-6 14-16 14S6 31 6 22z' fill='%23d9ebff' stroke='%2391bdf0' stroke-width='2'/%3E%3Ccircle cx='14' cy='9' r='4' fill='%23d9ebff' stroke='%2391bdf0' stroke-width='2'/%3E%3Ccircle cx='30' cy='9' r='4' fill='%23d9ebff' stroke='%2391bdf0' stroke-width='2'/%3E%3Ccircle cx='16' cy='22' r='2.4' fill='%235f7bb0'/%3E%3Ccircle cx='28' cy='22' r='2.4' fill='%235f7bb0'/%3E%3Cpath d='M18.5 27.5q3.5 3 7 0' fill='none' stroke='%235f7bb0' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='26' r='2' fill='%23ffc2d6'/%3E%3Ccircle cx='32' cy='26' r='2' fill='%23ffc2d6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.lb-lobby .lb-room-dock .lb-room-state.lb-room-empty b { font-size: 17px; }
+.lb-lobby .lb-room-dock .lb-room-state.lb-room-empty p { font-size: 13px; }
+
+/* 방 카드 */
+.lb-lobby .lb-room-dock .lb-room-card.lb-room-card {
+  padding: 0 6px 0 14px; border: 2px solid #fff; border-image: none; border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff, #f2f8ff); box-shadow: 0 0 0 1.5px #cfe3f7, 0 3px 0 rgba(110, 155, 220, .28);
+}
+.lb-lobby .lb-room-dock .lb-room-card.lb-selected { box-shadow: 0 0 0 3px #ffcf3a, 0 3px 0 rgba(110, 155, 220, .28); }
+.lb-lobby .lb-room-dock .lb-room-card.lb-room-closed { background: linear-gradient(180deg, #f8fafd, #edf2f8); }
+.lb-lobby .lb-room-dock .lb-room-title { color: var(--pa-navy); }
+.lb-lobby .lb-room-dock .lb-room-no { color: var(--pa-sub); }
+.lb-lobby .lb-room-dock .lb-room-mode { height: 24px; padding: 0 10px; border-radius: 999px; background: #e1eeff; color: #2f5fc4; font-size: 13px; }
+.lb-lobby .lb-room-dock .lb-room-mode-tdm { background: #ffe4ea; color: #c23d5d; }
+.lb-lobby .lb-room-dock .lb-room-mode-test { background: #ece7ff; color: #5a4cb0; }
+.lb-lobby .lb-room-dock .lb-room-slots b { color: var(--pa-navy); }
+
+/* 방 코드 입력: 열쇠 아이콘이 든 흰 알약 + 노란 참가 */
+.lb-lobby .lb-room-dock .lb-code-join { gap: 10px; }
+.lb-lobby .lb-room-dock .lb-code-join label > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.lb-lobby .lb-room-dock .lb-code-join input {
+  width: 220px; flex-basis: 220px; height: 44px; padding: 0 12px 0 40px; border: 2px solid #fff; border-image: none; border-radius: 16px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='8' cy='12' r='5' fill='none' stroke='%237f97c2' stroke-width='2.6'/%3E%3Cpath d='M13 12h9M18 12v4M21 12v3' fill='none' stroke='%237f97c2' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E") 12px center / 20px no-repeat;
+  box-shadow: 0 0 0 1.5px var(--pa-line), inset 0 2px 3px rgba(40, 90, 170, .1); color: var(--pa-navy); font-family: var(--lb-display-font); font-size: 16px;
+}
+.lb-lobby .lb-room-dock .lb-code-join input::placeholder { color: #8ea6cf; }
+.lb-lobby .lb-room-dock .lb-code-join input:focus-visible { outline: 3px solid #7cc4ff; outline-offset: 1px; }
+.lb-lobby .lb-room-dock .lb-btn.lb-code-submit { min-width: 84px; min-height: 44px; padding: 3px 16px 0; font-size: 17px; }
+
+/* ---------- 가로형 휴대폰 (낮은 화면): 같은 모양, 크기만 작게 ---------- */
+@media (max-height: 520px) {
+  .lb-lobby .lb-topbar .lb-nav-brand { width: 88px; }
+  .lb-lobby .lb-topbar .lb-level-card { gap: 6px; padding: 3px 10px 3px 3px; border-radius: 16px; }
+  .lb-lobby .lb-topbar .lb-level-icon { width: 32px; height: 32px; padding: 2px; }
+  .lb-lobby .lb-topbar .lb-level-name { font-size: 14px; }
+  .lb-lobby .lb-topbar .lb-level-lv { font-size: 12px; }
+  .lb-lobby .lb-topbar .lb-level-bar { min-width: 40px; height: 8px; }
+  .lb-lobby .lb-topbar .lb-top-icons { gap: 6px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn.lb-top-btn { min-width: 58px; min-height: 48px; border-radius: 14px; padding: 3px 6px 2px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn .lb-top-icon { width: 24px; height: 24px; border-radius: 8px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn .lb-top-icon svg { width: 15px; height: 15px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn b { font-size: 12px; }
+  .lb-lobby .lb-room-dock.lb-room-dock { padding: 6px 10px 8px; gap: 6px; border-width: 2px; border-radius: 20px; }
+  .lb-lobby .lb-room-dock .lb-room-tools-copy b { font-size: 18px; }
+  .lb-lobby .lb-room-dock .lb-room-collapse.lb-btn { min-height: 26px; padding: 0 10px; font-size: 12px; }
+  .lb-lobby .lb-room-dock .lb-room-actions { gap: 6px; }
+  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn { min-height: 36px; padding: 2px 10px 0; border-radius: 12px; font-size: 14px; }
+  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn svg { width: 16px; height: 16px; }
+  .lb-lobby .lb-room-dock .lb-btn.lb-room-refresh { width: 40px; min-width: 40px; }
+  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn.lb-room-refresh svg { width: 18px; height: 18px; }
+  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn.lb-room-quick { min-width: 116px; min-height: 38px; font-size: 16px; }
+  .lb-lobby .lb-room-dock .lb-room-state.lb-room-empty { padding: 6px 10px; }
+  .lb-lobby .lb-room-dock .lb-room-state.lb-room-empty::before { width: 30px; height: 28px; }
+  .lb-lobby .lb-room-dock .lb-room-state.lb-room-empty b { font-size: 14px; }
+  .lb-lobby .lb-room-dock .lb-room-state.lb-room-empty p { font-size: 11px; }
+  .lb-lobby .lb-room-dock .lb-room-card.lb-room-card { padding: 0 4px 0 10px; border-radius: 12px; }
+  .lb-lobby .lb-room-dock .lb-room-mode { height: 20px; padding: 0 7px; font-size: 11px; }
+  .lb-lobby .lb-room-dock .lb-code-join input { width: 150px; flex-basis: 150px; height: 34px; padding-left: 34px; border-radius: 12px; background-position: 9px center; background-size: 17px; font-size: 13px; }
+  .lb-lobby .lb-room-dock .lb-btn.lb-code-submit { min-width: 60px; min-height: 34px; border-radius: 12px; font-size: 13px; }
+}
+/* 방 목록 머리 줄: 버튼이 제목 위로 겹치지 않게, 자리가 모자라면 버튼 줄이 아래로 */
+.lb-lobby .lb-room-dock .lb-room-tools { flex-wrap: wrap; row-gap: 8px; }
+.lb-lobby .lb-room-dock .lb-room-actions { flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+/* 중간 폭: 로고·메뉴·빠른 시작을 조금 작게 */
+@media (max-width: 1000px) {
+  .lb-lobby .lb-topbar .lb-nav-brand { width: 104px; }
+  .lb-lobby .lb-topbar .lb-top-icons { gap: 6px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn.lb-top-btn { min-width: 64px; }
+  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn { padding: 3px 12px 0; font-size: 16px; }
+  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn.lb-room-quick { min-width: 140px; font-size: 18px; }
+}
+/* 좁은 화면(세로로 쥔 폰을 돌려 그리지 않는 경우 등): 상단 메뉴 버튼 폭 */
+@media (max-width: 760px) {
+  .lb-lobby .lb-topbar .lb-nav-brand { width: 84px; }
+  .lb-lobby .lb-topbar .lb-top-icon-btn.lb-top-btn { min-width: 54px; padding-inline: 5px; }
+  .lb-lobby .lb-topbar .lb-level-card { max-width: 200px; }
+}

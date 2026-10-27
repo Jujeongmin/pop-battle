@@ -5,6 +5,8 @@ import './pause.css';
 // Kenney UI 스킨: 로비·방·일시정지 CSS 모두 뒤에 와야 함 (Game 모듈 import 순서상 이 파일이 마지막)
 import './kenney.css';
 import './screens.css';
+// 메인 로비 파스텔 스킨 (마지막 층, 로고·프로필·상단 메뉴·방 목록)
+import './pastel.css';
 import { button, el, slider, type PauseHost, type PauseLockInfo, trapFocus } from './lobbyDom';
 
 /** lock = 마우스 고정 안내 (매치 시작 직후·브라우저가 고정을 거부했을 때, 일반 일시정지와 구분) */
