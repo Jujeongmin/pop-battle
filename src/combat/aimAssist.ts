@@ -1,6 +1,7 @@
 // 모바일(터치) 전용 약한 에임 보정 — 카메라 회전 입력만 바꾼다 (탄 방향·명중 판정·서버 검증은 그대로).
 // - Aim Slowdown: 조준선이 적 몸통 근처에 있으면 손가락 회전을 살짝 느리게
 // - Aim Magnetism: 손가락으로 끄는 중일 때만, 끈 양에 비례해 몸통 쪽으로 아주 조금 더 돌림 (입력이 없으면 아무것도 안 함)
+// - Aim Tracking: 사격 중·ADS 중에만, 조준선 바로 옆(trackRadiusDeg) 적 몸통 쪽으로 천천히 따라감 (손가락 입력이 없어도)
 // 대상은 몸통 중심만 (머리 자동 조준 없음), 맵 구조물에 가린 적은 제외. 강도는 AIM_ASSIST 상수로 조정.
 import * as THREE from 'three';
 
@@ -17,6 +18,12 @@ export const AIM_ASSIST = {
   magnetMinCos: -0.2,
   /** 이 거리(m)보다 먼 적은 보정 없음 */
   maxRange: 70,
+  /** 따라가기 반경 (도): 사격·ADS 중 조준선과 몸통 중심 각도가 이 안이면 따라감 */
+  trackRadiusDeg: 4,
+  /** 따라가기 세기 (1/s): 남은 각도를 초당 이 비율로 줄임 (2.5 = 0.3초에 약 절반) */
+  trackRate: 2.5,
+  /** 따라가기 최대 회전 속도 (도/s): 빠르게 움직이는 적을 순간 조준하지 않게 */
+  trackMaxDegPerSec: 18,
 } as const;
 
 export interface AssistTarget {
@@ -45,25 +52,8 @@ export function assistTouchLook(
   clear: (from: THREE.Vector3, to: THREE.Vector3) => boolean,
 ): { dx: number; dy: number; target: number } {
   if ((dx === 0 && dy === 0) || targets.length === 0 || radPerUnit <= 0) return { dx, dy, target: -1 };
-  const m = camera.matrixWorld;
-  camera.getWorldPosition(_p);
-  _r.setFromMatrixColumn(m, 0).normalize();
-  _u.setFromMatrixColumn(m, 1).normalize();
-  _f.setFromMatrixColumn(m, 2).normalize().negate();
   const slowRad = THREE.MathUtils.degToRad(AIM_ASSIST.slowRadiusDeg);
-  // 조준선 가까운 순 → 처음으로 가리지 않은 대상 하나
-  const near: Array<{ i: number; ex: number; ey: number; ang: number }> = [];
-  targets.forEach((t, i) => {
-    _v.subVectors(t.point, _p);
-    const ahead = _v.dot(_f);
-    if (ahead <= 0.5 || _v.length() > AIM_ASSIST.maxRange) return;
-    const ex = Math.atan2(_v.dot(_r), ahead);
-    const ey = Math.atan2(_v.dot(_u), ahead);
-    const ang = Math.hypot(ex, ey);
-    if (ang < slowRad) near.push({ i, ex, ey, ang });
-  });
-  near.sort((a, b) => a.ang - b.ang);
-  const hit = near.find((n) => clear(_p, targets[n.i]!.point));
+  const hit = nearestTarget(camera, targets, slowRad, clear);
   if (!hit) return { dx, dy, target: -1 };
   // 감속: 가운데일수록 크게
   const k = 1 - AIM_ASSIST.slowdown * (1 - hit.ang / slowRad);
@@ -81,4 +71,49 @@ export function assistTouchLook(
     }
   }
   return { dx: ox, dy: oy, target: hit.i };
+}
+
+/**
+ * 사격·ADS 중 따라가기: 조준선 바로 옆 적 몸통 쪽으로 이번 프레임에 더할 회전 입력 (applyLook 단위).
+ * 대상이 없으면 0. 손가락 입력과 별개로 더함
+ */
+export function trackTouchAim(
+  camera: THREE.Camera,
+  targets: readonly AssistTarget[],
+  radPerUnit: number,
+  clear: (from: THREE.Vector3, to: THREE.Vector3) => boolean,
+  dt: number,
+): { dx: number; dy: number; target: number } {
+  if (targets.length === 0 || radPerUnit <= 0 || dt <= 0) return { dx: 0, dy: 0, target: -1 };
+  const hit = nearestTarget(camera, targets, THREE.MathUtils.degToRad(AIM_ASSIST.trackRadiusDeg), clear);
+  if (!hit || hit.ang < 1e-5) return { dx: 0, dy: 0, target: -1 };
+  const step = Math.min(hit.ang * (1 - Math.exp(-AIM_ASSIST.trackRate * dt)), THREE.MathUtils.degToRad(AIM_ASSIST.trackMaxDegPerSec) * dt);
+  // yaw는 dx > 0이면 오른쪽, pitch는 dy < 0이면 위 (TpsCamera.applyLook)
+  return { dx: ((hit.ex / hit.ang) * step) / radPerUnit, dy: (-(hit.ey / hit.ang) * step) / radPerUnit, target: hit.i };
+}
+
+/** 조준선에서 radius(rad) 안, 가까운 순으로 처음 가리지 않은 대상 (ex·ey = 오른쪽·위 각도) */
+function nearestTarget(
+  camera: THREE.Camera,
+  targets: readonly AssistTarget[],
+  radius: number,
+  clear: (from: THREE.Vector3, to: THREE.Vector3) => boolean,
+): { i: number; ex: number; ey: number; ang: number } | null {
+  const m = camera.matrixWorld;
+  camera.getWorldPosition(_p);
+  _r.setFromMatrixColumn(m, 0).normalize();
+  _u.setFromMatrixColumn(m, 1).normalize();
+  _f.setFromMatrixColumn(m, 2).normalize().negate();
+  const near: Array<{ i: number; ex: number; ey: number; ang: number }> = [];
+  targets.forEach((t, i) => {
+    _v.subVectors(t.point, _p);
+    const ahead = _v.dot(_f);
+    if (ahead <= 0.5 || _v.length() > AIM_ASSIST.maxRange) return;
+    const ex = Math.atan2(_v.dot(_r), ahead);
+    const ey = Math.atan2(_v.dot(_u), ahead);
+    const ang = Math.hypot(ex, ey);
+    if (ang < radius) near.push({ i, ex, ey, ang });
+  });
+  near.sort((a, b) => a.ang - b.ang);
+  return near.find((n) => clear(_p, targets[n.i]!.point)) ?? null;
 }

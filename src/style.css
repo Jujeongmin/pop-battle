@@ -569,6 +569,8 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   transition: transform .06s, box-shadow .06s, background-color .12s, opacity .15s, filter .15s;
 }
 .tc-btn svg { width: 46%; height: 46%; pointer-events: none; filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .8)); }
+/* 글자 버튼 (슬라이딩 SLIDE): 버튼 크기에 맞춰 작게, 살짝 기울여 미끄러지는 느낌 */
+.tc-btn .tc-label { pointer-events: none; font-size: calc(12.5px * var(--tu) * var(--btn)); letter-spacing: .02em; transform: skewX(-12deg); text-shadow: 0 1px 0 rgba(255, 255, 255, .8); }
 .tc-btn.down { transform: translateY(3px) scale(.94); box-shadow: var(--tc-shadow-down); background-color: rgba(255, 255, 255, .94); }
 /* 사격: 가장 크고 유일한 진한 색(분홍 빨강) + 바깥 고리 → 엄지가 바로 찾음 */
 .tc-fire {

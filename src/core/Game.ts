@@ -72,7 +72,7 @@ import { GameSounds, type SoundActor } from '../audio/GameSounds';
 import { FIRE_SOUND, MIX, type MusicId } from '../config/audio';
 import { CAMERA, CHARACTER, MOVEMENT, RENDER } from '../config/gameConfig';
 import { GRAPHICS_PRESETS, getGraphicsQuality, onGraphicsQualityChange, type GraphicsPreset } from '../config/graphics';
-import { assistTouchLook, type AssistTarget } from '../combat/aimAssist';
+import { assistTouchLook, trackTouchAim, type AssistTarget } from '../combat/aimAssist';
 import { areHostile } from '../combat/teams';
 import { MELEE_MOUNT, MELEE_WEAPON, PRIMARY_WEAPONS, RIFLE, RIFLE_MOUNT, SECONDARY_WEAPON, WEAPONS, type WeaponDef } from '../config/weapons';
 import { initRapier, Physics } from '../physics/Physics';
@@ -866,7 +866,7 @@ export class Game {
     }
 
     // --- 시점 (렌더 프레임마다 즉시 반영) --- 모바일 터치 회전분에만 약한 에임 보정 (카메라 입력만, 판정 무관)
-    this.applyTouchAimAssist();
+    this.applyTouchAimAssist(dt);
     this.tpsCamera.applyLook(input.lookDX, input.lookDY, this.aim.lookSensitivityMultiplier);
 
     // --- 매치 진행 (카운트다운·타이머·시간 종료) ---
@@ -2751,14 +2751,19 @@ export class Game {
 
   /**
    * 모바일 에임 보정 (combat/aimAssist.ts): 이번 프레임 터치 회전 입력만 바꿈 (마우스 입력은 그대로).
-   * 손가락 입력이 있을 때만, 전투 중·살아 있음·총기일 때. 대상 = 살아 있는 적 몸통 중심 (봇·원격 플레이어), 맵 구조물에 가리면 제외
+   * 손가락 입력이 있을 때(감속·끌림) + 사격·ADS 중(따라가기), 전투 중·살아 있음·총기일 때.
+   * 대상 = 살아 있는 적 몸통 중심 (봇·원격 플레이어), 맵 구조물에 가리면 제외
    */
-  private applyTouchAimAssist(): void {
+  private applyTouchAimAssist(dt: number): void {
     this.aimAssistOn = null;
     const t = this.input.touch;
     const tdx = t.state.lookDX;
     const tdy = t.state.lookDY;
-    if (!this.input.touchMode || !t.active || (tdx === 0 && tdy === 0)) return;
+    if (!this.input.touchMode || !t.active) return;
+    // 따라가기: 쏘는 중(누르고 있음·방금 쏨)이거나 ADS 중. 스나이퍼 스코프는 제외 (확대 화면에서 자동 조준처럼 보임)
+    const scoped = this.aim.isAiming && this.aim.visualProfile?.style === 'scopeOverlay';
+    const engaged = !scoped && (t.state.fireHeld || this.aim.isAiming || this.weapons.timeSinceShot < 0.25);
+    if (tdx === 0 && tdy === 0 && !engaged) return;
     if (!this.match.combatActive || this.dead || this.lobbyShown || this.weapons.weapon.def.kind === 'melee') return;
     const list = this.assistTargets;
     const ids: string[] = [];
@@ -2772,12 +2777,25 @@ export class Game {
     for (const r of this.net?.hostiles() ?? []) if (areHostile(this.combatant, r)) add(r.id, (o) => r.avatar.getChestPosition(o));
     list.length = n;
     if (n === 0) return;
-    const out = assistTouchLook(tdx, tdy, this.tpsCamera.camera, list, CAMERA.sensitivity * this.aim.lookSensitivityMultiplier, (a, b) => this.physics.lineClear(a, b));
-    if (out.target < 0) return;
-    this.aimAssistOn = ids[out.target]!;
+    const radPerUnit = CAMERA.sensitivity * this.aim.lookSensitivityMultiplier;
+    const clear = (a: THREE.Vector3, b: THREE.Vector3) => this.physics.lineClear(a, b);
     const s = this.input.state;
-    s.lookDX += out.dx - tdx;
-    s.lookDY += out.dy - tdy;
+    if (tdx !== 0 || tdy !== 0) {
+      const out = assistTouchLook(tdx, tdy, this.tpsCamera.camera, list, radPerUnit, clear);
+      if (out.target >= 0) {
+        this.aimAssistOn = ids[out.target]!;
+        s.lookDX += out.dx - tdx;
+        s.lookDY += out.dy - tdy;
+      }
+    }
+    if (engaged) {
+      const tr = trackTouchAim(this.tpsCamera.camera, list, radPerUnit, clear, dt);
+      if (tr.target >= 0) {
+        this.aimAssistOn ??= ids[tr.target]!;
+        s.lookDX += tr.dx;
+        s.lookDY += tr.dy;
+      }
+    }
   }
 
   /** 디버그 (콘솔): 봇 목록 */

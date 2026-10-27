@@ -79,12 +79,13 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, html = '
 /** 버튼 크기 설정이 이보다 크면 큰 버튼 배치 (.touch-layer.big: 667×375에서도 화면 가운데 조준 영역을 비움) */
 const BIG_BUTTONS = 1.1;
 
-// 아이콘: 24×24, 선 굵기 2.4 통일. 사격 = 탄환(쏘기), ADS = 조준경(확대 조준) — 둘이 헷갈리지 않게 모양을 나눔
+// 아이콘: 24×24, 선 굵기 2.4 통일. 사격 = 탄환(쏘기), ADS = 조준경(확대 조준) — 둘이 헷갈리지 않게 모양을 나눔. 슬라이딩은 글자
 const ICONS: Record<ButtonKind, string> = {
   fire: '<svg viewBox="0 0 24 24"><g transform="rotate(45 12 12)"><path d="M12 2.5c2.7 1.9 3.7 4.6 3.7 7.4v6.3H8.3V9.9c0-2.8 1-5.5 3.7-7.4z" fill="currentColor"/><rect x="7.6" y="17.6" width="8.8" height="3.4" rx="1.2" fill="currentColor"/></g><path d="M2.5 15.5l2.6-2.6M4.6 19.4l2.6-2.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" opacity=".75"/></svg>',
   ads: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.3" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 2v5.2M12 16.8V22M2 12h5.2M16.8 12H22" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>',
   jump: '<svg viewBox="0 0 24 24"><path d="M12 4l7 8h-4.5v7h-5v-7H5z" fill="currentColor"/></svg>',
-  slide: '<svg viewBox="0 0 24 24"><path d="M3 17h13l5-5M14 7.5a2.3 2.3 0 1 0 0.01 0M9 13l3-3 3 2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // 슬라이딩: 그림보다 글자가 바로 읽힘 (모든 언어에서 SLIDE)
+  slide: '<span class="tc-label">SLIDE</span>',
   reload: '<svg viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.1-5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M20.5 3.5v5.2h-5.2z" fill="currentColor"/></svg>',
 };
 
