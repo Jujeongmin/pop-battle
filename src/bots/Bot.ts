@@ -601,7 +601,7 @@ export class Bot implements Combatant {
 
   dispose(): void {
     this.hitboxes.dispose();
-    this.physics.world.removeRigidBody(this.controller.body);
+    this.controller.dispose();
     this.avatar.dispose();
   }
 }

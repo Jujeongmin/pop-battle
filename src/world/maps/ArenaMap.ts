@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RENDER } from '../../config/gameConfig';
+import type { GraphicsPreset } from '../../config/graphics';
 import { ARENA, ARENA_MODELS, plain, type ArenaModelKey } from '../../config/maps';
 import type { Physics } from '../../physics/Physics';
 import type { GameMap, MapSpawns, NavBounds } from '../GameMap';
@@ -53,6 +54,8 @@ export class ArenaMap implements GameMap {
   private readonly backdrop: ArenaBackdrop;
   readonly lobbyKit: { models: KitModels; material: THREE.Material };
   private readonly disposables: Array<{ dispose(): void }> = [];
+  /** 원래 그림자를 드리우던 맵 메시 (그래픽 '낮음'에서 끔, 처음 적용할 때 모음) */
+  private staticCasters: THREE.Object3D[] | null = null;
   /** 디버그: 그리기 호출 수·인스턴스 수·충돌체 수 */
   stats = { instancedMeshes: 0, instances: 0, colliders: 0, movementOnlyColliders: 0, triangles: 0, decorTriangles: 0, cityTriangles: 0, cloudTriangles: 0 };
 
@@ -176,6 +179,27 @@ export class ArenaMap implements GameMap {
 
   update(dt: number): void {
     this.backdrop.update(dt);
+  }
+
+  /** 그래픽 품질: 그림자 맵 크기·구조물 그림자·배경 도시 재질 */
+  setGraphics(p: GraphicsPreset): void {
+    const shadow = this.sun.shadow;
+    if (shadow.mapSize.x !== p.shadowMapSize) {
+      shadow.mapSize.set(p.shadowMapSize, p.shadowMapSize);
+      // 그림자 맵은 다음 그리기에서 새 크기로 다시 만들어짐
+      shadow.map?.dispose();
+      shadow.map = null;
+    }
+    // 흐림 폭을 그림자 맵 칸 수로 주므로 맵이 작아지면 같은 비율로 줄여 실제 흐림 폭(약 5cm)을 유지
+    shadow.radius = Math.max(1, (3 * p.shadowMapSize) / RENDER.shadowMapSize);
+    if (!this.staticCasters) {
+      this.staticCasters = [];
+      this.group.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh && o.castShadow) this.staticCasters!.push(o);
+      });
+    }
+    for (const o of this.staticCasters) o.castShadow = p.staticShadows;
+    this.backdrop.setSimple(p.simpleBackdrop);
   }
 
   // ---------------- 조각 ----------------

@@ -11,6 +11,10 @@ import { KitMerger, lighten, seededRandom, trs, type KitModels } from './kit';
 export class ArenaBackdrop {
   readonly group = new THREE.Group();
   private readonly clouds: THREE.Mesh;
+  private readonly cityMesh: THREE.Mesh;
+  private readonly cityMaterial: THREE.Material;
+  /** 그래픽 '낮음'용 가벼운 도시 재질 (처음 쓸 때 만듦, 정점 색·텍스처는 같음) */
+  private simpleCityMaterial: THREE.MeshLambertMaterial | null = null;
   private readonly disposables: Array<{ dispose(): void }> = [];
   readonly stats = { cityTriangles: 0, cloudTriangles: 0, meshes: 0 };
 
@@ -54,6 +58,8 @@ export class ArenaBackdrop {
     cityMesh.name = 'toy-city';
     cityMesh.matrixAutoUpdate = false;
     this.group.add(cityMesh);
+    this.cityMesh = cityMesh;
+    this.cityMaterial = cityMaterial;
     this.disposables.push(cityGeo);
 
     // ---------- 구름 ----------
@@ -64,6 +70,18 @@ export class ArenaBackdrop {
 
   update(dt: number): void {
     this.clouds.rotation.y += dt * ARENA.sky.cloudDrift;
+  }
+
+  /**
+   * 그래픽 '낮음': 도시(화면의 큰 면적, 11만 삼각형)를 반사광 없는 Lambert 재질로 그려 픽셀 계산을 줄임.
+   * 모양·색·텍스처·안개는 같고, 해의 반짝임만 빠짐
+   */
+  setSimple(on: boolean): void {
+    if (on && !this.simpleCityMaterial) {
+      const src = this.cityMaterial as THREE.MeshStandardMaterial;
+      this.simpleCityMaterial = new THREE.MeshLambertMaterial({ color: src.color, map: src.map, vertexColors: src.vertexColors });
+    }
+    this.cityMesh.material = on ? this.simpleCityMaterial! : this.cityMaterial;
   }
 
   // ---------------- 하늘 ----------------
@@ -312,6 +330,8 @@ export class ArenaBackdrop {
   dispose(): void {
     this.group.removeFromParent();
     this.disposables.forEach((d) => d.dispose());
+    // 텍스처는 원래 도시 재질과 공유 → 재질만 해제
+    this.simpleCityMaterial?.dispose();
   }
 }
 

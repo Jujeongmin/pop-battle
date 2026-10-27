@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { KitModels } from './maps/kit';
+import type { GraphicsPreset } from '../config/graphics';
 
 /** 스폰 지점 (발 위치, yaw = 바라볼 방향 atan2(x, z) 기준). 맵 구조와 분리된 데이터 */
 export interface SpawnPoint {
@@ -40,6 +41,8 @@ export interface GameMap {
   followShadow(focus: THREE.Vector3): void;
   /** 매 프레임 배경 연출 (구름 흐름 등). 전투 판정과 무관 */
   update?(dt: number): void;
+  /** 그래픽 품질 적용 (그림자·배경). 없으면 해상도만 바뀜 */
+  setGraphics?(p: GraphicsPreset): void;
   /** 로비 공간이 같이 쓰는 키트 모델·장식 머티리얼 (맵이 소유, 로비는 해제하지 않음). 없으면 로비는 기본 도형만 */
   readonly lobbyKit?: { models: KitModels; material: THREE.Material };
   dispose(): void;

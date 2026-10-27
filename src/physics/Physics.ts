@@ -1,6 +1,13 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 
+/** 레이 원점·방향을 제자리에서 바꿈 (쿼리마다 새 객체를 만들지 않음 — Rapier는 호출 순간 값만 읽음) */
+function setXyz(v: RAPIER.Vector, x: number, y: number, z: number): void {
+  v.x = x;
+  v.y = y;
+  v.z = z;
+}
+
 export type HitPart = 'head' | 'body';
 
 /** 피해 1회 정보 */
@@ -161,8 +168,8 @@ export class Physics {
     /** 쏜 캐릭터 자신 (이동 캡슐·히트박스가 붙은 강체) */
     excludeBody?: RAPIER.RigidBody,
   ): RayHit | null {
-    this.ray.origin = { x: origin.x, y: origin.y, z: origin.z };
-    this.ray.dir = { x: dir.x, y: dir.y, z: dir.z };
+    setXyz(this.ray.origin, origin.x, origin.y, origin.z);
+    setXyz(this.ray.dir, dir.x, dir.y, dir.z);
     const hit = this.world.castRayAndGetNormal(
       this.ray, maxDistance, true, undefined, undefined, exclude, excludeBody, this.shotFilter,
     );
@@ -207,8 +214,8 @@ export class Physics {
     const dz = to.z - from.z;
     const len = Math.hypot(dx, dy, dz);
     if (len < 1e-3) return true;
-    this.ray.origin = { x: from.x, y: from.y, z: from.z };
-    this.ray.dir = { x: dx / len, y: dy / len, z: dz / len };
+    setXyz(this.ray.origin, from.x, from.y, from.z);
+    setXyz(this.ray.dir, dx / len, dy / len, dz / len);
     const hit = this.world.castRay(this.ray, len, true, undefined, undefined, undefined, undefined, this.staticFilter);
     return hit === null;
   }

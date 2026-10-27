@@ -65,6 +65,10 @@ const _fwd = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _origin = new THREE.Vector3();
 const _tmp = new THREE.Vector3();
+// predict 전용 (매 프레임 HUD 예측). 결과에 남는 값(aimDebug)은 복사해서 넣음
+const _pFwd = new THREE.Vector3();
+const _pOrigin = new THREE.Vector3();
+const _pAim = new THREE.Vector3();
 
 /**
  * 로컬 히트스캔 사격. 카메라 중앙 레이로 조준점을 구하고, 실제 탄은 총구에서 조준점으로 검사해
@@ -340,13 +344,14 @@ export class WeaponSystem {
       const none: ShotResult = { from: f.chest.clone(), aimPoint: f.chest.clone(), aimHit: null, stage: 'clear', hit: null, end: f.chest.clone(), damage: 0, headshot: false, killed: false };
       return { blocked: false, shot: none, impact: f.chest.clone(), cameraHit: null, enemy: h ? { name: h.target.name ?? 'target', part: h.part } : null };
     }
-    const fwd = f.camera.getWorldDirection(new THREE.Vector3());
+    const fwd = f.camera.getWorldDirection(_pFwd);
     const t0 = Math.max(0, _tmp.subVectors(f.pivot, f.camera.position).dot(fwd));
-    const origin = f.camera.position.clone().addScaledVector(fwd, t0);
+    const origin = _pOrigin.copy(f.camera.position).addScaledVector(fwd, t0);
     const camHit = this.physics.raycast(origin, fwd, def.range, undefined, this.shooter);
-    const aimPoint = camHit ? camHit.point : origin.clone().addScaledVector(fwd, def.range);
+    // traceFromMuzzle은 조준점을 복사해 씀 → 맞은 곳이 없을 때 조준점은 임시 벡터로 충분
+    const aimPoint = camHit ? camHit.point : _pAim.copy(origin).addScaledVector(fwd, def.range);
     const shot = traceFromMuzzle(this.physics, f.chest, f.muzzle, aimPoint, camHit, this.shooter);
-    if (this.traceDebug) shot.aimDebug = { origin, dir: fwd, chest: f.chest.clone() };
+    if (this.traceDebug) shot.aimDebug = { origin: origin.clone(), dir: fwd.clone(), chest: f.chest.clone() };
     const blocked = shot.end.distanceTo(aimPoint) > 0.3;
     // 적 판정은 카메라가 아니라 실제 탄이 맞는 대상 기준 (총구가 벽에 막히면 적이 보여도 아님)
     const hb = shot.hit?.hitbox;

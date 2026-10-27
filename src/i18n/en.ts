@@ -101,6 +101,7 @@ export const EN_EXACT: Record<string, string> = {
   '설정 종류': 'Settings type', '일반': 'General', 'PC 조작': 'PC controls', '모바일 터치': 'Mobile touch', '사운드': 'Sound', '조작 (PC)': 'Controls (PC)', '화면': 'Display',
   '전체 소리': 'Master volume', '효과음': 'Effects', '배경음': 'Music', '음소거': 'Mute', '마우스 감도': 'Mouse sensitivity', '시점 회전 감도': 'Look sensitivity', '조이스틱 크기': 'Joystick size', '버튼 크기': 'Button size',
   '확장 화면으로 플레이': 'Play in expanded view', '그래픽 품질': 'Graphics quality', '언어': 'Language',
+  '낮음': 'Low', '보통': 'Medium', '높음': 'High',
   '게임 안 확장은 이 화면에서 지원되지 않아요 · Verse8 화면의 확장 버튼을 써 주세요': 'In-game expand is not supported here · use the Verse8 expand button',
   '이 화면에서는 게임이 확장 화면을 열 수 없어요. Verse8 화면의 확장 버튼을 눌러 주세요.': "The game can't expand here. Please use the Verse8 expand button.",
   '확장 화면이 열리지 않았어요(브라우저가 거부). Verse8 화면의 확장 버튼을 눌러 주세요.': 'Expanded view was blocked by the browser. Please use the Verse8 expand button.',

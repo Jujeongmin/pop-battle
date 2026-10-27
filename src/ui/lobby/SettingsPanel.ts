@@ -1,6 +1,7 @@
-// SETTINGS: 실제로 적용되는 항목만 슬라이더 (사운드 크기·마우스 감도·모바일 터치), 그래픽은 준비 중. 값은 이 기기에 저장
+// SETTINGS: 사운드 크기·마우스 감도·모바일 터치(슬라이더), 그래픽 품질·언어(버튼). 값은 이 기기에 저장
 import { fullscreenAvailable, isExpanded, onExpandChange, setExpanded } from '../FullscreenPrompt';
 import { getLang, setLang, type Lang } from '../../i18n/lang';
+import { getGraphicsQuality, setGraphicsQuality, type GraphicsQuality } from '../../config/graphics';
 import { button, el, slider, type LobbyHost, type LobbyPanel } from './lobbyDom';
 import { nicknameEditor } from './nicknameUi';
 
@@ -152,14 +153,36 @@ export class SettingsPanel implements LobbyPanel {
     });
     left.append(row, expandNote);
     if (!fullscreenAvailable()) expandNote.textContent = '게임 안 확장은 이 화면에서 지원되지 않아요 · Verse8 화면의 확장 버튼을 써 주세요';
-    // 그래픽 설정은 아직 없음 → 작은 비활성 줄 (슬라이더 줄과 같은 모양, 조작 불가)
-    const gfx = el('div', 'lb-slider lb-slider-off lb-set-soon');
-    gfx.setAttribute('aria-disabled', 'true');
-    gfx.append(el('span', 'lb-slider-label', '그래픽 품질'), el('span', 'lb-set-soon-text', '다음 업데이트'), el('span', 'lb-slider-val', '준비 중'));
-    left.appendChild(gfx);
+    left.append(el('div', 'lb-slider-label lb-gfx-label', '그래픽 품질'), this.graphicsRow());
     left.append(el('div', 'lb-section', '언어'), this.languageRow());
     this.groupGeneral(left);
     select(this.tab);
+  }
+
+  /** 그래픽 품질: 낮음(성능 우선) / 보통(기본) / 높음(기존 그래픽). 누르면 바로 적용, 이 기기에 기억 — config/graphics.ts */
+  private graphicsRow(): HTMLElement {
+    const row = el('div', 'lb-lang-row lb-gfx-row');
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', '그래픽 품질');
+    const items: Array<[GraphicsQuality, HTMLButtonElement]> = [];
+    const sync = (): void => {
+      for (const [q, b] of items) {
+        const on = getGraphicsQuality() === q;
+        b.classList.toggle('lb-active', on);
+        b.setAttribute('aria-checked', String(on));
+      }
+    };
+    for (const [q, label] of [['low', '낮음'], ['medium', '보통'], ['high', '높음']] as const) {
+      const b = button(label, 'lb-lang-btn', () => {
+        setGraphicsQuality(q);
+        sync();
+      });
+      b.setAttribute('role', 'radio');
+      items.push([q, b]);
+      row.append(b);
+    }
+    sync();
+    return row;
   }
 
   /** 언어: 한국어 / English (누르면 화면 전체 즉시 번역, 이 기기에 기억 — i18n/lang.ts) */

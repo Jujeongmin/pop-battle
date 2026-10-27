@@ -105,6 +105,13 @@ export class PlayerController {
     physics.ignoreForQueries(this.collider);
   }
 
+  /** 제거 (봇을 지울 때): 이동 캡슐·강체와 캐릭터 컨트롤러(wasm 메모리)를 해제 */
+  dispose(): void {
+    this.physics.removeCollider(this.collider);
+    this.physics.world.removeRigidBody(this.body);
+    this.physics.world.removeCharacterController(this.controller);
+  }
+
   /** 사망 등: 이동 캡슐 충돌을 끄거나 켠다 (다른 캐릭터가 통과 가능) */
   setCollisionEnabled(enabled: boolean): void {
     this.collider.setEnabled(enabled);

@@ -105,6 +105,12 @@ export class LobbySpace {
     scene.add(this.pillarMesh);
   }
 
+  /** 그래픽 '낮음': 섬·탑 기둥(합친 큰 메시)이 그림자를 드리우지 않음 (캐릭터 그림자는 그대로 받음) */
+  setStaticShadows(on: boolean): void {
+    this.mesh.castShadow = on;
+    this.pillarMesh.castShadow = on;
+  }
+
   /**
    * 선분(카메라 → 캐릭터)이 탑 기둥을 지나는지 (가로 원 + 높이 범위). margin = 기둥 반지름에 더할 여유 (m)
    */

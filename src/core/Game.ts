@@ -71,6 +71,7 @@ import { Scoreboard, type ScoreRow } from '../ui/Scoreboard';
 import { GameSounds, type SoundActor } from '../audio/GameSounds';
 import { FIRE_SOUND, MIX, type MusicId } from '../config/audio';
 import { CAMERA, CHARACTER, MOVEMENT, RENDER } from '../config/gameConfig';
+import { GRAPHICS_PRESETS, getGraphicsQuality, onGraphicsQualityChange, type GraphicsPreset } from '../config/graphics';
 import { assistTouchLook, type AssistTarget } from '../combat/aimAssist';
 import { areHostile } from '../combat/teams';
 import { MELEE_MOUNT, MELEE_WEAPON, PRIMARY_WEAPONS, RIFLE, RIFLE_MOUNT, SECONDARY_WEAPON, WEAPONS, type WeaponDef } from '../config/weapons';
@@ -425,11 +426,12 @@ export class Game {
   /** 개발 진단 로그 타이머 (로비 전송량·FPS) */
   private hubLogTimer = 0;
   private readonly abort = new AbortController();
+  private offGraphics: (() => void) | null = null;
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     const coarsePointer = matchMedia('(hover: none) and (pointer: coarse)').matches;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarsePointer ? RENDER.mobileMaxPixelRatio : RENDER.maxPixelRatio));
+    this.renderer.setPixelRatio(this.pixelRatioFor(coarsePointer));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -442,7 +444,7 @@ export class Game {
     this.hud.setTouchMode(this.input.touchMode);
     this.input.onTouchModeChange = (on) => {
       this.hud.setTouchMode(on);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, on ? RENDER.mobileMaxPixelRatio : RENDER.maxPixelRatio));
+      this.renderer.setPixelRatio(this.pixelRatioFor(on));
       this.resize();
     };
     this.hud.onSlotTap = (i) => this.input.touch.pressSlot(i + 1);
@@ -785,6 +787,9 @@ export class Game {
     // 로비 전용 공간 (경기장 위 하늘 놀이섬, 맵 키트 재사용)에서 시작. 매치·멀티 입장 때 공간을 치우고 원래 스폰 규칙으로 배치
     this.lobbySpace = new LobbySpace(this.scene, this.physics, this.map.lobbyKit ?? null);
     this.placeAtSpawn(this.lobbySpace.spawn);
+    // 그래픽 품질 (설정에서 바꾸면 바로 다시 적용)
+    this.applyGraphics();
+    this.offGraphics = onGraphicsQualityChange(() => this.applyGraphics());
     // 온라인 로비: 같은 로비 인스턴스 사람들 (판정·충돌 없는 표시 전용 캐릭터 + 닉네임)
     this.peers = new LobbyPeers({
       createAvatar: (id) => this.createLobbyAvatar(id),
@@ -3166,6 +3171,7 @@ export class Game {
     this.lobbyMenuOpen = false;
     this.lobbyPanel = null;
     this.lobbySpace = new LobbySpace(this.scene, this.physics, this.map.lobbyKit ?? null);
+    this.lobbySpace.setStaticShadows(this.graphics.staticShadows);
     this.placeAtSpawn(this.lobbySpace.spawn);
     this.lobbyFollowReady = false;
     if (this.lobby?.menuOpen) this.lobby.closeMenu();
@@ -3552,6 +3558,25 @@ export class Game {
     }
   }
 
+  private get graphics(): GraphicsPreset {
+    return GRAPHICS_PRESETS[getGraphicsQuality()];
+  }
+
+  /** 렌더 해상도 배율: 그래픽 품질의 상한 (PC / 터치 기기), 기기 배율보다 크게는 안 씀 */
+  private pixelRatioFor(touch: boolean): number {
+    const g = this.graphics;
+    return Math.min(window.devicePixelRatio, touch ? g.mobileMaxPixelRatio : g.maxPixelRatio);
+  }
+
+  /** 그래픽 품질 적용: 해상도·그림자·배경 (게임 재시작 없이) */
+  private applyGraphics(): void {
+    const g = this.graphics;
+    this.renderer.setPixelRatio(this.pixelRatioFor(this.input.touchMode));
+    this.map.setGraphics?.(g);
+    this.lobbySpace?.setStaticShadows(g.staticShadows);
+    this.resize();
+  }
+
   private resize(): void {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
@@ -3567,6 +3592,7 @@ export class Game {
     this.disposed = true;
     cancelAnimationFrame(this.rafId);
     this.abort.abort();
+    this.offGraphics?.();
     this.hub?.dispose();
     this.peers?.dispose();
     this.lobbySpace?.dispose();
