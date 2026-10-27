@@ -84,7 +84,12 @@
 .lb-lobby .lb-room-dock .lb-btn.lb-room-rejoin {
   border: 2px solid rgba(255, 255, 255, .85); border-image: none; border-radius: 16px; text-shadow: none;
 }
-.lb-lobby .lb-room-dock .lb-room-actions .lb-btn { min-height: 46px; padding: 3px 18px 0; font-size: 18px; }
+/* 글자 세로 중앙: Jua 폰트에 이미 중앙 보정(toy.css ascent/descent-override)이 있어 앞 층의 위쪽 3px 여백은 빼고 위아래 같게 */
+.lb-lobby .lb-room-dock .lb-room-actions .lb-btn,
+.lb-lobby .lb-room-dock .lb-btn.lb-room-join,
+.lb-lobby .lb-room-dock .lb-btn.lb-code-submit,
+.lb-lobby .lb-room-dock .lb-room-collapse.lb-btn { align-items: center; padding-top: 0; padding-bottom: 0; line-height: 1; }
+.lb-lobby .lb-room-dock .lb-room-actions .lb-btn { min-height: 46px; padding-inline: 18px; font-size: 18px; }
 .lb-lobby .lb-room-dock .lb-room-actions .lb-btn svg { width: 20px; height: 20px; }
 .lb-lobby .lb-room-dock .lb-btn.lb-room-refresh {
   width: 52px; min-width: 52px; padding: 0; background: linear-gradient(180deg, #ffffff, #e9f3ff); color: var(--pa-blue);
@@ -157,7 +162,7 @@
 }
 .lb-lobby .lb-room-dock .lb-code-join input::placeholder { color: #8ea6cf; }
 .lb-lobby .lb-room-dock .lb-code-join input:focus-visible { outline: 3px solid #7cc4ff; outline-offset: 1px; }
-.lb-lobby .lb-room-dock .lb-btn.lb-code-submit { min-width: 84px; min-height: 44px; padding: 3px 16px 0; font-size: 17px; }
+.lb-lobby .lb-room-dock .lb-btn.lb-code-submit { min-width: 84px; min-height: 44px; padding-inline: 16px; font-size: 17px; }
 
 /* ---------- 가로형 휴대폰 (낮은 화면): 같은 모양, 크기만 작게 ---------- */
 @media (max-height: 520px) {
@@ -176,7 +181,7 @@
   .lb-lobby .lb-room-dock .lb-room-tools-copy b { font-size: 18px; }
   .lb-lobby .lb-room-dock .lb-room-collapse.lb-btn { min-height: 26px; padding: 0 10px; font-size: 12px; }
   .lb-lobby .lb-room-dock .lb-room-actions { gap: 6px; }
-  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn { min-height: 36px; padding: 2px 10px 0; border-radius: 12px; font-size: 14px; }
+  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn { min-height: 36px; padding-inline: 10px; border-radius: 12px; font-size: 14px; }
   .lb-lobby .lb-room-dock .lb-room-actions .lb-btn svg { width: 16px; height: 16px; }
   .lb-lobby .lb-room-dock .lb-btn.lb-room-refresh { width: 40px; min-width: 40px; }
   .lb-lobby .lb-room-dock .lb-room-actions .lb-btn.lb-room-refresh svg { width: 18px; height: 18px; }
@@ -198,7 +203,7 @@
   .lb-lobby .lb-topbar .lb-nav-brand { width: 104px; }
   .lb-lobby .lb-topbar .lb-top-icons { gap: 6px; }
   .lb-lobby .lb-topbar .lb-top-icon-btn.lb-top-btn { min-width: 64px; }
-  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn { padding: 3px 12px 0; font-size: 16px; }
+  .lb-lobby .lb-room-dock .lb-room-actions .lb-btn { padding-inline: 12px; font-size: 16px; }
   .lb-lobby .lb-room-dock .lb-room-actions .lb-btn.lb-room-quick { min-width: 140px; font-size: 18px; }
 }
 /* 좁은 화면(세로로 쥔 폰을 돌려 그리지 않는 경우 등): 상단 메뉴 버튼 폭 */
