@@ -19,11 +19,11 @@ export const AIM_ASSIST = {
   /** 이 거리(m)보다 먼 적은 보정 없음 */
   maxRange: 70,
   /** 따라가기 반경 (도): 사격·ADS 중 조준선과 몸통 중심 각도가 이 안이면 따라감 */
-  trackRadiusDeg: 4,
-  /** 따라가기 세기 (1/s): 남은 각도를 초당 이 비율로 줄임 (2.5 = 0.3초에 약 절반) */
-  trackRate: 2.5,
+  trackRadiusDeg: 2.5,
+  /** 따라가기 세기 (1/s): 남은 각도를 초당 이 비율로 줄임 (1.2 = 약 0.6초에 절반) */
+  trackRate: 1.2,
   /** 따라가기 최대 회전 속도 (도/s): 빠르게 움직이는 적을 순간 조준하지 않게 */
-  trackMaxDegPerSec: 18,
+  trackMaxDegPerSec: 8,
 } as const;
 
 export interface AssistTarget {

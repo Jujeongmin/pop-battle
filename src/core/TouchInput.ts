@@ -369,8 +369,19 @@ export class TouchInput {
 
   private beginStick(x: number, y: number): void {
     const r = this.radius;
-    const originX = Math.max(r + 8, Math.min(viewW() * MOVE_ZONE - r, x));
+    let maxX = viewW() * MOVE_ZONE - r;
     const originY = Math.max(r + 8, Math.min(viewH() - r - 8, y));
+    // 아래 가운데 무기 슬롯 바(HUD)와 같은 높이면 조이스틱 원이 슬롯 위로 그려지지 않게 그 왼쪽까지만
+    const slots = document.querySelector<HTMLElement>('.hud.touch .slots');
+    const rect = slots?.getBoundingClientRect();
+    if (rect && rect.width > 0) {
+      const a = toGame(rect.left, rect.top);
+      const b = toGame(rect.right, rect.bottom);
+      const left = Math.min(a.x, b.x);
+      const top = Math.min(a.y, b.y);
+      if (originY + r > top - 6) maxX = Math.min(maxX, left - r - 6);
+    }
+    const originX = Math.max(r + 8, Math.min(maxX, x));
     this.moveOrigin.x = originX;
     this.moveOrigin.y = originY;
     this.stick.classList.add('live');

@@ -682,22 +682,27 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
 /* 킬로그: 2줄(Hud.setTouchMode) · 이름 폭 · 글자 */
 .hud.touch .kf-row { font-size: 12px; padding: 2px 8px; }
 
-/* 터치: 오른쪽 엄지 버튼 묶음(버튼 크기 설정 최대 140%)과 겹치지 않게 슬롯 바를 가운데보다 조금 왼쪽에 */
-.hud.touch .slots { left: 44%; bottom: calc(var(--pad-y) + var(--safe-b)); }
+/* 터치: 슬롯 바는 아래 가운데. 칸을 작게 해(3칸 약 200px) 오른쪽 버튼 묶음과 겹치지 않게, 조이스틱은 슬롯 바 위로 그리지 않음 (TouchInput.beginStick) */
+.hud.touch .slots { left: 50%; bottom: calc(var(--pad-y) + var(--safe-b)); gap: 5px; }
 /* 조작 중에만 슬롯 바를 터치 레이어 위로 (일시정지 카드 위에 겹치지 않게) */
 .hud.touch.playing .slots { z-index: 9; pointer-events: auto; }
 /* 작은 가로 화면: 시작·일시정지 카드는 스크롤, 카드 자체를 눌러도 시작 */
 .hud.touch .lock-card { pointer-events: auto; max-height: calc(100% - 16px); overflow-y: auto; overscroll-behavior: contain; }
 .hud.touch .lock-card ul { margin: 6px 0; font-size: 12px; line-height: 1.5; }
 .hud.touch .slot {
-  min-height: 44px; padding: 6px 12px 6px 6px; touch-action: none;
+  min-height: 44px; padding: 6px 8px 6px 5px; gap: 4px; touch-action: none;
   border: 3px solid var(--tc-border); border-radius: 16px; background: var(--tc-gloss), var(--tc-bg); box-shadow: var(--tc-shadow);
   transition: transform .06s, box-shadow .06s;
 }
 .hud.touch .slot.active { background: var(--tc-gloss), var(--yellow); border-color: #fff; box-shadow: 0 4px 0 rgba(176, 120, 0, .45), inset 0 -3px 0 rgba(176, 120, 0, .15); }
 .hud.touch .slot.down { transform: translateY(2px) scale(.96); box-shadow: var(--tc-shadow-down); }
 .hud.touch .slot-name { display: none; }
-.hud.touch .slot-icon svg { width: 40px; height: 16px; }
+.hud.touch .slot-icon svg { width: 32px; height: 14px; }
+/* 좁은 가로 화면(667px 등): 버튼 크기 140%에서도 SLIDE 버튼과 겹치지 않게 칸을 더 작게 */
+@media (max-width: 720px) {
+  .hud.touch .slot { padding: 5px 6px 5px 4px; gap: 3px; }
+  .hud.touch .slot-icon svg { width: 26px; height: 12px; }
+}
 .hud .touch-only, .hud .touch-settings-open { display: none; }
 .hud.touch .touch-only { display: inline; }
 .hud.touch .pc-only { display: none; }
@@ -904,10 +909,10 @@ input, textarea, select, .debug-panel, .debug-panel *, .net-panel, .net-panel * 
   animation: coach-in .2s ease-out;
 }
 .coach.hidden { display: none; }
-.coach b { font-size: 16px; font-weight: 900; white-space: nowrap; }
+.coach b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; font-weight: 900; white-space: nowrap; }
 .coach-dots { color: #ffd45e; font-size: 10px; letter-spacing: 2px; white-space: nowrap; }
 .coach-skip {
-  min-width: 44px; min-height: 36px; padding: 0 12px; border: 2px solid rgba(255, 255, 255, .7); border-radius: 999px; background: transparent;
+  flex: none; white-space: nowrap; min-width: 44px; min-height: 36px; padding: 0 12px; border: 2px solid rgba(255, 255, 255, .7); border-radius: 999px; background: transparent;
   color: #fff; font: inherit; font-size: 12px; font-weight: 900; cursor: pointer;
 }
 .coach-skip:focus-visible { outline: 3px solid #ffd45e; outline-offset: 2px; }
