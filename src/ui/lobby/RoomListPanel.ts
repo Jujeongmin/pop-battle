@@ -190,7 +190,17 @@ export class RoomListPanel implements LobbyPanel {
     const state = this.clearList();
     if (!state) return;
     state.classList.add('lb-room-empty');
-    state.append(el('b', '', '열린 방이 없어요'), el('p', '', '빠른 시작을 누르면 바로 매칭돼요 · 방을 만들어 친구를 불러도 좋아요'));
+    // 안내 얼굴: BUBU 초상 (게임이 3D 모델로 한 번 그려 캐시한 그림, 랭킹 빈 화면과 같은 방식)
+    const face = el('span', 'lb-room-empty-face');
+    void this.host.characterPortrait('blue').then((src) => {
+      if (!face.isConnected) return;
+      const img = el('img');
+      img.src = src;
+      img.alt = '';
+      img.draggable = false;
+      face.append(img);
+    }).catch(() => undefined);
+    state.append(face, el('b', '', '열린 방이 없어요'), el('p', '', '빠른 시작을 누르면 바로 매칭돼요 · 방을 만들어 친구를 불러도 좋아요'));
     this.updateCount();
   }
 
