@@ -6,7 +6,6 @@ import './pause.css';
 import './kenney.css';
 import './screens.css';
 import { button, el, slider, type PauseHost, type PauseLockInfo, trapFocus } from './lobbyDom';
-import { touchLogControls } from './touchLogUi';
 
 /** lock = 마우스 고정 안내 (매치 시작 직후·브라우저가 고정을 거부했을 때, 일반 일시정지와 구분) */
 type View = 'main' | 'settings' | 'controls' | 'lock';
@@ -225,8 +224,6 @@ export class PauseMenu {
     if (this.host.touch()) {
       box.append(el('div', 'lb-section', '모바일 터치'));
       for (const x of s.touch) box.append(slider(x));
-      // 임시: 갤럭시 터치 조사용 기록 (ui/lobby/touchLogUi.ts)
-      box.append(touchLogControls());
     } else {
       box.append(el('div', 'lb-section', '조작 (PC)'));
       for (const x of s.controls) box.append(slider(x));

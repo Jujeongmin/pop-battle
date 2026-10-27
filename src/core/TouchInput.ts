@@ -7,7 +7,6 @@
 import { createInputState } from './Input';
 import { toGame, viewH, viewW } from './screenRotation';
 import { bindButtonActivation } from '../ui/buttonActivation';
-import { logNote, logPointer, logTouch } from './touchLog';
 
 export interface TouchSettings {
   /** 시점 회전 감도 배율 (PC 마우스 감도 기준) */
@@ -33,6 +32,14 @@ const STICK_DEADZONE = 0.12;
 /** 화면 왼쪽 이 비율까지 = 조이스틱 영역 */
 const MOVE_ZONE = 0.42;
 const FIRE_HOLD_MS = 200;
+/**
+ * Verse8 안드로이드 앱(WebView)은 손가락이 둘 이상이고 가장 작은 번호의 손가락이 앱이 처음 잡은 손가락이 아닐 때,
+ * touchmove의 모든 손가락 좌표를 같은 양(= 앱이 잡은 손가락 − 가장 작은 번호 손가락)만큼 밀어서 보낸다
+ * (touchstart·touchend 좌표는 정상). 예: 오른손(0) → 왼손(1) → 오른손을 뗐다 다시 누름(새 0번)이면
+ * 0번 좌표 = 왼손 위치, 1번 좌표 = 2×왼손 − 오른손 → 시점이 수백 px 튀고 조이스틱이 반대로 꺾임.
+ * 손가락마다 마지막 실제 위치를 기억해, 한 이벤트에서 이 차이(px)보다 크게 어긋나면 밀린 양을 되돌려 본다.
+ */
+const SHIFT_CHECK_PX = 100;
 
 type ButtonKind = 'fire' | 'ads' | 'jump' | 'slide' | 'reload';
 type FireMode = 'rifle' | 'shotgun' | 'sniper' | 'pistol' | 'direct';
@@ -107,6 +114,8 @@ export class TouchInput {
   private firePulse = false;
   private fireHoldTimer: number | null = null;
   private readonly moveOrigin = { x: 0, y: 0 };
+  /** 손가락별 마지막 실제 위치 (화면 좌표, 밀린 좌표를 되돌린 값). touchstart 좌표가 기준 */
+  private readonly touchPos = new Map<number, { x: number; y: number }>();
   private readonly lastLook = { x: 0, y: 0 };
   private readonly lastFire = { x: 0, y: 0 };
   private readonly abort = new AbortController();
@@ -145,8 +154,6 @@ export class TouchInput {
     this.root.addEventListener('touchstart', this.onTouchStart, { signal: this.abort.signal, passive: false });
     this.root.addEventListener('touchmove', this.onTouchMove, { signal: this.abort.signal, passive: false });
     for (const t of ['touchend', 'touchcancel'] as const) this.root.addEventListener(t, this.onTouchEnd, { signal: this.abort.signal, passive: false });
-    // 임시 터치 기록 (core/touchLog.ts, 꺼져 있으면 아무것도 안 함)
-    for (const t of ['pointerdown', 'pointerup', 'pointercancel'] as const) window.addEventListener(t, logPointer, { ...opts, capture: true });
     window.addEventListener('blur', () => this.releaseAll(), opts);
     // 화면 크기·회전·브라우저 주소창 크기 변화 → 버튼 배율 다시 계산 (진행 중 손가락은 놓은 것으로)
     const onResize = () => this.root.style.setProperty('--tu', this.unit.toFixed(3));
@@ -312,7 +319,7 @@ export class TouchInput {
   }
 
   private releaseAll(): void {
-    logNote('releaseAll');
+    this.touchPos.clear();
     this.moveTouchId = null;
     this.lookTouchId = null;
     this.fireTouchId = null;
@@ -378,13 +385,12 @@ export class TouchInput {
   private readonly onTouchStart = (e: TouchEvent): void => {
     e.preventDefault();
     if (!this.active) return;
-    const lx = this.state.lookDX;
-    const ly = this.state.lookDY;
     this.dropLostTouches(e.touches);
     for (const touch of e.changedTouches) {
       const id = touch.identifier;
       // Android는 뗀 손가락 번호를 새 손가락에 다시 준다: 끝 이벤트를 놓쳐 그 번호가 아직 역할을 갖고 있으면 여기서 끝낸다
       this.endTouch(id);
+      this.touchPos.set(id, { x: touch.clientX, y: touch.clientY });
       const p = toGame(touch.clientX, touch.clientY);
       const button = touch.target instanceof Element ? touch.target.closest('button') : null;
       if (button) {
@@ -405,43 +411,85 @@ export class TouchInput {
         this.lastLook.y = p.y;
       }
     }
-    this.log(e, lx, ly);
   };
-
-  /** 임시 터치 기록: 이번 이벤트 뒤 역할과 이 이벤트가 만든 시점 이동량(px, 감도 곱하기 전) */
-  private log(e: TouchEvent, lx: number, ly: number): void {
-    const s = this.settings.lookSensitivity;
-    logTouch(
-      e,
-      { move: this.moveTouchId, look: this.lookTouchId, fire: this.fireTouchId },
-      { dx: (this.state.lookDX - lx) / s, dy: (this.state.lookDY - ly) / s },
-      { x: this.state.moveX, y: this.state.moveY },
-    );
-  }
 
   private readonly onTouchMove = (e: TouchEvent): void => {
     e.preventDefault();
     if (!this.active) return;
-    const lx = this.state.lookDX;
-    const ly = this.state.lookDY;
     this.dropLostTouches(e.touches);
+    const pos = this.actualPositions(e.touches);
     for (const touch of e.changedTouches) {
       const id = touch.identifier;
+      const c = pos.get(id);
+      if (!c) continue;
       if (id === this.moveTouchId) {
-        const p = toGame(touch.clientX, touch.clientY);
+        const p = toGame(c.x, c.y);
         this.updateStick(p.x, p.y);
       } else if (id === this.lookTouchId) {
-        this.dragLook(touch, this.lastLook);
+        this.dragLook(c, this.lastLook);
       } else if (id === this.fireTouchId) {
-        this.dragLook(touch, this.lastFire);
+        this.dragLook(c, this.lastFire);
       }
     }
-    this.log(e, lx, ly);
   };
 
+  /**
+   * touchmove의 실제 손가락 위치 (SHIFT_CHECK_PX 설명). 모든 손가락이 같은 양만큼 밀렸다고 보고
+   * 밀린 양 후보(가장 작은 번호 손가락 기준으로 다른 손가락 하나씩)마다 되돌린 위치가 직전 위치와 이어지는지 비교해,
+   * 원래 좌표보다 훨씬 잘 이어질 때만 되돌린다 (정상 이벤트는 그대로)
+   */
+  private actualPositions(touches: TouchList): Map<number, { x: number; y: number }> {
+    const out = new Map<number, { x: number; y: number }>();
+    let rawErr = 0;
+    let known = 0;
+    let first: Touch | null = null;
+    for (const t of touches) {
+      out.set(t.identifier, { x: t.clientX, y: t.clientY });
+      const last = this.touchPos.get(t.identifier);
+      if (last) {
+        known++;
+        rawErr = Math.max(rawErr, Math.hypot(t.clientX - last.x, t.clientY - last.y));
+      }
+      if (!first || t.identifier < first.identifier) first = t;
+    }
+    if (first && touches.length >= 2 && known === touches.length && rawErr > SHIFT_CHECK_PX) {
+      let best = Infinity;
+      let sx = 0;
+      let sy = 0;
+      for (const anchor of touches) {
+        if (anchor === first) continue;
+        // 밀린 양 = 앱이 잡은 손가락(anchor)의 보고 위치 − 가장 작은 번호 손가락의 보고 위치
+        const ax = anchor.clientX - first.clientX;
+        const ay = anchor.clientY - first.clientY;
+        let err = 0;
+        for (const t of touches) {
+          const last = this.touchPos.get(t.identifier)!;
+          err = Math.max(err, Math.hypot(t.clientX - ax - last.x, t.clientY - ay - last.y));
+        }
+        if (err < best) {
+          best = err;
+          sx = ax;
+          sy = ay;
+        }
+      }
+      if (best < rawErr / 3) {
+        for (const c of out.values()) {
+          c.x -= sx;
+          c.y -= sy;
+        }
+      }
+    }
+    // 화면에 없는 손가락은 지우고, 나머지는 이번 실제 위치로
+    for (const id of this.touchPos.keys()) if (!out.has(id)) this.touchPos.delete(id);
+    for (const [id, c] of out) this.touchPos.set(id, c);
+    return out;
+  }
+
   private readonly onTouchEnd = (e: TouchEvent): void => {
-    for (const touch of e.changedTouches) if (this.endTouch(touch.identifier)) e.preventDefault();
-    this.log(e, this.state.lookDX, this.state.lookDY);
+    for (const touch of e.changedTouches) {
+      this.touchPos.delete(touch.identifier);
+      if (this.endTouch(touch.identifier)) e.preventDefault();
+    }
   };
 
   /** 이 번호의 역할을 끝냄. 역할이 있었으면 true */
@@ -472,9 +520,9 @@ export class TouchInput {
     }
   }
 
-  /** 같은 손가락의 직전 위치에서 움직인 만큼만 시점 회전 */
-  private dragLook(touch: Touch, last: { x: number; y: number }): void {
-    const p = toGame(touch.clientX, touch.clientY);
+  /** 같은 손가락의 직전 위치에서 움직인 만큼만 시점 회전 (c = 실제 화면 좌표) */
+  private dragLook(c: { x: number; y: number }, last: { x: number; y: number }): void {
+    const p = toGame(c.x, c.y);
     this.addLook(p.x - last.x, p.y - last.y);
     last.x = p.x;
     last.y = p.y;
