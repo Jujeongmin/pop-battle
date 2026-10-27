@@ -730,6 +730,10 @@ export class Game {
       this.appearances.set(this.combatant.id, this.createAppearance(this.avatar.bodyMeshes, PLAYER_CHARACTER, mask, deadEyes));
     }
     await this.setupBotAppearances();
+    // 나머지 캐릭터 외형 데이터(팀 마스크·사망 표정)도 미리 (캐릭터 고르기·로비 사람들·멀티 상대가 바로 씀, 캐시 공유)
+    await Promise.all(
+      CHARACTER_DISPLAY_ORDER.map((id) => Promise.all([loadTeamMask(CHARACTERS[id]).catch(() => undefined), this.loadDeadEyesSafe(id)])),
+    );
     this.setTeamPreview(TEAM_PREVIEW);
     // 첫 스폰도 리스폰과 같은 규칙 (봇이 생긴 뒤 위치 확정)
     this.placeAtSpawn(this.pickPlayerSpawn());
@@ -854,9 +858,12 @@ export class Game {
   private async prepareFirstFrame(progress: LoadReporter): Promise<void> {
     progress.stage('render');
     const soft = (p: Promise<unknown> | undefined, ms: number): Promise<unknown> => (p ? withTimeout(p, ms).catch(() => undefined) : Promise.resolve());
-    // 제목·버튼 글꼴 (toy.css 'POP Jua') + 로비 프로필 초상화 (같은 렌더러로 한 번 그려 캐시)
+    // 제목·버튼 글꼴 (toy.css 'POP Jua') + 캐릭터 6종 초상화·전신 그림 (닉네임 창 얼굴·프로필·캐릭터 카드, 같은 렌더러로 한 번 그려 캐시)
     const fonts = soft(document.fonts?.load("16px 'POP Jua'"), 5000);
-    const portrait = soft(this.characterArt.portrait(this.avatar.character.id), 5000);
+    const portrait = soft(
+      Promise.all(CHARACTER_DISPLAY_ORDER.flatMap((id) => [this.characterArt.portrait(id), this.characterArt.fullBody(id)])),
+      8000,
+    );
     // 장면 전체 셰이더 (병렬 컴파일 확장이 있으면 기다리는 동안 화면이 멈추지 않음)
     await soft(this.renderer.compileAsync(this.scene, this.tpsCamera.camera), 10000);
     progress.part(0.6);

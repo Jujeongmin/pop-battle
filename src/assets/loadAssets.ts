@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { BOT_CHARACTERS, CHARACTERS, PLAYER_CHARACTER, type CharacterId } from '../config/characters';
+import { BOT_CHARACTERS, CHARACTER_DISPLAY_ORDER, CHARACTERS, PLAYER_CHARACTER, type CharacterId } from '../config/characters';
 import { ASSETS } from '../config/gameConfig';
 import { WEAPONS } from '../config/weapons';
 import type { TrackFile } from '../core/loadProgress';
@@ -53,8 +53,8 @@ export async function loadCharacterModel(renderer: THREE.WebGLRenderer, id: Char
 export async function loadGameAssets(renderer: THREE.WebGLRenderer, track?: TrackFile): Promise<GameAssets> {
   const loader = new GLTFLoader();
   const extra = Object.values(WEAPONS).filter((w) => w.model.glb && w.model.glb !== ASSETS.rifle);
-  // 봇 캐릭터 중 플레이어와 다른 것만 따로 로드 (같은 캐릭터는 복제)
-  const otherIds = [...new Set(BOT_CHARACTERS)].filter((id) => id !== PLAYER_CHARACTER);
+  // 고를 수 있는 캐릭터 6종 전부 + 개발용 봇 캐릭터 (첫 화면에서 바로 캐릭터를 고름 → 바꿀 때 멈칫하지 않게). 플레이어 것은 위에서
+  const otherIds = [...new Set([...CHARACTER_DISPLAY_ORDER, ...BOT_CHARACTERS])].filter((id) => id !== PLAYER_CHARACTER);
   const [character, rifle, ...rest] = await Promise.all([
     loadGlb(loader, ASSETS.character, '캐릭터', track),
     loadGlb(loader, ASSETS.rifle, '라이플', track),
