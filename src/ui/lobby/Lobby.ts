@@ -71,6 +71,9 @@ export class Lobby {
   private readonly closeLabel = el('span', '', '닫기');
   private readonly navButtons = new Map<string, HTMLButtonElement>();
   private readonly nav = el('nav', 'lb-nav');
+  /** 상단 바의 로고·메뉴 아이콘 묶음 (낮은 화면에서 창 제목 줄이 그 사이에 들어갈 자리를 잼) */
+  private navBrand: HTMLElement | null = null;
+  private navIcons: HTMLElement | null = null;
   private readonly charStage = el('div', 'lb-char-stage');
   private readonly stageName = el('b', 'lb-stage-name');
   private readonly stageRole = el('span', 'lb-stage-role');
@@ -349,6 +352,7 @@ export class Lobby {
     this.presence.hidden = true;
     identity.append(this.levelCard, this.playerName, this.presence);
     status.append(brand, identity);
+    this.navBrand = brand;
     // 상단: [로고 · 캐릭터 · 장비 · 상점 · 설정]. 게임 시작·방 만들기는 그 아래 방 목록 칸 머리에 (예전 큰 버튼 줄·MENU 창 없음)
     const icons = el('div', 'lb-top-icons');
     // 메뉴 = 탭 목록 (화면 읽기 프로그램이 체크 상자·토글로 읽지 않게): ← → 이동, 선택은 aria-selected
@@ -392,6 +396,7 @@ export class Lobby {
       this.navButtons.set(item.id, navButton);
       icons.append(navButton);
     }
+    this.navIcons = icons;
     const row = el('div', 'lb-top-row');
     row.append(status, icons);
     this.nav.classList.add('lb-topbar');
@@ -603,6 +608,14 @@ export class Lobby {
     // MENU 창은 상단 바 바로 아래·오른쪽 끝 맞춤 (바 높이는 화면 크기에 따라 달라짐 → 실제 위치로)
     this.root.style.setProperty('--lb-nav-bottom', `${this.nav.offsetTop + this.nav.offsetHeight}px`);
     this.root.style.setProperty('--lb-nav-right', `${Math.max(0, this.root.clientWidth - this.nav.offsetLeft - this.nav.offsetWidth)}px`);
+    // 창 제목 줄이 상단 바 안(로고와 메뉴 아이콘 사이)에 들어갈 때 쓰는 좌우 여백: 창 기준, 실제 로고·아이콘 위치 (언어·버튼 폭이 달라도 겹치지 않게)
+    if (this.menu && this.navBrand && this.navIcons) {
+      const panel = this.panelBox.getBoundingClientRect();
+      const left = this.navBrand.getBoundingClientRect().right + 8 - panel.left;
+      const right = panel.right - this.navIcons.getBoundingClientRect().left + 8;
+      this.root.style.setProperty('--lb-head-left', `${Math.round(left)}px`);
+      this.root.style.setProperty('--lb-head-right', `${Math.round(right)}px`);
+    }
     this.layoutCharacterStage();
     // 3D가 보이는 빈 영역 = 위쪽 방 목록 칸 아래 → 게임이 캐릭터를 그 가운데에
     if (this.visible && this.dockOn) {
