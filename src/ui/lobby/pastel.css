@@ -30,6 +30,26 @@
   --k-slice: 20 20 26 20 fill;
   --k-width: 10px 10px 13px 10px;
 }
+/* 면 버튼 모양: 둥근 면(타일)은 그림이라 상자 모서리는 0이었음 → 포커스 테두리·그림자·눌림이 사각으로 보임.
+   상자 모서리를 면 모서리와 같게 (개별 버튼 규칙이 뒤에서 덮으므로 따로 모양을 정한 버튼은 그대로) */
+.lb-lobby .lb-btn,
+.lb-pause .lb-btn,
+.lb-mp-overlay .lb-mp-btn { border-radius: 12px; }
+/* 면 버튼 뒤에 깔린 예전 상태 배경(사각, 면 바깥으로 비침) 제거 → 상태는 면 색으로 */
+.lb-lobby .lb-weapon.lb-selected { background: none; transform: none; }
+.lb-lobby .lb-btn.lb-char-equip,
+.lb-lobby .lb-btn.lb-char-equip:disabled,
+.lb-lobby .lb-btn.lb-char-equip.lb-loading,
+.lb-lobby .lb-btn.lb-char-equip.lb-success,
+.lb-lobby .lb-btn.lb-char-equip.lb-equip-locked,
+.lb-lobby .lb-btn.lb-char-equip.lb-equip-buy:not(:disabled) { background: none; }
+.lb-lobby .lb-btn.lb-char-equip.lb-success { border-image-source: var(--k-mint); }
+.lb-lobby .lb-btn.lb-char-equip.lb-equip-locked { border-image-source: var(--k-grey); }
+/* 키보드 포커스: 버튼 모양을 따르는 파란 고리 (지우지 않음) */
+.lb-lobby .lb-btn:focus-visible,
+.lb-pause .lb-btn:focus-visible,
+.lb-mp-overlay .lb-mp-btn:focus-visible { outline: 3px solid #2f73e8; outline-offset: 2px; }
+
 /* 전체 화면 메뉴 바탕: 크림 대신 하늘빛 (캐릭터 화면은 3D 무대가 보이게 그대로 투명) */
 .lb-lobby.lb-fullscreen .lb-menu-layer { background: linear-gradient(180deg, #dff0ff 0%, #eef7ff 45%, #fdf8ef 100%); }
 .lb-lobby.lb-fullscreen.lb-character-open .lb-menu-layer { background: transparent; }
@@ -315,8 +335,8 @@
 }
 .lb-lobby .lb-shop-char-art { border: 0; border-radius: 14px; box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .9), 0 0 0 1.5px #c9e0f7; --pa-btn-shadow: inset 0 0 0 2px rgba(255, 255, 255, .9), 0 0 0 1.5px #c9e0f7; }
 .lb-lobby .lb-shop-char-price { border: 2px solid #fff; box-shadow: var(--pa-ring); --pa-btn-shadow: var(--pa-ring); }
-.lb-lobby .lb-shop-char-buy { border: 2px solid rgba(255, 255, 255, .85); border-radius: 16px; background: var(--pa-yellow); color: #5a3a00; box-shadow: inset 0 2px 0 rgba(255, 255, 255, .5), 0 4px 0 #d99a00; --pa-btn-shadow: inset 0 2px 0 rgba(255, 255, 255, .5), 0 4px 0 #d99a00; }
-.lb-lobby .lb-shop-char-buy:disabled { background: linear-gradient(180deg, #f3f6fb, #e1e8f3); color: var(--pa-sub); box-shadow: var(--pa-ring), 0 3px 0 rgba(140, 160, 190, .3); --pa-btn-shadow: var(--pa-ring), 0 3px 0 rgba(140, 160, 190, .3); }
+.lb-lobby .lb-shop-char-buy { border: 2px solid rgba(255, 255, 255, .85); border-image: none; border-radius: 16px; background: var(--pa-yellow); color: #5a3a00; box-shadow: inset 0 2px 0 rgba(255, 255, 255, .5), 0 4px 0 #d99a00; --pa-btn-shadow: inset 0 2px 0 rgba(255, 255, 255, .5), 0 4px 0 #d99a00; }
+.lb-lobby .lb-shop-char-buy:disabled { border-image: none; background: linear-gradient(180deg, #f3f6fb, #e1e8f3); color: var(--pa-sub); box-shadow: var(--pa-ring), 0 3px 0 rgba(140, 160, 190, .3); --pa-btn-shadow: var(--pa-ring), 0 3px 0 rgba(140, 160, 190, .3); }
 @media (max-height: 520px) {
   .lb-lobby .lb-shop-char { border-radius: 14px; box-shadow: var(--pa-ring), 0 3px 0 rgba(110, 155, 220, .3); --pa-btn-shadow: var(--pa-ring), 0 3px 0 rgba(110, 155, 220, .3); }
 }
@@ -545,3 +565,6 @@
 .lb-lobby .lb-btn,
 .lb-pause .lb-btn,
 .lb-mp-overlay .lb-mp-btn { box-shadow: var(--pa-btn-shadow, none) !important; }
+
+/* 설정 탭 줄(스크롤해도 위에 고정): 바탕이 투명해 아래 내용과 겹쳐 보이던 것 → 메뉴 바탕색 띠 */
+.lb-lobby .lb-settings-tabs { background: linear-gradient(180deg, #e2f1ff 82%, rgba(226, 241, 255, 0)); }

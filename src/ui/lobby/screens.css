@@ -1109,7 +1109,6 @@
 /* 언어: 한국어 / English 두 칸 (고른 쪽 노랑) */
 .lb-lobby .lb-lang-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .lb-lobby .lb-lang-row .lb-lang-btn { min-height: 36px; padding: 4px 10px; font-size: 14px; }
-.lb-lobby .lb-lang-row .lb-lang-btn.lb-active { background: var(--lb-yellow); }
 /* 그래픽 품질: 낮음 / 보통 / 높음 세 칸 (언어 줄과 같은 모양) */
 .lb-lobby .lb-gfx-row { grid-template-columns: repeat(3, 1fr); }
 .lb-lobby .lb-gfx-label { display: block; margin: 4px 2px 0; }
