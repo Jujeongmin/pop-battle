@@ -39,6 +39,7 @@ export class CoachMarks {
   private readonly root = document.createElement('div');
   private readonly text = document.createElement('b');
   private readonly dots = document.createElement('span');
+  private shownLabel = '';
   private readonly skipButton = document.createElement('button');
   private readonly done = loadDone();
   private flow: { id: string; steps: CoachStep[]; i: number; shownFor: number } | null = null;
@@ -105,11 +106,13 @@ export class CoachMarks {
     const step = f.steps[f.i]!;
     f.shownFor += dt;
     const label = touch ? step.touch : step.pc;
-    if (this.text.textContent !== label) {
+    // 마지막으로 쓴 원문과 비교 (textContent는 영어일 때 번역돼 있어 매 프레임 다시 쓰게 됨)
+    if (this.shownLabel !== label) {
+      this.shownLabel = label;
       this.text.textContent = label;
       this.dots.textContent = `${f.i + 1}/${f.steps.length} ${step.label}`;
     }
-    this.root.classList.remove('hidden');
+    if (this.root.classList.contains('hidden')) this.root.classList.remove('hidden');
     if (f.shownFor >= 0.6 && did(step.id)) {
       f.i++;
       f.shownFor = 0;

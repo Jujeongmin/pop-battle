@@ -99,8 +99,9 @@ export class NetGameMode {
     }, ctx.client);
   }
 
-  get labels(): BotLabel[] {
-    return [...this.remotes.values()].map((r) => r.label);
+  /** 원격 플레이어 이름표를 out 뒤에 붙임 (HUD가 매 프레임 부름 → 새 배열 없이) */
+  collectLabels(out: BotLabel[]): void {
+    for (const r of this.remotes.values()) out.push(r.label);
   }
 
   avatarOf(id: string): PlayerAvatar | undefined {

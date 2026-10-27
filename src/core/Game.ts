@@ -14,7 +14,7 @@ import { WeaponModelLibrary } from '../assets/weaponModels';
 import { WeaponArt } from '../assets/weaponArt';
 import { CharacterArt } from '../assets/characterArt';
 import type { Bot } from '../bots/Bot';
-import { BotManager } from '../bots/BotManager';
+import { BotManager, type BotLabel } from '../bots/BotManager';
 import { COMBAT, TEAMS } from '../config/combat';
 import { FFA_RULES, NET_TEST_RULES } from '../config/match';
 import { NET_MODE } from '../net/netConfig';
@@ -82,7 +82,7 @@ import { PlayerController } from '../player/PlayerController';
 import { CharacterDebug, type DebugParticipant } from '../ui/CharacterDebug';
 import { DebugPanel } from '../ui/DebugPanel';
 import { setKillFeedWeaponIcons, type DeathCause, type KillFeedEvent } from '../ui/KillFeed';
-import { Hud, type MatchHudInfo } from '../ui/Hud';
+import { Hud, type HudFrame, type MatchHudInfo } from '../ui/Hud';
 import { Lobby } from '../ui/lobby/Lobby';
 import { PauseMenu } from '../ui/lobby/PauseMenu';
 import type { LobbyHost, LobbyPresence, LobbySlider, LobbyWeapon, NicknameResult, PauseHost } from '../ui/lobby/lobbyDom';
@@ -301,6 +301,11 @@ export class Game {
   private primary: WeaponDef = RIFLE;
   /** 현재 슬롯 (0 = 1번 주무기, 1 = 2번 권총, 2 = 3번 근접) */
   private slotIndex = 0;
+  /** HUD 무기 칸·이름표 목록 (매 프레임 새 배열을 만들지 않음): 무기 칸은 주무기·선택 칸이 바뀔 때만 새로 */
+  private hudSlots: HudFrame['slots'] = [];
+  private hudSlotsPrimary: WeaponDef | null = null;
+  private hudSlotsIndex = -1;
+  private readonly hudLabels: BotLabel[] = [];
   private disposed = false;
 
   private rafId = 0;
@@ -938,7 +943,8 @@ export class Game {
         // 무기별 이동속도(권총·근접 1.2배) × ADS 감속. 현재 무기 값으로 매 스텝 새로 곱함 (누적 없음)
         speedMultiplier: this.aim.moveSpeedMultiplier * this.weapons.def.moveSpeedMultiplier,
       });
-      this.bots.fixedStep(step);
+      // 로비에서는 봇이 숨겨진 채 정지 (매치 시작 때 resetForMatch가 다시 배치) → 이동 계산 생략
+      if (!this.lobbyShown) this.bots.fixedStep(step);
       this.physics.step();
       this.accumulator -= step;
       steps++;
@@ -1109,7 +1115,7 @@ export class Game {
     this.lastMuzzle.copy(muzzle);
     for (const t of this.targets) t.update(dt);
     // --- 봇 (감지·결정은 간격, 애니메이션·조준은 매 프레임) ---
-    this.bots.update(dt, alpha, cam);
+    if (!this.lobbyShown) this.bots.update(dt, alpha, cam);
     this.updateSpawnFx();
     this.characterDebug?.update(dt, this.debugPanel.visible);
     this.bullets.update(dt);
@@ -1163,8 +1169,8 @@ export class Game {
         playerPos: this.renderFeet,
         weaponName: w.def.name,
         melee: this.weapons.isMelee,
-        slots: this.loadout.map((d, i) => ({ key: String(i + 1), id: d.id, name: d.name, active: i === this.slotIndex })),
-        botLabels: this.net ? [...this.bots.labels, ...this.net.labels] : this.bots.labels,
+        slots: this.slotsForHud(),
+        botLabels: this.labelsForHud(),
         // 개발용 수치는 개발 서버에서 디버그 패널(`)을 열었을 때만 (일반 플레이 화면에는 정식 HUD만)
         debug: import.meta.env.DEV && this.debugPanel.visible,
         debugLines,
@@ -1354,6 +1360,24 @@ export class Game {
       this.effects.worldImpact(r.wall.point, r.wall.normal);
       this.audio.play('meleeHit', { gain: 0.6 });
     }
+  }
+
+  private slotsForHud(): HudFrame['slots'] {
+    if (this.primary !== this.hudSlotsPrimary || this.slotIndex !== this.hudSlotsIndex) {
+      this.hudSlotsPrimary = this.primary;
+      this.hudSlotsIndex = this.slotIndex;
+      this.hudSlots = this.loadout.map((d, i) => ({ key: String(i + 1), id: d.id, name: d.name, active: i === this.slotIndex }));
+    }
+    return this.hudSlots;
+  }
+
+  private labelsForHud(): readonly BotLabel[] {
+    if (!this.net) return this.bots.labels;
+    const out = this.hudLabels;
+    out.length = 0;
+    for (const l of this.bots.labels) out.push(l);
+    this.net.collectLabels(out);
+    return out;
   }
 
   /** 1번 주무기 / 2번 권총 / 3번 근접 */

@@ -196,6 +196,14 @@ export class Hud {
   private crosshairKey = '';
   private spreadShown = 0;
   private lastFpsText = '';
+  // 마지막으로 쓴 원문 (요소의 textContent와 비교하지 않음: 영어일 때는 번역기가 바꿔 둬서 매 프레임 다시 쓰게 됨)
+  private lastReloadLabel = '';
+  private lastSlots: HudFrame['slots'] | null = null;
+  private lastDeathTitle = '';
+  private lastDeathTime = '';
+  private readonly labelTexts: string[] = [];
+  private readonly labelBars: HTMLDivElement[] = [];
+  private readonly labelWidths: string[] = [];
   private readonly hpCard: HTMLDivElement;
   private readonly hpFill: HTMLDivElement;
   private readonly hpLag: HTMLDivElement;
@@ -792,8 +800,11 @@ export class Hud {
     // 쓰러진 동안 적 이름·체력 표시(.labels)는 숨김 → 쓰러짐 패널을 가리지 않게
     this.root.classList.toggle('player-dead', f.dead);
     if (f.dead) {
-      this.death.querySelector('b')!.textContent = f.killedBy ? `${f.killedBy}에게 쓰러짐!` : '쓰러짐!';
-      this.death.querySelector('span')!.textContent = `${f.respawnIn.toFixed(1)}초 후 부활`;
+      // 바뀐 글자만 씀 (같은 글자를 매 프레임 넣으면 글자 노드를 새로 만들고 다시 번역함)
+      const title = f.killedBy ? `${f.killedBy}에게 쓰러짐!` : '쓰러짐!';
+      if (title !== this.lastDeathTitle) this.death.querySelector('b')!.textContent = this.lastDeathTitle = title;
+      const time = `${f.respawnIn.toFixed(1)}초 후 부활`;
+      if (time !== this.lastDeathTime) this.death.querySelector('span')!.textContent = this.lastDeathTime = time;
     }
     this.updateHealth(f);
     this.updateIndicators(f);
@@ -856,10 +867,12 @@ export class Hud {
       if (done) this.reload.animate([{ scale: '1.25' }, { scale: '1' }], { duration: 260, easing: 'cubic-bezier(.2,1.6,.4,1)' });
     }
     const label = done ? RELOAD_TEXT.done : RELOAD_TEXT.busy;
-    if (this.reloadLabel.textContent !== label) this.reloadLabel.textContent = label;
+    if (label !== this.lastReloadLabel) this.reloadLabel.textContent = this.lastReloadLabel = label;
     const p = done ? 1 : busy ? f.reloadProgress : 0;
     this.reloadRing.style.strokeDashoffset = (100 - p * 100).toFixed(2);
-    this.reloadPrev = { on: busy, weaponId: f.weaponId, magazine: f.magazine };
+    prev.on = busy;
+    prev.weaponId = f.weaponId;
+    prev.magazine = f.magazine;
   }
 
   private updateWeapon(f: HudFrame): void {
@@ -909,6 +922,9 @@ export class Hud {
     // 무기 카드 막대도 같은 진행률 (탄약 숫자는 완료 프레임에 같이 바뀜 — Weapon.update에서 같은 순간)
     this.cardReloadBar.style.transform = `scaleX(${f.reloading ? f.reloadProgress.toFixed(3) : 0})`;
 
+    // 같은 배열이면 칸 구성·선택 그대로 (Game은 바뀔 때만 새 배열을 줌)
+    if (f.slots === this.lastSlots) return;
+    this.lastSlots = f.slots;
     const slotsKey = f.slots.map((s) => `${s.key}${s.id}${s.name}`).join('|');
     if (slotsKey !== this.lastSlotsKey) {
       this.lastSlotsKey = slotsKey;
@@ -992,6 +1008,9 @@ export class Hud {
       el.innerHTML = '<b></b><div class="bl-bar"><div></div></div>';
       this.labelHost.appendChild(el);
       this.labelEls.push(el);
+      this.labelBars.push(el.querySelector('.bl-bar div') as HTMLDivElement);
+      this.labelTexts.push('');
+      this.labelWidths.push('');
     }
     for (let i = 0; i < this.labelEls.length; i++) {
       const el = this.labelEls[i]!;
@@ -1007,10 +1026,10 @@ export class Hud {
       }
       el.style.display = '';
       el.style.transform = `translate(${((_v.x + 1) / 2) * width}px, ${((1 - _v.y) / 2) * height}px) translate(-50%, -100%)`;
-      const name = el.firstChild as HTMLElement;
       const text = l.protected ? `${l.name} · 보호` : l.name;
-      if (name.textContent !== text) name.textContent = text;
-      (el.querySelector('.bl-bar div') as HTMLDivElement).style.width = `${((l.hp / l.maxHp) * 100).toFixed(0)}%`;
+      if (text !== this.labelTexts[i]) (el.firstChild as HTMLElement).textContent = this.labelTexts[i] = text;
+      const bar = `${((l.hp / l.maxHp) * 100).toFixed(0)}%`;
+      if (bar !== this.labelWidths[i]) this.labelBars[i]!.style.width = this.labelWidths[i] = bar;
       el.classList.toggle('protected', l.protected);
       el.classList.toggle('ally', l.ally);
     }
