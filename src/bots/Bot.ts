@@ -9,7 +9,7 @@ import { areHostile } from '../combat/teams';
 import { Weapon } from '../combat/Weapon';
 import { BOT, type BotDifficulty } from '../config/bots';
 import { TEAMS } from '../config/combat';
-import { CHARACTER } from '../config/gameConfig';
+import { CHARACTER, MOVEMENT } from '../config/gameConfig';
 import type { WeaponDef } from '../config/weapons';
 import type { AttackerInfo, HitInfo, HitPart, Physics } from '../physics/Physics';
 import type { PlayerAvatar } from '../player/PlayerAvatar';
@@ -25,6 +25,8 @@ export interface BotCallbacks {
   onDamaged?(bot: Bot, hit: HitInfo, applied: number): void;
   /** 이 봇이 쓰러짐 (한 번의 사망에 한 번). killer = 마지막 피해를 준 공격자 (없으면 null) */
   onDeath?(bot: Bot, killer: AttackerInfo | null, hit: HitInfo): void;
+  /** 낙사 (맵 아래로 떨어짐, 공격자 없음). 플레이어 낙사처럼 바로 부활 */
+  onFall?(bot: Bot): void;
   /** 부활함 */
   onRespawn?(bot: Bot): void;
 }
@@ -422,6 +424,13 @@ export class Bot implements Combatant {
     this.timeSinceShot += dt;
     this.kick = Math.max(0, this.kick - dt * 0.6);
     const ctrl = this.controller;
+
+    // 낙사: 플레이어와 같은 높이(MOVEMENT.killPlaneY) 아래로 떨어지면 공격자 없는 사망 + 바로 부활 (대기 시간 없음)
+    if (this.alive && ctrl.position.y < MOVEMENT.killPlaneY) {
+      this.die();
+      this.deathTimer = 0;
+      this.cb.onFall?.(this);
+    }
 
     if (this.alive) {
       this.renderFeet.lerpVectors(ctrl.prevPosition, ctrl.position, alpha);

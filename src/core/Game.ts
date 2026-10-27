@@ -705,6 +705,11 @@ export class Game {
         // 사망 표정 (사망 애니메이션과 같은 프레임부터, 리스폰 전까지 유지)
         this.appearances.get(bot.id)?.setDead(true);
       },
+      // 낙사: 플레이어 낙사와 같은 집계 (데스만, 킬로그 '낙사')
+      onFall: (bot) => {
+        this.match.recordDeath(bot.id, null);
+        this.reportDeath(bot.id, null, null, 'fall');
+      },
       onRespawn: (bot) => {
         this.queueSpawnFx(bot.avatar);
         this.feedDead.delete(bot.id);
