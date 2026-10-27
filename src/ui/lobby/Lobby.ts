@@ -518,7 +518,7 @@ export class Lobby {
     this.nickPick = pick;
     this.syncNickCrew();
     const eyebrow = el('span', 'lb-nickname-eyebrow', 'WELCOME');
-    const title = el('h2', 'lb-nickname-title', '닉네임을 정해 주세요');
+    const title = el('h2', 'lb-nickname-title', '닉네임과 캐릭터를 정해 주세요');
     this.nickEyebrow = eyebrow;
     this.nickTitle = title;
     title.id = titleId;
@@ -547,7 +547,7 @@ export class Lobby {
     const must = this.host.nicknameMustChange();
     this.nicknameModal.classList.toggle('lb-nickname-must', must);
     if (this.nickEyebrow) this.nickEyebrow.textContent = must ? '안내' : 'WELCOME';
-    if (this.nickTitle) this.nickTitle.textContent = must ? '닉네임 변경이 필요합니다' : '닉네임을 정해 주세요';
+    if (this.nickTitle) this.nickTitle.textContent = must ? '닉네임 변경이 필요합니다' : '닉네임과 캐릭터를 정해 주세요';
     if (this.nickCopy) {
       this.nickCopy.textContent = must
         ? '현재 닉네임이 운영 정책에 맞지 않아 변경이 필요합니다. 새로운 닉네임을 설정해 주세요.'

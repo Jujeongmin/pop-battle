@@ -21,7 +21,7 @@ export const EN_EXACT: Record<string, string> = {
   'WASD 이동 · W 두 번 달리기 · Space 점프 · Shift 슬라이딩 · TAB 게임 시작': 'WASD move · double-tap W sprint · Space jump · Shift slide · TAB play',
   '게임 시작': 'Play', '최대 레벨': 'Max level',
   // 닉네임 창
-  '닉네임을 정해 주세요': 'Choose your nickname', '다른 플레이어에게 보일 이름이에요. 나중에 SETTINGS에서 바꿀 수 있어요.': 'Other players will see this name. You can change it later in Settings.',
+  '닉네임과 캐릭터를 정해 주세요': 'Choose your nickname & character', '다른 플레이어에게 보일 이름이에요. 나중에 SETTINGS에서 바꿀 수 있어요.': 'Other players will see this name. You can change it later in Settings.',
   '닉네임 변경이 필요합니다': 'Nickname change required',
   '현재 닉네임이 운영 정책에 맞지 않아 변경이 필요합니다. 새로운 닉네임을 설정해 주세요.': "Your current nickname doesn't meet our policy. Please choose a new one.",
   '닉네임': 'Nickname', '닉네임 입력': 'Enter nickname', '현재 닉네임': 'Current nickname', '닉네임 변경': 'Change nickname', '새 닉네임': 'New nickname',

@@ -638,7 +638,11 @@
   font-size: 11px; font-weight: 900; letter-spacing: 2px; box-shadow: inset 0 0 0 1.5px #c9e0f7;
 }
 .lb-lobby .lb-nickname-must .lb-nickname-eyebrow { background: #fff0d6; color: #c86a00; box-shadow: inset 0 0 0 1.5px #ffd79a; }
-.lb-lobby .lb-nickname-title { margin: 0; color: #1d3270; font-family: var(--lb-display-font); font-size: 27px; font-weight: 400; line-height: 1.15; word-break: keep-all; text-wrap: balance; }
+.lb-lobby .lb-nickname-title { margin: 0; color: #1d3270; font-family: var(--lb-display-font); font-size: clamp(18px, 6.4cqi, 25px); font-weight: 400; line-height: 1.15; white-space: nowrap; }
+/* 제목 한 줄: 카드 너비 기준 글자 크기 */
+.lb-lobby .lb-nickname-card { container-type: inline-size; }
+/* 영어 제목이 더 길어 조금 작게 */
+html:lang(en) .lb-lobby .lb-nickname-title { font-size: clamp(15px, 5.4cqi, 21px); }
 .lb-lobby .lb-nickname-copy { margin: 0 0 4px; color: #5f7bb0; font-size: 12px; font-weight: 800; line-height: 1.45; word-break: keep-all; text-wrap: balance; }
 
 /* 입력칸: 둥근 흰 칸 + 파란 초점 고리, 확인 = 노란 버튼 같은 높이 */
@@ -667,7 +671,7 @@
   .lb-lobby .lb-nickname-crew { gap: 7px; }
   .lb-lobby .lb-nickname-face { width: 34px; height: 34px; border-width: 2px; }
   .lb-lobby .lb-nickname-pick { margin-top: 0; padding: 1px 10px; font-size: 12px; }
-  .lb-lobby .lb-nickname-title { font-size: 20px; }
+  .lb-lobby .lb-nickname-title { font-size: clamp(16px, 5.4cqi, 20px); }
   .lb-lobby .lb-nickname-copy { margin: 0; font-size: 11px; }
   .lb-lobby .lb-nickname-input { height: 42px; font-size: 15px; }
   .lb-lobby .lb-btn.lb-nickname-submit { min-width: 80px; min-height: 42px; }
