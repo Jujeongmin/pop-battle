@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { ARENA } from '../../config/maps';
-import { balloon, buildCity, CROSS_ROADS, type Keepout } from './arenaCity';
+import { ARENA, type ArenaTheme } from '../../config/maps';
+import { balloon, buildCity, CROSS_ROADS, groundHalves, type GroundHalves, type Keepout } from './arenaCity';
+import type { MapShell } from './arenaLayout';
 import { KitMerger, lighten, seededRandom, trs, type KitModels } from './kit';
 
 /**
@@ -18,15 +19,27 @@ export class ArenaBackdrop {
   private readonly disposables: Array<{ dispose(): void }> = [];
   readonly stats = { cityTriangles: 0, cloudTriangles: 0, meshes: 0 };
 
-  constructor(kit: KitModels, cityMaterial: THREE.Material, anisotropy: number) {
+  /** 경기장 크기에 맞춘 광장·순환 도로 (도시·간판·랜드마크도 그만큼 밖으로) */
+  private readonly ground: GroundHalves;
+
+  constructor(
+    kit: KitModels,
+    cityMaterial: THREE.Material,
+    anisotropy: number,
+    private readonly shell: MapShell,
+    private readonly mapName: string,
+    private readonly theme: ArenaTheme,
+  ) {
     this.group.name = 'arena-backdrop';
+    this.ground = groundHalves(shell);
     this.addSky();
     this.addGround(anisotropy);
 
     // ---------- 도시 + 랜드마크 + 간판 기둥 (지오메트리 하나) ----------
     const city = new KitMerger();
-    const EAST_TOWER = new THREE.Vector3(56, 0, 20);
-    const WEST_TOWER = new THREE.Vector3(-56, 0, -20);
+    // 랜드마크: 경기장 동·서 벽에서 36m 밖 (POP! ARENA x ±56)
+    const EAST_TOWER = new THREE.Vector3(shell.halfX + 36, 0, 20);
+    const WEST_TOWER = new THREE.Vector3(-shell.halfX - 36, 0, -20);
     const keepouts: Keepout[] = [
       { x: EAST_TOWER.x, z: EAST_TOWER.z, r: 9 },
       { x: WEST_TOWER.x, z: WEST_TOWER.z, r: 9 },
@@ -36,8 +49,9 @@ export class ArenaBackdrop {
     this.addSign(kit, city, 'north', anisotropy);
     this.addSign(kit, city, 'south', anisotropy);
     // 광장 네 모서리 풍선 기둥
-    const [px, pz] = ARENA.ground.plazaHalf;
-    const colors = [ARENA.palette.pink, ARENA.palette.yellow, ARENA.palette.blue, ARENA.palette.mint, ARENA.palette.orange];
+    const [px, pz] = this.ground.plaza;
+    const tp = this.theme.palette;
+    const colors = [tp.pink, tp.yellow, tp.blue, tp.mint, tp.orange];
     let ci = 0;
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
@@ -51,7 +65,7 @@ export class ArenaBackdrop {
         }
       }
     }
-    buildCity(kit, city, keepouts);
+    buildCity(kit, city, keepouts, this.ground);
     const cityGeo = city.build()!;
     this.stats.cityTriangles = city.triangles;
     const cityMesh = new THREE.Mesh(cityGeo, cityMaterial);
@@ -88,7 +102,7 @@ export class ArenaBackdrop {
 
   /** 반구 그라데이션 하늘 (셰이더 하나, 텍스처 없음). 수평선 색 = 안개 색 → 먼 건물·땅이 하늘에 자연스럽게 녹음 */
   private addSky(): void {
-    const sky = ARENA.sky;
+    const sky = this.theme.sky;
     const geo = new THREE.SphereGeometry(350, 32, 16);
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
@@ -143,7 +157,7 @@ export class ArenaBackdrop {
       // 구름 방향(접선)으로 길게
       const tx = Math.cos(a);
       const tz = -Math.sin(a);
-      const color = rnd() < 0.5 ? 0xffffff : 0xfff6e8;
+      const color = rnd() < 0.5 ? this.theme.sky.cloud[0] : this.theme.sky.cloud[1];
       const puffs = 5 + Math.floor(rnd() * 3);
       for (let p = 0; p < puffs; p++) {
         const t = (p / (puffs - 1) - 0.5) * 2;
@@ -158,7 +172,7 @@ export class ArenaBackdrop {
     puff.dispose();
     const geo = m.build()!;
     this.stats.cloudTriangles = m.triangles;
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, emissive: 0xfff4e4, emissiveIntensity: 0.55, fog: false });
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true, emissive: this.theme.sky.cloudGlow, emissiveIntensity: 0.55, fog: false });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.name = 'clouds';
     mesh.renderOrder = -5;
@@ -170,7 +184,7 @@ export class ArenaBackdrop {
 
   /** 도시 바닥: 440m 정사각형 캔버스 한 장 (잔디·광장·순환 도로·큰길·격자 도로) + 바깥 잔디 고리 */
   private addGround(anisotropy: number): void {
-    const g = ARENA.ground;
+    const g = this.theme.ground;
     const SIZE = 440;
     const PX = 1024;
     const canvas = document.createElement('canvas');
@@ -216,11 +230,11 @@ export class ArenaBackdrop {
       }
     }
     // 큰길 (남북·동서)
-    roadBand(false, 0, g.avenueHalfWidth);
-    roadBand(true, 0, g.avenueHalfWidth);
+    roadBand(false, 0, ARENA.ground.avenueHalfWidth);
+    roadBand(true, 0, ARENA.ground.avenueHalfWidth);
     // 순환 도로 + 광장
-    const [rx, rz] = g.ringRoadHalf;
-    const [px, pz] = g.plazaHalf;
+    const [rx, rz] = this.ground.ring;
+    const [px, pz] = this.ground.plaza;
     rect(-rx - 1.2, -rz - 1.2, rx + 1.2, rz + 1.2, sidewalk, 6);
     rect(-rx, -rz, rx, rz, road, 5);
     rect(-px - 1.2, -pz - 1.2, px + 1.2, pz + 1.2, sidewalk, 4);
@@ -288,7 +302,8 @@ export class ArenaBackdrop {
     const P = ARENA.palette;
     const north = which === 'north';
     const s = north ? 1 : -1;
-    const z = s * 31.5;
+    // 남·북 벽에서 5.5m 밖 (POP! ARENA z ±31.5)
+    const z = s * (this.shell.halfZ + 5.5);
     const width = north ? 17 : 13;
     const height = north ? 4.4 : 3.6;
     const legScale = 10;
@@ -314,7 +329,7 @@ export class ArenaBackdrop {
     }
 
     // 글자 판
-    const tex = signTexture(north ? 'POP! BATTLE' : 'POP! ARENA', north, anisotropy);
+    const tex = signTexture(north ? 'POP! BATTLE' : this.mapName, north, anisotropy);
     const face = new THREE.MeshLambertMaterial({ map: tex });
     const side = new THREE.MeshLambertMaterial({ color: lighten(team, 0.2) });
     // BoxGeometry 면 순서: +x, -x, +y, -y, +z, -z. 경기장 쪽 면에 글자

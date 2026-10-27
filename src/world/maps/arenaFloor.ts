@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ARENA } from '../../config/maps';
+import type { ArenaTheme } from '../../config/maps';
 import type { SpawnPoint } from '../GameMap';
 import type { ZonePiece } from './arenaLayout';
 
@@ -14,6 +14,7 @@ export function buildArenaFloor(
   spawns: readonly SpawnPoint[],
   extent: { halfX: number; halfZ: number },
   anisotropy: number,
+  theme: ArenaTheme,
 ): { mesh: THREE.Mesh; disposables: Array<{ dispose(): void }> } {
   const minX = -Math.ceil(extent.halfX);
   const maxX = Math.ceil(extent.halfX);
@@ -30,8 +31,8 @@ export function buildArenaFloor(
     }
     return null;
   };
-  const base = new THREE.Color(ARENA.palette.floorA);
-  const ring = new THREE.Color(0xffe2a0);
+  const base = new THREE.Color(theme.palette.floorA);
+  const ring = new THREE.Color(theme.floorRing);
   const spawnPad = new Map<number, THREE.Color>();
   const tmp = new THREE.Color();
 
@@ -60,7 +61,7 @@ export function buildArenaFloor(
       // 스폰 자리: 진영 색 2×2 칸
       for (const s of spawns) {
         if (Math.abs(cx - s.x) < 1 && Math.abs(cz - s.z) < 1) {
-          const c = zn?.color ?? ARENA.palette.floorA;
+          const c = zn?.color ?? theme.palette.floorA;
           let pad = spawnPad.get(c);
           if (!pad) spawnPad.set(c, (pad = new THREE.Color(c).multiplyScalar(0.86)));
           tmp.copy(pad);

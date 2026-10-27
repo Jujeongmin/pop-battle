@@ -93,6 +93,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MAP_ID } from '../config/maps';
 import type { GameMap, SpawnPoint } from '../world/GameMap';
 import { ArenaMap } from '../world/maps/ArenaMap';
+import { ARENA_DEFS } from '../world/maps/mapDefs';
 import { TestMap } from '../world/TestMap';
 import { TestTarget } from '../world/TestTarget';
 import { LobbySpace } from '../world/LobbySpace';
@@ -579,7 +580,7 @@ export class Game {
     this.map =
       MAP_ID === 'test'
         ? new TestMap(this.scene, this.physics)
-        : await ArenaMap.create(this.scene, this.physics, new GLTFLoader(), Math.min(4, this.renderer.capabilities.getMaxAnisotropy()), progress.files());
+        : await ArenaMap.create(ARENA_DEFS[MAP_ID], this.scene, this.physics, new GLTFLoader(), Math.min(4, this.renderer.capabilities.getMaxAnisotropy()), progress.files());
     const firstSpawn = this.map.spawns.teamA[0]!;
     const spawn = new THREE.Vector3(firstSpawn.x, firstSpawn.y + 0.7, firstSpawn.z);
     this.player = new PlayerController(this.physics, spawn);

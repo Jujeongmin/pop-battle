@@ -10,7 +10,7 @@
 //        │  경사로·계단 양끝                                    │
 //  z -26 └──────────────── 남쪽 스폰 (파랑) ───────────────┘
 //          x -20                    0                      x +20
-import { ARENA } from '../../config/maps';
+import { ARENA, type ArenaModelKey } from '../../config/maps';
 
 const C = ARENA.palette;
 
@@ -90,15 +90,42 @@ export interface ZonePiece {
   color: number;
 }
 
-export type ArenaPiece = BrickPiece | WallPiece | PlatformPiece | RampPiece | FlagPiece | ZonePiece;
+/**
+ * 장난감 도형 하나 (Prototype Kit 모델을 늘려 씀, 단색). sx·sy·sz = 모델 원래 크기에 곱하는 배율 (rotDeg 0이면 모델 축 그대로).
+ * 충돌 = 늘린 모델의 상자 (round면 둥근 모양 안쪽으로 조금 줄임), collide false = 장식
+ */
+export interface PropPiece {
+  kind: 'prop';
+  model: ArenaModelKey;
+  x: number;
+  z: number;
+  rotDeg: number;
+  sx: number;
+  sy: number;
+  sz: number;
+  color: number;
+  baseY?: number;
+  collide?: boolean;
+  round?: boolean;
+}
 
-/** 맵 크기 (바깥 벽 중심선) */
-export const ARENA_SIZE = { halfX: 20, halfZ: 26, boundaryThickness: 1 };
+export type ArenaPiece = BrickPiece | WallPiece | PlatformPiece | RampPiece | FlagPiece | ZonePiece | PropPiece;
+
+/** 경기장 틀 크기 (바깥 벽 중심선 반폭). 담장·바닥·스폰 구역·바깥 광장·도시가 이 크기를 따라감 */
+export interface MapShell {
+  halfX: number;
+  halfZ: number;
+  boundaryThickness: number;
+}
+
+/** POP! ARENA 크기 (40 × 52m) */
+export const ARENA_SIZE: MapShell = { halfX: 20, halfZ: 26, boundaryThickness: 1 };
 
 /** 북쪽 조각을 남쪽에 거울상으로 복제 (z → -z) */
-function mirror(p: ArenaPiece): ArenaPiece {
+export function mirror(p: ArenaPiece): ArenaPiece {
   switch (p.kind) {
     case 'brick':
+    case 'prop':
       return { ...p, z: -p.z, rotDeg: -p.rotDeg };
     case 'wall':
       return { ...p, z1: -p.z1, z2: -p.z2 };
@@ -113,23 +140,36 @@ function mirror(p: ArenaPiece): ArenaPiece {
 }
 
 /** 진영 색: 북쪽(봇) 분홍, 남쪽(플레이어) 파랑 → 어느 쪽에 있는지 바로 알 수 있게 */
-function teamColor(p: ArenaPiece, south: boolean): ArenaPiece {
+export function teamColor(p: ArenaPiece, south: boolean): ArenaPiece {
   if (!south) return p;
   if ('color' in p && p.color === C.pink) return { ...p, color: C.blue };
   if (p.kind === 'zone' && p.color === SPAWN_ZONE_NORTH) return { ...p, color: SPAWN_ZONE_SOUTH };
   return p;
 }
 
-const SPAWN_ZONE_NORTH = 0xffe3ef;
+export const SPAWN_ZONE_NORTH = 0xffe3ef;
 const SPAWN_ZONE_SOUTH = 0xdcebff;
 const PLATFORM_H = 1.6;
 // 발판 4.48(x) × 6.72(z) = 플레이트 1 × 3장
 const PF_W = 4.48;
 const PF_D = 6.72;
 
-/** 북쪽 절반 (z > 0)에만 있는 조각. 남쪽은 mirror로 생성 */
-const NORTH: ArenaPiece[] = [
-  // --- 스폰 구역 (z 18~26) ---
+/**
+ * 북쪽 스폰 구역 (POP! ARENA 기준 z 18~26): 바닥 색 + 가림막 + 깃발 — 모든 맵 공용 (스폰 위치 arenaSpawns.ts와 짝).
+ * 큰 맵은 북쪽 벽에 붙어 있도록 z를 (halfZ − 26)만큼 밀고, 바닥 색 폭은 맵 폭에 맞춤
+ */
+export function spawnNorth(shell: MapShell, soft = false): ArenaPiece[] {
+  const dz = shell.halfZ - ARENA_SIZE.halfZ;
+  return SPAWN_NORTH_ARENA.map((p) => {
+    if (p.kind === 'zone') return { ...p, z: p.z + dz, w: shell.halfX * 2 - 1 };
+    if (p.kind === 'wall') return { ...p, z1: p.z1 + dz, z2: p.z2 + dz };
+    // soft(놀이터 테마): 가림막 브릭 1x8 2단(4.48 × 1.12 × 1.57m) → 같은 크기 둥근 상자
+    if (soft && p.kind === 'brick') return { kind: 'prop', model: 'pCubeRounded', x: p.x, z: p.z + dz, rotDeg: p.rotDeg, sx: 4.48, sy: 1.57, sz: 1.12, color: p.color };
+    return { ...p, z: p.z + dz };
+  });
+}
+
+const SPAWN_NORTH_ARENA: readonly ArenaPiece[] = [
   { kind: 'zone', x: 0, z: 22.25, w: 39, d: 7.5, color: SPAWN_ZONE_NORTH },
   // 스폰 가림막: 가운데 출구(6.7m)와 양옆 출구 → 스폰에서 여러 경로, 가운데 직선 시야는 중앙 큰 엄폐물이 막음
   { kind: 'brick', model: 'brick1x8', x: -5.6, z: 18, rotDeg: 0, levels: 2, color: C.pink },
@@ -141,6 +181,11 @@ const NORTH: ArenaPiece[] = [
   { kind: 'brick', model: 'brick1x8', x: 15, z: 20, rotDeg: 0, levels: 2, color: C.pink },
   { kind: 'flag', x: -9, z: 24.5, color: C.pink, scale: 2.2 },
   { kind: 'flag', x: 9, z: 24.5, color: C.pink, scale: 2.2 },
+];
+
+/** 북쪽 절반 (z > 0)에만 있는 조각. 남쪽은 mirror로 생성 */
+const NORTH: ArenaPiece[] = [
+  ...spawnNorth(ARENA_SIZE),
 
   // --- 차로 구분 벽 (x ±10, z 3.5~14): 가운데 틈(중앙↔차로)과 양끝으로 연결, 막다른 길 없음 ---
   { kind: 'wall', x1: -10, z1: 3.5, x2: -10, z2: 14, height: 3, thickness: 0.5, color: C.mint },
@@ -195,8 +240,9 @@ const MIDDLE: ArenaPiece[] = [
   { kind: 'brick', model: 'brick2x2', x: 16.5, z: -2.6, rotDeg: 0, levels: 2, color: C.orange, baseY: PLATFORM_H },
 ];
 
-export const ARENA_LAYOUT: readonly ArenaPiece[] = [
-  ...MIDDLE,
-  ...NORTH,
-  ...NORTH.map((p) => teamColor(mirror(p), true)),
-];
+/** 가운데 줄 + 북쪽 절반 + 거울상 남쪽 (남쪽 분홍 → 파랑) — 앞뒤 대칭 맵 공용 */
+export function symmetricLayout(middle: readonly ArenaPiece[], north: readonly ArenaPiece[]): readonly ArenaPiece[] {
+  return [...middle, ...north, ...north.map((p) => teamColor(mirror(p), true))];
+}
+
+export const ARENA_LAYOUT: readonly ArenaPiece[] = symmetricLayout(MIDDLE, NORTH);

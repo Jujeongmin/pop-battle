@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { ARENA, plain, type ArenaModelKey } from '../../config/maps';
-import { ARENA_SIZE } from './arenaLayout';
+import { ARENA, plain, type ArenaModelKey, type ArenaTheme } from '../../config/maps';
+import type { MapShell } from './arenaLayout';
 import { KitMerger, lighten, trs, type KitModels } from './kit';
 
 /**
@@ -16,6 +16,8 @@ export interface WallInstance {
   model: ArenaModelKey;
   color: number;
   matrix: THREE.Matrix4;
+  /** false = 단색 장난감 도형 (놀이터 담장) */
+  textured?: boolean;
 }
 export interface WallCollider {
   center: THREE.Vector3;
@@ -64,11 +66,8 @@ interface Side {
   raised: boolean;
 }
 
-const P = ARENA.palette;
-export const CREAM = 0xfff3e2;
-const CAP = P.white;
-const PILLAR_COLORS = [P.blue, P.yellow, P.pink, P.orange, P.mint, P.lavender];
-const PENNANT_COLORS = [P.pink, P.yellow, P.blue, P.orange, P.mint, P.lavender];
+/** 진영 색 (북 분홍·남 파랑): 모든 맵에서 같음 */
+const TEAM = ARENA.palette;
 
 /** 벽 따라 거리(along)·바깥쪽 거리(out) → 월드 x, z */
 function place(side: SideName, along: number, out: number, face: number): [number, number] {
@@ -86,6 +85,15 @@ function place(side: SideName, along: number, out: number, face: number): [numbe
 const rotOf = (side: SideName) => (side === 'N' || side === 'S' ? 0 : Math.PI / 2);
 
 /** 한 줄을 스터드 길이 조각으로 나누기 (홀수 줄은 반 칸 밀어 엇갈려 쌓기) */
+/** 벽 반길이 half 안에 0부터 step 간격으로 놓은 기둥 자리 (모서리 기둥과 2m 안으로 붙는 자리는 뺌). POP! ARENA 남·북(19.5, 6.7) = 0·±6.7·±13.4 */
+function evenMids(half: number, step: number): number[] {
+  let n = Math.floor(half / step);
+  if (half - n * step < 2) n--;
+  const out: number[] = [];
+  for (let i = n; i >= -n; i--) out.push(i * step);
+  return out;
+}
+
 export function rowSequence(n: number, offset: boolean): number[] {
   const seq: number[] = [];
   let rem = n;
@@ -102,11 +110,21 @@ export function rowSequence(n: number, offset: boolean): number[] {
   return seq;
 }
 
-export function buildArenaWall(kit: KitModels, decor: KitMerger): ArenaWallBuild {
-  const { halfX, halfZ } = ARENA_SIZE;
+/**
+ * shell: 경기장 크기. raised: 동·서 벽 가운데(발판 옆 |z| ≤ raisedHalfZ)를 높게 — 벽 가까이에 발판이 있는 맵(POP! ARENA)만.
+ * theme: 색 + 모양 (brick = 브릭 엇갈려 쌓기, soft = 둥근 벽판 두 장 + 원기둥 기둥). 충돌은 모양과 상관없이 같음
+ */
+export function buildArenaWall(kit: KitModels, decor: KitMerger, shell: MapShell, raised: boolean, theme: ArenaTheme): ArenaWallBuild {
+  const P = theme.palette;
+  const CREAM = theme.wallCream;
+  const CAP = P.white;
+  const PILLAR_COLORS = [P.blue, P.yellow, P.pink, P.orange, P.mint, P.lavender];
+  const PENNANT_COLORS = [P.pink, P.yellow, P.blue, P.orange, P.mint, P.lavender];
+  const soft = theme.wallStyle === 'soft';
+  const { halfX, halfZ } = shell;
   // 경계 안쪽 면 (이전 벽 중심선 ± 두께/2 와 같음)
-  const faceX = halfX - ARENA_SIZE.boundaryThickness / 2;
-  const faceZ = halfZ - ARENA_SIZE.boundaryThickness / 2;
+  const faceX = halfX - shell.boundaryThickness / 2;
+  const faceZ = halfZ - shell.boundaryThickness / 2;
   const { rows: ROWS, raisedRows: RAISED_ROWS, raisedHalfZ, colliderHeight } = ARENA.wall;
   const wallTop = ROWS * LEVEL + PLATE;
   const raisedTop = RAISED_ROWS * LEVEL + PLATE;
@@ -115,11 +133,11 @@ export function buildArenaWall(kit: KitModels, decor: KitMerger): ArenaWallBuild
     { name: 'N', half: faceX, face: faceZ, raised: false, rows: [lighten(P.pink, 0.2), CREAM, lighten(P.yellow, 0.15)] },
     { name: 'S', half: faceX, face: faceZ, raised: false, rows: [lighten(P.blue, 0.28), CREAM, lighten(P.yellow, 0.15)] },
     {
-      name: 'E', half: faceZ, face: faceX, raised: true,
+      name: 'E', half: faceZ, face: faceX, raised,
       rows: [lighten(P.lavender, 0.1), CREAM, lighten(P.orange, 0.2), lighten(P.lavender, 0.1), CREAM],
     },
     {
-      name: 'W', half: faceZ, face: faceX, raised: true,
+      name: 'W', half: faceZ, face: faceX, raised,
       rows: [lighten(P.mint, 0.1), CREAM, lighten(P.orange, 0.2), lighten(P.mint, 0.1), CREAM],
     },
   ];
@@ -139,12 +157,25 @@ export function buildArenaWall(kit: KitModels, decor: KitMerger): ArenaWallBuild
   for (const side of sides) {
     const rot = rotOf(side.name);
     const cornerAlong = side.half + CORNER / 2;
-    const mids = side.raised ? [17.7, 9.4, 0, -9.4, -17.7] : [13.4, 6.7, 0, -6.7, -13.4];
+    // 중간 기둥: 높은 구간이 있는 벽은 높은 구간 끝(±9.4)에 맞춘 자리, 나머지는 약 6.7~9m 간격으로 고르게 (POP! ARENA 남·북 = 6.7)
+    const mids = side.raised ? [17.7, 9.4, 0, -9.4, -17.7] : evenMids(side.half, side.name === 'E' || side.name === 'W' ? 8.8 : 6.7);
     const stops = [-cornerAlong, ...mids.slice().reverse(), cornerAlong].sort((a, b) => a - b);
     const isRaised = (a: number) => side.raised && Math.abs(a) <= raisedHalfZ + 1e-3;
 
+    // --- 놀이터 담장: 기둥 사이를 둥근 벽판 두 장(아래 색·위 크림)으로 (벽판 끝은 기둥 속에 숨음) ---
+    for (let i = 0; soft && i < stops.length - 1; i++) {
+      const a0 = stops[i]!;
+      const a1 = stops[i + 1]!;
+      const [x, z] = place(side.name, (a0 + a1) / 2, INSET + WALL_DEPTH / 2, side.face);
+      const lower = wallTop * 0.62;
+      // 벽판 모델은 긴 변이 z축 → 남·북 벽(브릭 회전 0)은 90° 돌림
+      const yaw = rot + Math.PI / 2;
+      instances.push({ model: 'pWall', color: side.rows[0]!, textured: false, matrix: trs(x, 0, z, yaw, [WALL_DEPTH / 0.2, lower, a1 - a0]) });
+      instances.push({ model: 'pWall', color: CREAM, textured: false, matrix: trs(x, lower, z, yaw, [WALL_DEPTH / 0.2, wallTop - lower, a1 - a0]) });
+    }
+
     // --- 담장: 기둥 사이를 브릭으로 채움 (조각 끝은 기둥 속에 숨음) ---
-    for (let i = 0; i < stops.length - 1; i++) {
+    for (let i = 0; !soft && i < stops.length - 1; i++) {
       const a0 = stops[i]!;
       const a1 = stops[i + 1]!;
       const rows = isRaised(a0) && isRaised(a1) ? RAISED_ROWS : ROWS;
@@ -178,11 +209,17 @@ export function buildArenaWall(kit: KitModels, decor: KitMerger): ArenaWallBuild
       const color = PILLAR_COLORS[pillarIndex % PILLAR_COLORS.length]!;
       const levels = isRaised(a) ? 6 : 4;
       const [x, z] = place(side.name, a, PILLAR / 2, side.face);
-      for (let l = 0; l < levels; l++) {
-        instances.push({ model: 'box2x2', color: l % 2 === 0 ? color : CAP, matrix: trs(x, l * LEVEL, z, rot, S) });
-      }
       const top = levels * LEVEL;
-      instances.push({ model: 'plate2x2', color: CAP, matrix: trs(x, top, z, rot, S) });
+      if (soft) {
+        // 원기둥 두 토막 (색 + 흰 머리)
+        instances.push({ model: 'pCylinder', color, textured: false, matrix: trs(x, 0, z, 0, [PILLAR, top * 0.7, PILLAR]) });
+        instances.push({ model: 'pCylinder', color: CAP, textured: false, matrix: trs(x, top * 0.7, z, 0, [PILLAR, top * 0.3 + PLATE, PILLAR]) });
+      } else {
+        for (let l = 0; l < levels; l++) {
+          instances.push({ model: 'box2x2', color: l % 2 === 0 ? color : CAP, matrix: trs(x, l * LEVEL, z, rot, S) });
+        }
+        instances.push({ model: 'plate2x2', color: CAP, matrix: trs(x, top, z, rot, S) });
+      }
       sideBox(side, a, PILLAR / 2, 0, top + PLATE, PILLAR / 2, PILLAR / 2, '벽 기둥');
       const decorY = top + PLATE;
       if (pillarIndex % 2 === 0) {
@@ -190,7 +227,7 @@ export function buildArenaWall(kit: KitModels, decor: KitMerger): ArenaWallBuild
         decor.addKit(kit.round1x1, trs(x, decorY, z, 0, 11), PILLAR_COLORS[(pillarIndex + 2) % PILLAR_COLORS.length]!);
       } else {
         // 깃발 (진영 색: 북 분홍, 남 파랑, 동서는 기둥 색)
-        const flagColor = side.name === 'N' ? P.pink : side.name === 'S' ? P.blue : color;
+        const flagColor = side.name === 'N' ? TEAM.pink : side.name === 'S' ? TEAM.blue : color;
         decor.addKit(kit.flag, trs(x, decorY, z, rot + Math.PI / 2, 1.5), flagColor, true);
       }
       pillarIndex++;
@@ -205,7 +242,7 @@ export function buildArenaWall(kit: KitModels, decor: KitMerger): ArenaWallBuild
       const a0 = stops[i]!;
       const a1 = stops[i + 1]!;
       const minY = (isRaised(a0) && isRaised(a1) ? raisedTop : wallTop) + 0.35;
-      addBunting(decor, side, a0, a1, pillarTop(a0) - 0.2, pillarTop(a1) - 0.2, minY, i);
+      addBunting(decor, side, a0, a1, pillarTop(a0) - 0.2, pillarTop(a1) - 0.2, minY, i, PENNANT_COLORS);
     }
   }
 
@@ -215,12 +252,17 @@ export function buildArenaWall(kit: KitModels, decor: KitMerger): ArenaWallBuild
     for (const sz of [-1, 1]) {
       const x = sx * (faceX + CORNER / 2);
       const z = sz * (faceZ + CORNER / 2);
-      const team = sz > 0 ? P.pink : P.blue;
-      for (let l = 0; l < 5; l++) {
-        instances.push({ model: 'box2x2', color: l % 2 === 0 ? team : CAP, matrix: trs(x, l * CORNER_LEVEL, z, 0, CORNER_SCALE) });
-      }
+      const team = sz > 0 ? TEAM.pink : TEAM.blue;
       const top = 5 * CORNER_LEVEL;
-      instances.push({ model: 'plate2x2', color: CAP, matrix: trs(x, top, z, 0, CORNER_SCALE) });
+      if (soft) {
+        instances.push({ model: 'pCylinder', color: team, textured: false, matrix: trs(x, 0, z, 0, [CORNER, top * 0.7, CORNER]) });
+        instances.push({ model: 'pCylinder', color: CAP, textured: false, matrix: trs(x, top * 0.7, z, 0, [CORNER, top * 0.3 + CORNER_PLATE, CORNER]) });
+      } else {
+        for (let l = 0; l < 5; l++) {
+          instances.push({ model: 'box2x2', color: l % 2 === 0 ? team : CAP, matrix: trs(x, l * CORNER_LEVEL, z, 0, CORNER_SCALE) });
+        }
+        instances.push({ model: 'plate2x2', color: CAP, matrix: trs(x, top, z, 0, CORNER_SCALE) });
+      }
       box(x, (top + CORNER_PLATE) / 2, z, CORNER / 2, (top + CORNER_PLATE) / 2, CORNER / 2, '모서리 탑');
       const roofY = top + CORNER_PLATE;
       decor.addBasic(coneGeo, trs(x, roofY + 0.75, z, 0, 1), P.yellow);
@@ -233,7 +275,7 @@ export function buildArenaWall(kit: KitModels, decor: KitMerger): ArenaWallBuild
 }
 
 /** 두 기둥 사이 처진 줄 + 삼각 깃발 */
-function addBunting(decor: KitMerger, side: Side, a0: number, a1: number, y0: number, y1: number, minY: number, seed: number): void {
+function addBunting(decor: KitMerger, side: Side, a0: number, a1: number, y0: number, y1: number, minY: number, seed: number, colors: readonly number[]): void {
   const len = a1 - a0;
   const sag = Math.min(0.5, len * 0.06);
   const out = INSET + WALL_DEPTH / 2;
@@ -259,7 +301,7 @@ function addBunting(decor: KitMerger, side: Side, a0: number, a1: number, y0: nu
   for (let i = 0; i < count; i++) {
     const t = (0.7 + (i + 0.5) * ((len - 1.4) / count)) / len;
     const [x, y, z] = xyz(side, a0 + len * t, out, yAt(t) - 0.01);
-    decor.addBasic(tri, trs(x, y, z, rot, 1), PENNANT_COLORS[(i + seed) % PENNANT_COLORS.length]!);
+    decor.addBasic(tri, trs(x, y, z, rot, 1), colors[(i + seed) % colors.length]!);
   }
   tri.dispose();
 }

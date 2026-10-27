@@ -1,8 +1,10 @@
-// 맵 선택. 기본 = 첫 정식 맵 POP! ARENA, 테스트 맵은 ?map=test
-export type MapId = 'arena' | 'test';
+// 맵 선택. 기본 = 정식 맵 POP! ARENA, 테스트 맵은 ?map=test.
+// 시험 중인 경기장 맵(tower·maze)은 개발 서버에서만 ?map=tower / ?map=maze (멀티 서버·배포 목록에는 아직 없음 → 다른 사람과 맵이 어긋나지 않게)
+export type MapId = 'arena' | 'tower' | 'maze' | 'test';
 
 const param = new URLSearchParams(location.search).get('map');
-export const MAP_ID: MapId = param === 'test' ? 'test' : 'arena';
+export const MAP_ID: MapId =
+  param === 'test' ? 'test' : import.meta.env.DEV && (param === 'tower' || param === 'maze') ? param : 'arena';
 
 const base = import.meta.env.BASE_URL;
 
@@ -39,6 +41,12 @@ export const ARENA_MODELS = {
   stairs: `${base}assets/kits/prototype/stairs.glb`,
   cube: `${base}assets/kits/prototype/shape-cube.glb`,
   flag: `${base}assets/kits/prototype/flag.glb`,
+  // 둥근 장난감 도형 (Prototype Kit, 놀이터 테마 맵의 벽·엄폐물·장식). 원본 크기 1 × 1 × 1 (벽은 두께 0.2, 상자 0.5)
+  pWall: `${base}assets/kits/prototype/wall.glb`,
+  pCylinder: `${base}assets/kits/prototype/shape-cylinder.glb`,
+  pHexagon: `${base}assets/kits/prototype/shape-hexagon.glb`,
+  pCubeRounded: `${base}assets/kits/prototype/shape-cube-rounded.glb`,
+  pCrate: `${base}assets/kits/prototype/crate-color.glb`,
 } as const;
 
 export type ArenaModelKey = keyof typeof ARENA_MODELS;
@@ -106,9 +114,58 @@ export const ARENA = {
     plaza: 0xf4ebdd,
     road: 0xdcd6ea,
     roadLine: 0xfffaf0,
-    /** 경기장 주변 광장 반폭 (x, z) / 순환 도로 바깥 반폭 */
-    plazaHalf: [29, 35] as const,
-    ringRoadHalf: [36, 42] as const,
+    /** 경기장 담장(반폭) 바깥 광장·순환 도로 바깥 반폭까지 여유 (m). POP! ARENA = 광장 29×35, 도로 36×42 */
+    plazaMargin: 9,
+    ringRoadMargin: 16,
     avenueHalfWidth: 4,
   },
+};
+
+/**
+ * 맵 분위기 (색·하늘·빛·바깥 바닥·바깥 담장 모양). 배치 조각 색은 각 맵 배치 파일이 자기 테마 palette로 칠함.
+ * 진영 색(북 분홍·남 파랑: 스폰 가림막·깃발·모서리 탑)은 모든 맵에서 POP! ARENA 색 그대로 → 어느 맵이든 진영을 바로 알아봄
+ */
+export interface ArenaTheme {
+  palette: { blue: number; yellow: number; orange: number; pink: number; mint: number; lavender: number; white: number; floorA: number; floorB: number };
+  /** 바닥 가운데 원형 띠 */
+  floorRing: number;
+  sky: { zenith: number; upper: number; horizon: number; cloud: readonly [number, number]; cloudGlow: number };
+  light: { hemiSky: number; hemiGround: number; hemi: number; sun: number; sunIntensity: number; sunOffset: readonly [number, number, number] };
+  ground: { grass: number; plaza: number; road: number; roadLine: number };
+  /** 바깥 담장: brick = 장난감 브릭 엇갈려 쌓기, soft = 둥근 장난감 벽판 + 원기둥 기둥 */
+  wallStyle: 'brick' | 'soft';
+  wallCream: number;
+}
+
+/** POP! ARENA: 맑은 낮 파스텔 */
+export const ARENA_THEME: ArenaTheme = {
+  palette: ARENA.palette,
+  floorRing: 0xffe2a0,
+  sky: { zenith: ARENA.sky.zenith, upper: ARENA.sky.upper, horizon: ARENA.sky.horizon, cloud: [0xffffff, 0xfff6e8], cloudGlow: 0xfff4e4 },
+  light: { hemiSky: 0xe6f2ff, hemiGround: 0xf6e6d4, hemi: 1.75, sun: 0xfff1dc, sunIntensity: 2.2, sunOffset: [12, 20, 8] },
+  ground: { grass: ARENA.ground.grass, plaza: ARENA.ground.plaza, road: ARENA.ground.road, roadLine: ARENA.ground.roadLine },
+  wallStyle: 'brick',
+  wallCream: 0xfff3e2,
+};
+
+/** 노을 사탕 마을: 복숭아·분홍·보라 노을 하늘, 낮게 깔린 주황 햇빛, 사탕·마카롱 색 블록 */
+export const CANDY_THEME: ArenaTheme = {
+  palette: { blue: 0x9fb4ff, yellow: 0xffd48f, orange: 0xff9a8a, pink: 0xff86c2, mint: 0x92ecd2, lavender: 0xc49cff, white: 0xfff4fa, floorA: 0xf8e6ef, floorB: 0xeedcf6 },
+  floorRing: 0xffc2dc,
+  sky: { zenith: 0x7f74d6, upper: 0xee9cc6, horizon: 0xffcfa6, cloud: [0xffd7ea, 0xffe4cc], cloudGlow: 0xffb99a },
+  light: { hemiSky: 0xffd8ea, hemiGround: 0xf2cfc0, hemi: 1.55, sun: 0xffb27e, sunIntensity: 2.5, sunOffset: [20, 11, 6] },
+  ground: { grass: 0xd8c6ee, plaza: 0xfae3ec, road: 0xe2cdea, roadLine: 0xfff4f8 },
+  wallStyle: 'brick',
+  wallCream: 0xffe9f2,
+};
+
+/** 장난감 놀이터: 맑고 시원한 아침, 둥근 놀이 도형(Prototype Kit), 민트·하늘·노랑 */
+export const PLAYGROUND_THEME: ArenaTheme = {
+  palette: { blue: 0x6ec2ff, yellow: 0xffdf5e, orange: 0xff8b5e, pink: 0xff8fb4, mint: 0x5fd8bc, lavender: 0x9ea8ff, white: 0xf4fbff, floorA: 0xe6f5ef, floorB: 0xd9ecf6 },
+  floorRing: 0xbfeee0,
+  sky: { zenith: 0x4fb2ff, upper: 0x97dcff, horizon: 0xe6fbff, cloud: [0xffffff, 0xf0fbff], cloudGlow: 0xeaf8ff },
+  light: { hemiSky: 0xe0f4ff, hemiGround: 0xd6efe2, hemi: 1.8, sun: 0xfffaf0, sunIntensity: 2.25, sunOffset: [-10, 21, 9] },
+  ground: { grass: 0xa6e29b, plaza: 0xe6f3ec, road: 0xcdd9e6, roadLine: 0xffffff },
+  wallStyle: 'soft',
+  wallCream: 0xf4fbff,
 };

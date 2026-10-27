@@ -2,6 +2,7 @@
 // teamA = 남쪽 (지금 모드: 플레이어), teamB = 북쪽 (지금 모드: 봇). PvP에서는 팀별로 그대로 사용.
 // 모두 스폰 가림막(z ±18) 뒤 → 스폰 직후 중앙에서 바로 보이지 않음. 서로 3m 이상 떨어짐.
 import type { MapSpawns, SpawnPoint } from '../GameMap';
+import { ARENA_SIZE, type MapShell } from './arenaLayout';
 
 const SOUTH: SpawnPoint[] = [
   { x: -5.5, y: 0.05, z: -22.5, yaw: 0 },
@@ -14,7 +15,11 @@ const SOUTH: SpawnPoint[] = [
   { x: 16.5, y: 0.05, z: -23, yaw: 0 },
 ];
 
-export const ARENA_SPAWNS: MapSpawns = {
-  teamA: SOUTH,
-  teamB: SOUTH.map((s) => ({ ...s, z: -s.z, yaw: Math.PI })),
-};
+/** 맵 크기에 맞춘 스폰 (스폰 구역 arenaLayout.spawnNorth와 같이 벽 쪽으로 밀림) */
+export function spawnsFor(shell: MapShell): MapSpawns {
+  const dz = shell.halfZ - ARENA_SIZE.halfZ;
+  const south = SOUTH.map((s) => ({ ...s, z: s.z - dz }));
+  return { teamA: south, teamB: south.map((s) => ({ ...s, z: -s.z, yaw: Math.PI })) };
+}
+
+export const ARENA_SPAWNS: MapSpawns = spawnsFor(ARENA_SIZE);

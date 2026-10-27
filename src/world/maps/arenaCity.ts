@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ARENA } from '../../config/maps';
+import type { MapShell } from './arenaLayout';
 import { KitMerger, lighten, seededRandom, trs, type KitModels } from './kit';
 
 /**
@@ -29,10 +30,23 @@ export interface Keepout {
   r: number;
 }
 
-/** 도로·광장 위인지 (반폭 여유 m) */
-export function onRoad(x: number, z: number, margin: number): boolean {
+/** 경기장 바깥 광장·순환 도로 바깥 반폭 (경기장 크기 + 여유) */
+export interface GroundHalves {
+  plaza: readonly [number, number];
+  ring: readonly [number, number];
+}
+export function groundHalves(shell: MapShell): GroundHalves {
   const g = ARENA.ground;
-  const [rx, rz] = g.ringRoadHalf;
+  return {
+    plaza: [shell.halfX + g.plazaMargin, shell.halfZ + g.plazaMargin],
+    ring: [shell.halfX + g.ringRoadMargin, shell.halfZ + g.ringRoadMargin],
+  };
+}
+
+/** 도로·광장 위인지 (반폭 여유 m) */
+export function onRoad(x: number, z: number, margin: number, ground: GroundHalves): boolean {
+  const g = ARENA.ground;
+  const [rx, rz] = ground.ring;
   // 광장 + 순환 도로 안쪽
   if (Math.abs(x) < rx + margin && Math.abs(z) < rz + margin) return true;
   // 남북·동서 큰길
@@ -48,14 +62,14 @@ export function onRoad(x: number, z: number, margin: number): boolean {
 /** 바깥 격자 도로 위치 (|x|, |z| 기준) */
 export const CROSS_ROADS = [92, 160];
 
-export function buildCity(kit: KitModels, city: KitMerger, keepouts: readonly Keepout[]): void {
+export function buildCity(kit: KitModels, city: KitMerger, keepouts: readonly Keepout[], ground: GroundHalves): void {
   const rnd = seededRandom(20261020);
   const pick = <T>(a: readonly T[]): T => a[Math.floor(rnd() * a.length)]!;
   const blocked = (x: number, z: number, r: number) =>
-    onRoad(x, z, r) || keepouts.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + r);
+    onRoad(x, z, r, ground) || keepouts.some((k) => Math.hypot(x - k.x, z - k.z) < k.r + r);
 
   // ---------- 광장 가장자리 나무 줄 (벽 너머로 잎이 보임) ----------
-  const [px, pz] = ARENA.ground.plazaHalf;
+  const [px, pz] = ground.plaza;
   for (let z = -pz + 3; z <= pz - 3; z += 5.5) {
     for (const sx of [-1, 1]) {
       const x = sx * (px - 2.2);

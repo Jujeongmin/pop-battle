@@ -2,16 +2,16 @@ import * as THREE from 'three';
 import type { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { RENDER } from '../../config/gameConfig';
 import type { GraphicsPreset } from '../../config/graphics';
-import { ARENA, ARENA_MODELS, plain, type ArenaModelKey } from '../../config/maps';
+import { ARENA, ARENA_MODELS, plain, type ArenaModelKey, type ArenaTheme } from '../../config/maps';
 import type { TrackFile } from '../../core/loadProgress';
 import type { Physics } from '../../physics/Physics';
 import type { GameMap, MapSpawns, NavBounds } from '../GameMap';
 import { ArenaBackdrop } from './ArenaBackdrop';
 import { buildArenaFloor } from './arenaFloor';
-import { ARENA_LAYOUT, ARENA_SIZE, type ArenaPiece, type BrickPiece, type RampPiece, type WallPiece, type ZonePiece } from './arenaLayout';
-import { ARENA_SPAWNS } from './arenaSpawns';
-import { buildArenaWall, CREAM, PIECES, rowSequence } from './arenaWall';
+import type { ArenaPiece, BrickPiece, PropPiece, RampPiece, WallPiece, ZonePiece } from './arenaLayout';
+import { buildArenaWall, PIECES, rowSequence } from './arenaWall';
 import { KitMerger, lighten, type KitModel, type KitModels } from './kit';
+import type { ArenaDef } from './mapDefs';
 
 /** 브릭 키트 모델 원본 크기 (스터드 몸체 기준, 원본 단위) */
 const BRICK_SIZE: Record<BrickPiece['model'], [number, number]> = {
@@ -39,17 +39,11 @@ type AddInstance = (model: ArenaModelKey, color: number, textured: boolean, matr
  * 배치 데이터는 arenaLayout.ts, 스폰 arenaSpawns.ts, 바깥 담장 arenaWall.ts, 바닥 arenaFloor.ts, 바깥 환경 ArenaBackdrop.ts.
  */
 export class ArenaMap implements GameMap {
-  readonly id = 'arena';
-  readonly name = 'POP! ARENA';
+  readonly id: string;
+  readonly name: string;
   readonly hasTestTargets = false;
-  readonly spawns: MapSpawns = ARENA_SPAWNS;
-  readonly navBounds: NavBounds = {
-    minX: -ARENA_SIZE.halfX + 0.5,
-    maxX: ARENA_SIZE.halfX - 0.5,
-    minZ: -ARENA_SIZE.halfZ + 0.5,
-    maxZ: ARENA_SIZE.halfZ - 0.5,
-    ceiling: 6,
-  };
+  readonly spawns: MapSpawns;
+  readonly navBounds: NavBounds;
   readonly group = new THREE.Group();
   readonly sun: THREE.DirectionalLight;
   private readonly backdrop: ArenaBackdrop;
@@ -57,6 +51,9 @@ export class ArenaMap implements GameMap {
   private readonly disposables: Array<{ dispose(): void }> = [];
   /** 원래 그림자를 드리우던 맵 메시 (그래픽 '낮음'에서 끔, 처음 적용할 때 모음) */
   private staticCasters: THREE.Object3D[] | null = null;
+  private readonly theme: ArenaTheme;
+  /** 해 위치 (그림자 중심에서의 방향, 테마별) */
+  private readonly sunOffset: readonly [number, number, number];
   /** 디버그: 그리기 호출 수·인스턴스 수·충돌체 수 */
   stats = { instancedMeshes: 0, instances: 0, colliders: 0, movementOnlyColliders: 0, triangles: 0, decorTriangles: 0, cityTriangles: 0, cloudTriangles: 0 };
 
@@ -65,15 +62,25 @@ export class ArenaMap implements GameMap {
     private readonly physics: Physics,
     private readonly models: KitModels,
     anisotropy: number,
+    def: ArenaDef,
   ) {
-    const sky = ARENA.sky;
-    // 하늘 반구가 배경을 덮음. 배경색·안개색 = 수평선 색 (먼 건물·땅이 수평선에 녹음, 전투 구역 대각선 65m 안은 안개 없음)
-    scene.background = new THREE.Color(sky.horizon);
-    scene.fog = new THREE.Fog(sky.horizon, sky.fogNear, sky.fogFar);
-    // 밝고 부드러운 조명: 하늘·바닥 반사광 + 그림자 있는 해
-    const hemi = new THREE.HemisphereLight(0xe6f2ff, 0xf6e6d4, 1.75);
-    this.sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
-    this.sun.position.set(12, 20, 8);
+    const shell = def.shell;
+    this.id = def.id;
+    this.name = def.name;
+    this.spawns = def.spawns;
+    this.navBounds = { minX: -shell.halfX + 0.5, maxX: shell.halfX - 0.5, minZ: -shell.halfZ + 0.5, maxZ: shell.halfZ - 0.5, ceiling: 6 };
+    const theme = def.theme;
+    this.theme = theme;
+    this.sunOffset = theme.light.sunOffset;
+    // 하늘 반구가 배경을 덮음. 배경색·안개색 = 수평선 색 (먼 건물·땅이 수평선에 녹음, 전투 구역 대각선 안은 안개 없음 — 큰 맵은 그만큼 멀리서 시작)
+    scene.background = new THREE.Color(theme.sky.horizon);
+    const fogNear = Math.max(ARENA.sky.fogNear, Math.hypot(shell.halfX * 2, shell.halfZ * 2) + 5);
+    scene.fog = new THREE.Fog(theme.sky.horizon, fogNear, ARENA.sky.fogFar);
+    // 밝고 부드러운 조명: 하늘·바닥 반사광 + 그림자 있는 해 (색·세기·방향은 맵 테마)
+    const L = theme.light;
+    const hemi = new THREE.HemisphereLight(L.hemiSky, L.hemiGround, L.hemi);
+    this.sun = new THREE.DirectionalLight(L.sun, L.sunIntensity);
+    this.sun.position.set(...L.sunOffset);
     this.sun.castShadow = true;
     const ext = RENDER.shadowExtent;
     const cam = this.sun.shadow.camera;
@@ -104,21 +111,22 @@ export class ArenaMap implements GameMap {
     this.disposables.push(brickMat, flatMat, decorMat);
     this.lobbyKit = { models, material: decorMat };
 
-    const allSpawns = [...ARENA_SPAWNS.teamA, ...ARENA_SPAWNS.teamB];
+    const allSpawns = [...def.spawns.teamA, ...def.spawns.teamB];
     const floor = buildArenaFloor(
-      ARENA_LAYOUT.filter((p): p is ZonePiece => p.kind === 'zone'),
+      def.layout.filter((p): p is ZonePiece => p.kind === 'zone'),
       allSpawns,
-      { halfX: ARENA_SIZE.halfX + 1, halfZ: ARENA_SIZE.halfZ + 1 },
+      { halfX: shell.halfX + 1, halfZ: shell.halfZ + 1 },
       anisotropy,
+      theme,
     );
     this.group.add(floor.mesh);
     this.disposables.push(...floor.disposables);
-    this.addBox(new THREE.Vector3(0, -0.5, 0), new THREE.Vector3(ARENA_SIZE.halfX + 1, 0.5, ARENA_SIZE.halfZ + 1), undefined, '바닥');
+    this.addBox(new THREE.Vector3(0, -0.5, 0), new THREE.Vector3(shell.halfX + 1, 0.5, shell.halfZ + 1), undefined, '바닥');
 
     // 조각 + 바깥 담장 (같은 인스턴스 배치, 그림자 있음)
     const decor = new KitMerger();
-    const wall = buildArenaWall(models, decor);
-    this.buildPieces(ARENA_LAYOUT, wall.instances, brickMat, flatMat);
+    const wall = buildArenaWall(models, decor, shell, def.raisedWalls, theme);
+    this.buildPieces(def.layout, wall.instances, brickMat, flatMat);
     for (const c of wall.colliders) {
       const collider = this.addBox(c.center, c.half, undefined, c.label);
       if (c.movementOnly) {
@@ -140,7 +148,7 @@ export class ArenaMap implements GameMap {
     }
 
     // 바깥 환경 (하늘·구름·도시·간판·랜드마크): 그림자 없음, 충돌 없음
-    this.backdrop = new ArenaBackdrop(models, decorMat, anisotropy);
+    this.backdrop = new ArenaBackdrop(models, decorMat, anisotropy, shell, def.name, theme);
     this.stats.cityTriangles = this.backdrop.stats.cityTriangles;
     this.stats.cloudTriangles = this.backdrop.stats.cloudTriangles;
     this.group.add(this.backdrop.group);
@@ -148,7 +156,7 @@ export class ArenaMap implements GameMap {
   }
 
   /** 키트 GLB를 불러온 뒤 맵 생성. 모델 파일이 없거나 손상되면 오류를 그대로 올린다 (대체 도형 없음) */
-  static async create(scene: THREE.Scene, physics: Physics, loader: GLTFLoader, anisotropy: number, track?: TrackFile): Promise<ArenaMap> {
+  static async create(def: ArenaDef, scene: THREE.Scene, physics: Physics, loader: GLTFLoader, anisotropy: number, track?: TrackFile): Promise<ArenaMap> {
     const entries = await Promise.all(
       (Object.keys(ARENA_MODELS) as ArenaModelKey[]).map(async (key) => {
         const url = ARENA_MODELS[key];
@@ -172,12 +180,13 @@ export class ArenaMap implements GameMap {
         return [key, { parts }] as const;
       }),
     );
-    return new ArenaMap(scene, physics, Object.fromEntries(entries) as KitModels, anisotropy);
+    return new ArenaMap(scene, physics, Object.fromEntries(entries) as KitModels, anisotropy, def);
   }
 
   followShadow(focus: THREE.Vector3): void {
     this.sun.target.position.copy(focus);
-    this.sun.position.set(focus.x + 12, focus.y + 20, focus.z + 8);
+    const [ox, oy, oz] = this.sunOffset;
+    this.sun.position.set(focus.x + ox, focus.y + oy, focus.z + oz);
   }
 
   update(dt: number): void {
@@ -209,7 +218,7 @@ export class ArenaMap implements GameMap {
 
   private buildPieces(
     pieces: readonly ArenaPiece[],
-    extra: ReadonlyArray<{ model: ArenaModelKey; color: number; matrix: THREE.Matrix4 }>,
+    extra: ReadonlyArray<{ model: ArenaModelKey; color: number; matrix: THREE.Matrix4; textured?: boolean }>,
     brickMat: THREE.MeshStandardMaterial,
     flatMat: THREE.MeshStandardMaterial,
   ): void {
@@ -253,7 +262,7 @@ export class ArenaMap implements GameMap {
           }
           if (p.levels >= 2) {
             // 높은 엄폐물 덮개 플레이트 (같은 크기, 흰색)
-            add(CAP_PLATE[p.model], ARENA.palette.white, true, new THREE.Matrix4().compose(_p.set(p.x, base + h, p.z), _q.setFromAxisAngle(UP, rot), _s.setScalar(S)));
+            add(CAP_PLATE[p.model], this.theme.palette.white, true, new THREE.Matrix4().compose(_p.set(p.x, base + h, p.z), _q.setFromAxisAngle(UP, rot), _s.setScalar(S)));
             h += ARENA.plateBodyHeight * S;
           }
           const label = p.levels === 0 ? '발판 턱' : p.levels === 1 ? '낮은 엄폐물' : base > 0 ? '발판 기둥' : '높은 엄폐물';
@@ -294,9 +303,12 @@ export class ArenaMap implements GameMap {
         case 'zone':
           // 바닥 색 구역은 바닥 메시(arenaFloor)에서 칸 색으로 그림
           break;
+        case 'prop':
+          this.buildProp(p, add);
+          break;
       }
     }
-    for (const w of extra) add(w.model, w.color, true, w.matrix);
+    for (const w of extra) add(w.model, w.color, w.textured ?? true, w.matrix);
 
     // 인스턴스 메시: 모델 파트마다 하나, 색은 인스턴스 색 (머티리얼은 브릭 공용 / 구조물 공용)
     for (const b of batches.values()) {
@@ -317,6 +329,34 @@ export class ArenaMap implements GameMap {
         this.stats.triangles += ((part.geometry.index?.count ?? part.geometry.getAttribute('position').count) / 3) * b.items.length;
       }
     }
+  }
+
+  /** 장난감 도형: 단색 인스턴스 + 늘린 모델 상자 충돌 (둥근 도형은 안쪽으로 8% 줄인 상자) */
+  private buildProp(p: PropPiece, add: AddInstance): void {
+    const rot = THREE.MathUtils.degToRad(p.rotDeg);
+    const base = p.baseY ?? 0;
+    add(p.model, p.color, false, new THREE.Matrix4().compose(_p.set(p.x, base, p.z), _q.setFromAxisAngle(UP, rot), _s.set(p.sx, p.sy, p.sz)));
+    if (p.collide === false) return;
+    const b = this.modelBounds(p.model);
+    const k = p.round ? 0.92 : 1;
+    const half = new THREE.Vector3(((b.max.x - b.min.x) * p.sx * k) / 2, ((b.max.y - b.min.y) * p.sy) / 2, ((b.max.z - b.min.z) * p.sz * k) / 2);
+    const local = new THREE.Vector3(((b.max.x + b.min.x) * p.sx) / 2, ((b.max.y + b.min.y) * p.sy) / 2, ((b.max.z + b.min.z) * p.sz) / 2).applyAxisAngle(UP, rot);
+    this.addBox(new THREE.Vector3(p.x + local.x, base + local.y, p.z + local.z), half, _q.setFromAxisAngle(UP, rot), '도형');
+  }
+
+  private readonly boundsCache = new Map<ArenaModelKey, THREE.Box3>();
+  /** 모델 원래 크기 상자 (파트 전체, 한 번만 계산) */
+  private modelBounds(model: ArenaModelKey): THREE.Box3 {
+    let b = this.boundsCache.get(model);
+    if (!b) {
+      b = new THREE.Box3();
+      for (const part of this.models[model].parts) {
+        part.geometry.computeBoundingBox();
+        b.union(part.geometry.boundingBox!.clone().applyMatrix4(part.local));
+      }
+      this.boundsCache.set(model, b);
+    }
+    return b;
   }
 
   /**
@@ -351,8 +391,8 @@ export class ArenaMap implements GameMap {
         const l = studs * stud * fl;
         const mid = a + l / 2;
         const [brick, platePiece] = PIECES[studs]!;
-        const base = r % 2 === 0 ? lighten(p.color, 0.2) : CREAM;
-        const color = cap ? ARENA.palette.white : k % 2 === 0 ? base : lighten(base, 0.22);
+        const base = r % 2 === 0 ? lighten(p.color, 0.2) : this.theme.wallCream;
+        const color = cap ? this.theme.palette.white : k % 2 === 0 ? base : lighten(base, 0.22);
         add(cap ? platePiece : plain(brick), color, true, new THREE.Matrix4().compose(
           _p.set(cx + ux * mid, (cap ? rows * level : r * level) * fy, cz + uz * mid),
           _q.setFromAxisAngle(UP, rot),
